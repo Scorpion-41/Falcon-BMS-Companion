@@ -1,0 +1,2465 @@
+{
+  "sourceDocs": [
+    "TO 1F-16CMAM-34-1-1 BMS (Change 4.38) - 2.7.3 Radar Warning Receiver, 2.5.6 RWR threats on HMCS",
+    "TO 1F-16CM/AM-1 BMS - 24.2 Audio panels (TWS tones)",
+    "BMS Threat Guide - Air Defense Vehicle charts (AN/ALR-69(V)/ALR-56M and AN/ALR-93(V)1), radar and aircraft entries",
+    "BMS Training Manual 4.38.1 - ramp start (TWA/TWP), Missions 12 and 28",
+    "BMS Technical Manual 4.38.1 - TWP callbacks",
+    "BMS Naval Ops - AN/ALR-67(V)3"
+  ],
+  "overview": "The RWR detects and identifies radar emissions painting the aircraft and shows each emitter as an alphanumeric symbol on the azimuth indicator (scope) at its bearing. BMS models the different RWRs fitted to the F-16 variants - AN/ALR-56M (USAF F-16CM), AN/ALR-69(V) (older/European F-16s), AN/ALR-93(V)1 (e.g. F-16C Blk 52+ and F-CK-1), plus Thales CARAPACE, ALR-67(V)3 (F/A-18) and Elisra SPS-1000/3000 - each with its own display, sounds, controls, library and direction-finding accuracy (15 deg in E-J band, omnidirectional in C/D band for ALR-56M/69/93). Distance of a symbol from the scope center is NOT proportional to real range (ambiguities are modelled), and the emitter symbols differ between RWR types (the Threat Guide lists ALR-69/ALR-56M symbols on top and ALR-93 symbols below). Priority: the RWR ranks emitters by lethality (SAM dat files give LOW and HIGH altitude lethality scores - ALTITUDE button selects the bias); PRIORITY mode shows only the 5 most lethal tracks, OPEN mode up to 12 (16 with UNKNOWN on). The diamond (HANDOFF modes) marks the highest priority or selected emitter and its audio is played continuously. Fire control radars in track are boxed, a flashing circle around a symbol together with the red flashing LAUNCH light and the missile launch tone indicates a radar-guided missile being guided on ownship. Search radars are only shown when SEARCH is selected (S flashes when filtered search radars are painting you) and unknown emitters only when UNKNOWN is selected (U flashes). New emitters trigger the \"new guy\" alert (3 bursts of sound in 1.5 s, symbol pulsing to 1.5x size for 4 s). Listen for the tone change from SA (search/acquisition) to FC (fire control): most SAMs fire shortly after it. Some systems give no launch warning at all (SA-10, SA-20, Patriot) and IR SAMs/optical AAA never appear on the RWR. Before taxi: power the system at the Threat Warning Aux panel (SYSTEM POWER), run SYS TEST and LAUNCH light/audio test at the Threat Warning Prime, then press HANDOFF once to enter diamond float mode - omitting this leaves the RWR in normal (quiet) mode.",
+  "symbols": [
+    {
+      "symbol": "U",
+      "meaning": "Unknown emitter",
+      "details": "Unknown-type radars are shown only when UNKNOWN mode is selected (display shows up to 16 symbols). When UNKNOWN is off but unknown radars paint ownship, the U on the UNKNOWN button flashes at 4 Hz. On the ALR-93, unknown/AAA/search/CW emitters get a 2-character numeric code (see alr93SymbolCodes).",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.4, 2.7.3.4.3"
+    },
+    {
+      "symbol": "S",
+      "meaning": "Search radar (air search mode)",
+      "details": "With SEARCH mode on, emitters detected in an air search radar mode are shown as S symbols (and S in the scope center on ALR-56M/69). With SEARCH off, the S on the button flashes at 4 Hz when search radars paint ownship. ALR-93: search radars are only in the training library (LIB SET).",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.4, 2.7.3.2.1, 2.7.3.4.1"
+    },
+    {
+      "symbol": "Diamond",
+      "meaning": "Priority / handed-off emitter",
+      "details": "Shown in diamond float (floats to the highest priority symbol), transient (steps down the priority list while HANDOFF is held) and latch (stays on the last selected symbol) modes; the audio of that emitter is heard continuously. Inhibited in normal mode. The same threat is repeated on the HMCS (diamond on the circle at its bearing, ID in the center) when RWR DSPLY is ON.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.1; 2.5.6 (HMCS)"
+    },
+    {
+      "symbol": "Flashing circle around symbol",
+      "meaning": "Missile launch",
+      "details": "The RWR flashes a circle about the threat on its scope, the red MISSILE LAUNCH light on the Threat Warning Prime flashes (4 Hz) and the missile launch tone sounds when a radar missile is being guided on ownship. The RWR will not step to it automatically if the diamond is latched on another threat.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.4; 2.5.6 (HMCS)"
+    },
+    {
+      "symbol": "Box around symbol",
+      "meaning": "Signal correlated with a target tracking radar",
+      "details": "A box is drawn around the symbol when the emitter signal is correlated with a target tracking radar.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.5.6 (RWR threats on HMCS)"
+    },
+    {
+      "symbol": "Pulsing symbol (1.5x size)",
+      "meaning": "New guy (new threat)",
+      "details": "A new emitter alternates between normal size and 1.5 times normal size for its first 4 seconds of display, with 3 bursts of its sound in 1.5 s.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.1.1"
+    },
+    {
+      "symbol": "Octagon (ALR-93)",
+      "meaning": "Lock (STT)",
+      "details": "ALR-93: octagon + a beep every 7 seconds = lock (STT). No beep = track (SAM/TWS or similar).",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.4.3"
+    },
+    {
+      "symbol": "\"T\" suffix (ALR-93), e.g. 6T",
+      "meaning": "Radar in track mode",
+      "details": "Displayed after single-character emitters in track mode. Because of the 2-character limit it cannot be added to 2-character symbols - use the octagon/beep cue instead.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.4.3"
+    },
+    {
+      "symbol": "A/S (alternating)",
+      "meaning": "Radar-directed AAA (Fire Can) on ALR-69/ALR-56M",
+      "details": "KS-12, KS-19 and S-60 guns directed by the Fire Can radar show alternating A and S flashing. ALR-93 shows K.",
+      "source": "BMS Threat Guide p.41-42"
+    },
+    {
+      "symbol": "15/M (alternating)",
+      "meaning": "SA-15 Gauntlet (Scrum Half) on ALR-69/ALR-56M",
+      "details": "Alternating 15 and M flashing on the RWR.",
+      "source": "BMS Threat Guide p.41"
+    },
+    {
+      "symbol": "L (scope center)",
+      "meaning": "LOW altitude threat table selected",
+      "details": "ALTITUDE button selects the low altitude threat table (ALR-56M/69).",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.2.1, 2.7.3.3.1"
+    },
+    {
+      "symbol": "S (scope center)",
+      "meaning": "SEARCH mode on",
+      "details": "ALR-56M/69.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.2.1"
+    },
+    {
+      "symbol": "I then WO (scope center)",
+      "meaning": "ALR-56M boot-up / initial BIT",
+      "details": "After boot \"I\" is shown in the middle of the scope, then \"WO\"; indications disappear when the initial BIT finishes.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.2.1"
+    },
+    {
+      "symbol": "F (scope center)",
+      "meaning": "Fault",
+      "details": "After self-test, a detected fault shows the fault list (ALR-56M) or flashing BAD on the second test screen (ALR-69), then the normal display with F in the middle. ALR-69 also shows F briefly during boot.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.2.2, 2.7.3.3.1, 2.7.3.3.3"
+    },
+    {
+      "symbol": "Ship icon (bottom of scope)",
+      "meaning": "ALR-69 SEA (naval) mode active",
+      "details": "Toggled by pressing SYS TEST and then UNKNOWN within 0.5-1 s. ALR-56M has no SEA mode - naval emitters are always visible.",
+      "source": "BMS Technical Manual (Threat Warning Prime callbacks); TO 1F-16CMAM-34-1-1 BMS 2.7.3.3.1"
+    },
+    {
+      "symbol": "Noise bars and cycle timer",
+      "meaning": "Band noise (graphical only) and signal load",
+      "details": "Four noise bars at 6, 9, 12 and 3 o'clock (bands 0-3) are graphical only. The cycle timer (vertical bar at the left end of the band 3 bar) moves up and down in 1 s with no signal activity and slows to 2.6 s with full RWR activity.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.3"
+    },
+    {
+      "symbol": "STBY / A / E (ALR-93 family, SPS-3000)",
+      "meaning": "Internal ECM state",
+      "details": "STBY = ECM off, A = ECM AVNC (XMT 2, auto ECM priority), E = ECM ECM (XMT 3, active jam). ALR-93 also shows CMDS mode and ECM state at the top, ECM interference indications at the bottom and ECM unavailable at the right.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.4.1, 2.7.3.8.1"
+    },
+    {
+      "symbol": "HUD lines (ALR-67, F/A-18)",
+      "meaning": "Threat bearing repeated in the HUD",
+      "details": "Threat at 12 o'clock at the top of the HUD, 3 o'clock on the right, etc. Longer line = threat in the inner RWR circle, shorter line = outer circle, flashing line = missile launch detected.",
+      "source": "BMS Naval Ops (AN/ALR-67(V)3)"
+    },
+    {
+      "symbol": "Inner vs outer ring position",
+      "meaning": "Relative threat/priority placement (not true range)",
+      "details": "Symbol distance from center is not proportional to actual distance. The Threat Guide notes e.g. the SA-10 Big Bird \"10 has lower sound and stays in outer ring\" while the Flap Lid has a \"higher chirp inner ring\".",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3 (intro); BMS Threat Guide (Big Bird, Flap Lid B)"
+    },
+    {
+      "symbol": "Hat (semicircle over symbol)",
+      "meaning": "Airborne emitter (aircraft radar)",
+      "details": "Standard RWR convention for air threats; the BMS docs only show it in figures.",
+      "source": "general"
+    }
+  ],
+  "alr93SymbolCodes": {
+    "description": "ALR-93(V)1 symbol codes for AAA, SEARCH, UNKNOWN and CW emitters: the first character comes from the pulse repetition interval (PRI), the second from the frequency band.",
+    "pri": [
+      {
+        "pri": "200 ms",
+        "symbol": "0"
+      },
+      {
+        "pri": "201-300 ms",
+        "symbol": "1"
+      },
+      {
+        "pri": "301-400 ms",
+        "symbol": "2"
+      },
+      {
+        "pri": "401-500 ms",
+        "symbol": "3"
+      },
+      {
+        "pri": "501-700 ms",
+        "symbol": "4"
+      },
+      {
+        "pri": "701-900 ms",
+        "symbol": "5"
+      },
+      {
+        "pri": "901-1200 ms",
+        "symbol": "6"
+      },
+      {
+        "pri": "1201-1500 ms",
+        "symbol": "7"
+      },
+      {
+        "pri": "1501-2000 ms",
+        "symbol": "8"
+      },
+      {
+        "pri": "2001-10000 ms",
+        "symbol": "9"
+      }
+    ],
+    "band": [
+      {
+        "band": "E",
+        "symbol": "1"
+      },
+      {
+        "band": "F",
+        "symbol": "1"
+      },
+      {
+        "band": "G",
+        "symbol": "2"
+      },
+      {
+        "band": "H",
+        "symbol": "2"
+      },
+      {
+        "band": "I",
+        "symbol": "3"
+      },
+      {
+        "band": "J",
+        "symbol": "4"
+      },
+      {
+        "band": "anything else",
+        "symbol": "1"
+      }
+    ],
+    "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.4.3"
+  },
+  "emitters": [
+    {
+      "symbol": "2",
+      "system": "SA-2 Guideline (S-75 Dvina)",
+      "type": "SAM",
+      "alr56m": "2",
+      "alr56mSearch": null,
+      "alr93": "2",
+      "alr93Search": null,
+      "radars": "SA/EWR: Spoon Rest (no RWR symbol listed); FC: Fan Song E/F",
+      "notes": "HARM 2A/2T, ALIC 402/202. Max range 38 NM / 198,000 ft. Command guidance.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "3",
+      "system": "SA-3 Goa (S-125 Neva)",
+      "type": "SAM",
+      "alr56m": "3",
+      "alr56mSearch": "F",
+      "alr93": "3",
+      "alr93Search": "F",
+      "radars": "SA: Flat Face; FC: Low Blow",
+      "notes": "HARM F/3T, ALIC 403/203. Max 11 NM / 67,000 ft.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "4",
+      "system": "SA-4 Ganef (2K11 Krug)",
+      "type": "SAM",
+      "alr56m": "4",
+      "alr56mSearch": "L",
+      "alr93": "4",
+      "alr93Search": "L",
+      "radars": "SA: Long Track; FC: Pat Hand",
+      "notes": "HARM 4A/4T, ALIC 404/204. Max 22 NM / 80,000 ft. Mobile.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "5",
+      "system": "SA-5 Gammon (S-200 Angara)",
+      "type": "SAM",
+      "alr56m": "5",
+      "alr56mSearch": "B (Bar Lock), B (Odd Group)",
+      "alr93": "5",
+      "alr93Search": "5 (Bar Lock), 5 (Odd Group)",
+      "radars": "SA: Bar Lock, Odd Group; FC: Square Pair",
+      "notes": "HARM 5A/5T, ALIC 405/205. Max 190 NM / 327,000 ft.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "6",
+      "system": "SA-6 Gainful (2K12 Kub)",
+      "type": "SAM",
+      "alr56m": "6",
+      "alr56mSearch": "F",
+      "alr93": "6",
+      "alr93Search": "F",
+      "radars": "SA: Flat Face; FC: Straight Flush",
+      "notes": "HARM F/6T, ALIC 403/206. Max 20 NM / 101,500 ft. Home-on-jam.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "8",
+      "system": "SA-8 Gecko (9K33 Osa)",
+      "type": "SAM",
+      "alr56m": "8",
+      "alr56mSearch": null,
+      "alr93": "8",
+      "alr93Search": null,
+      "radars": "On-board Land Roll",
+      "notes": "HARM 8T, ALIC 608. Max 8.5 NM / 50,000 ft.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "O",
+      "system": "SA-9 Gaskin (9K31 Strela-1)",
+      "type": "SAM",
+      "alr56m": null,
+      "alr56mSearch": "O",
+      "alr93": null,
+      "alr93Search": "13",
+      "radars": "SA: Dog Ear; missile rear-aspect IR",
+      "notes": "Only the Dog Ear search radar shows (HARM D, ALIC 609). Max 3.2 NM / 14,500 ft. IR missile - no launch indication.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "10",
+      "system": "SA-10 Grumble (S-300PS)",
+      "type": "SAM",
+      "alr56m": "10",
+      "alr56mSearch": "10",
+      "alr93": "10",
+      "alr93Search": "10",
+      "radars": "SA: Big Bird; FC: Flap Lid",
+      "notes": "HARM 10A/10T, ALIC 410/210. Max 54 NM / 276,000 ft. HOJ. Very dangerous: no smoke or launch warning; can track without showing 10 on RWR.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts); BMS Threat Guide (SA-10B, Flap Lid B)"
+    },
+    {
+      "symbol": "11",
+      "system": "SA-11 Gadfly (Buk-M1)",
+      "type": "SAM",
+      "alr56m": "11",
+      "alr56mSearch": "D",
+      "alr93": "11",
+      "alr93Search": "D",
+      "radars": "SA: Snow Drift; FC: on-board Fire Dome",
+      "notes": "HARM 11A/11T, ALIC 411/211. Max 20 NM / 90,000 ft. HOJ. Some launch warning.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "O",
+      "system": "SA-13 Gopher (9K35 Strela-10)",
+      "type": "SAM",
+      "alr56m": null,
+      "alr56mSearch": "O",
+      "alr93": null,
+      "alr93Search": "13",
+      "radars": "SA: Dog Ear; on-board Snap Shot / IR",
+      "notes": "HARM D, ALIC 609 (Dog Ear). Max 5 NM / 26,800 ft. Very dangerous optical IR seeker.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "15/M",
+      "system": "SA-15 Gauntlet (9K331 Tor-M1)",
+      "type": "SAM",
+      "alr56m": "15/M (alternating)",
+      "alr56mSearch": null,
+      "alr93": "15",
+      "alr93Search": null,
+      "radars": "On-board Scrum Half",
+      "notes": "HARM 15T, ALIC 615. Max 7 NM / 42,500 ft. No smoke.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "17",
+      "system": "SA-17 Grizzly (Buk M1-2/M2)",
+      "type": "SAM",
+      "alr56m": "17",
+      "alr56mSearch": "D",
+      "alr93": "17",
+      "alr93Search": "D",
+      "radars": "SA: Snow Drift; FC: on-board Chair Back",
+      "notes": "HARM 17A/17T, ALIC 417/217. Max 18.5 NM / 115,000 ft. HOJ.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "A",
+      "system": "SA-19 Grison on 2S6 Tunguska",
+      "type": "SAM",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "19",
+      "alr93Search": null,
+      "radars": "On-board Hot Shot / IR",
+      "notes": "HARM 19T, ALIC 619. Max 5.7 NM / 33,000 ft. HOJ. Very dangerous.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "20",
+      "system": "SA-20A Gargoyle (S-300PM)",
+      "type": "SAM",
+      "alr56m": "20",
+      "alr56mSearch": "BB (Big Bird 64N6E), CS (Clam Shell)",
+      "alr93": "20",
+      "alr93Search": "BB, CS",
+      "radars": "SA: Big Bird 64N6E, Clam Shell 76N6; FC: Tombstone",
+      "notes": "HARM 20A/20T, ALIC 420/220 (Clam Shell ALIC 620). Max 95 NM / 450,000 ft. HOJ. No smoke or launch warning.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts); BMS Threat Guide (SA-20A, Clam Shell)"
+    },
+    {
+      "symbol": null,
+      "system": "HN-5A Red Tassel",
+      "type": "SAM (MANPAD)",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical / IR",
+      "notes": "No RWR indication (IR). Max 2 NM / 10,500 ft rear-aspect IR.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": null,
+      "system": "SA-7 Grail",
+      "type": "SAM (MANPAD)",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical / IR",
+      "notes": "No RWR indication (IR). Max 2 NM / 12,000 ft rear-aspect IR.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": null,
+      "system": "SA-14 Gremlin",
+      "type": "SAM (MANPAD)",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical / IR",
+      "notes": "No RWR indication (IR). Max 3 NM / 12,100 ft all-aspect IR.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": null,
+      "system": "SA-16 Gimlet",
+      "type": "SAM (MANPAD)",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical / IR",
+      "notes": "No RWR indication (IR). Max 3.5 NM / 19,400 ft all-aspect IR.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "A/S",
+      "system": "KS-12 85 mm (Type 72)",
+      "type": "AAA",
+      "alr56m": "A/S (alternating)",
+      "alr56mSearch": null,
+      "alr93": "K",
+      "alr93Search": null,
+      "radars": "Fire Can radar / optical",
+      "notes": "HARM AAA, ALIC 692. Max 5 NM / 28,000 ft. Jink vertically.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "A/S",
+      "system": "KS-19 100 mm",
+      "type": "AAA",
+      "alr56m": "A/S (alternating)",
+      "alr56mSearch": null,
+      "alr93": "K",
+      "alr93Search": null,
+      "radars": "Fire Can radar / optical",
+      "notes": "HARM AAA, ALIC 692. Max 5 NM / 33,500 ft.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "A/S",
+      "system": "S-60 57 mm (Type 59)",
+      "type": "AAA",
+      "alr56m": "A/S (alternating)",
+      "alr56mSearch": null,
+      "alr93": "K",
+      "alr93Search": null,
+      "radars": "Fire Can radar / optical",
+      "notes": "HARM AAA, ALIC 692. Max 3 NM / 20,900 ft.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "A",
+      "system": "M-1992 30 mm",
+      "type": "AAA",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "23",
+      "alr93Search": null,
+      "radars": "On-board Gun Dish",
+      "notes": "Max 2.5 NM / 14,000 ft. Maintain 450+ kts, jink.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "A",
+      "system": "ZSU-23-4 Shilka",
+      "type": "AAA",
+      "alr56m": "A",
+      "alr56mSearch": "O (Dog Ear)",
+      "alr93": "23",
+      "alr93Search": "13 (Dog Ear)",
+      "radars": "SA: Dog Ear; on-board Gun Dish",
+      "notes": "Max 3 NM / 16,000 ft. Very dangerous.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": null,
+      "system": "M-1939 37 mm",
+      "type": "AAA",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical",
+      "notes": "No RWR indication (optical). Max 1.3 NM / 8,600 ft.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": null,
+      "system": "ZU-23 23 mm",
+      "type": "AAA",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical",
+      "notes": "No RWR indication (optical). Max 2 NM / 9,900 ft.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": null,
+      "system": "ZPU-2 14.5 mm",
+      "type": "AAA",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical",
+      "notes": "No RWR indication (optical). Max 1.8 NM / 9,800 ft.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": null,
+      "system": "ZSU-57-2 Sparka 57 mm",
+      "type": "AAA",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical",
+      "notes": "No RWR indication (optical). Max 3 NM / 20,800 ft.",
+      "source": "BMS Threat Guide p.41-42 (Opfor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "H",
+      "system": "MIM-23 Hawk (HAWK ADS)",
+      "type": "SAM",
+      "alr56m": "H",
+      "alr56mSearch": "50 (AN/MPQ-50), 55 (AN/MPQ-55)",
+      "alr93": "MQ",
+      "alr93Search": "H (AN/MPQ-50), H (AN/MPQ-55)",
+      "radars": "SA: AN/MPQ-50 PAR, AN/MPQ-55 CWAR; FC: AN/MPQ-46 HPI",
+      "notes": "HARM HA/HT, ALIC 430/230. Max 18-39 NM / 62,000 ft. HOJ. FC tone at 19 NM first time in, 33 NM second time.",
+      "source": "BMS Threat Guide p.43-44 (Bluefor Air Defense Vehicle charts); BMS Threat Guide (AN/MPQ-46)"
+    },
+    {
+      "symbol": "C",
+      "system": "KSAM Chun-ma (Pegasus)",
+      "type": "SAM",
+      "alr56m": "C",
+      "alr56mSearch": null,
+      "alr93": "C",
+      "alr93Search": null,
+      "radars": "On-board Daewoo radar / FLIR / EOTS",
+      "notes": "Max 8 NM / 27,000 ft.",
+      "source": "BMS Threat Guide p.43-44 (Bluefor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "N",
+      "system": "Nike Hercules",
+      "type": "SAM",
+      "alr56m": "N",
+      "alr56mSearch": null,
+      "alr93": "N",
+      "alr93Search": null,
+      "radars": "AN/MPQ-43",
+      "notes": "HARM N, ALIC 696. Max 70 NM / 259,000 ft. ALR-56M chart and the AN/MPQ-43 entry also list a \"P\" line for this system. Passing through the beam usually breaks lock.",
+      "source": "BMS Threat Guide p.43-44 (Bluefor Air Defense Vehicle charts); BMS Threat Guide (AN/MPQ-43)"
+    },
+    {
+      "symbol": "P",
+      "system": "Patriot MIM-104",
+      "type": "SAM",
+      "alr56m": "P",
+      "alr56mSearch": null,
+      "alr93": "P",
+      "alr93Search": null,
+      "radars": "AN/MPQ-53",
+      "notes": "HARM P, ALIC 693. Max 91 NM / 80,000 ft. HOJ. No launch warning - assume launch if you hear the FC tone.",
+      "source": "BMS Threat Guide p.43-44 (Bluefor Air Defense Vehicle charts); BMS Threat Guide (AN/MPQ-53)"
+    },
+    {
+      "symbol": "P",
+      "system": "Sky Guard (SAM/AAA)",
+      "type": "SAM",
+      "alr56m": "P",
+      "alr56mSearch": null,
+      "alr93": "R",
+      "alr93Search": null,
+      "radars": "Sky Guard radar",
+      "notes": "HARM SKY, ALIC 695. Max 11 NM / 23,000 ft.",
+      "source": "BMS Threat Guide p.43-44 (Bluefor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "A",
+      "system": "K263 Cheongoon 20 mm",
+      "type": "AAA",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "63",
+      "alr93Search": null,
+      "radars": "On-board TPS-830K radar",
+      "notes": "Max 2 NM / 9,900 ft.",
+      "source": "BMS Threat Guide p.43-44 (Bluefor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": null,
+      "system": "M-163/M-167 Vulcan 20 mm",
+      "type": "AAA",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "On-board AN/VPS-2 range-only / M61 optical",
+      "notes": "Supposed to have radar but does not appear on the RWR. Max 2 NM / 9,900 ft.",
+      "source": "BMS Threat Guide p.43-44 (Bluefor Air Defense Vehicle charts); BMS Threat Guide (M-163/M-167)"
+    },
+    {
+      "symbol": null,
+      "system": "Avenger (M1097 HMMWV)",
+      "type": "SAM (IR SHORAD/MANPAD)",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical / IR",
+      "notes": "No RWR indication.",
+      "source": "BMS Threat Guide p.43-44 (Bluefor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": null,
+      "system": "Chaparral",
+      "type": "SAM (IR SHORAD/MANPAD)",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical / IR",
+      "notes": "No RWR indication. No radar shown on RWR (AN/MPQ-49 FAAR).",
+      "source": "BMS Threat Guide p.43-44 (Bluefor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": null,
+      "system": "LAV-AD",
+      "type": "SAM (IR SHORAD/MANPAD)",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical / IR",
+      "notes": "No RWR indication.",
+      "source": "BMS Threat Guide p.43-44 (Bluefor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": null,
+      "system": "M2A2 ADATS",
+      "type": "SAM (IR SHORAD/MANPAD)",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical / IR",
+      "notes": "No RWR indication.",
+      "source": "BMS Threat Guide p.43-44 (Bluefor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": null,
+      "system": "M6 BSFV-AD",
+      "type": "SAM (IR SHORAD/MANPAD)",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical / IR",
+      "notes": "No RWR indication.",
+      "source": "BMS Threat Guide p.43-44 (Bluefor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": null,
+      "system": "Mistral",
+      "type": "SAM (IR SHORAD/MANPAD)",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical / IR",
+      "notes": "No RWR indication.",
+      "source": "BMS Threat Guide p.43-44 (Bluefor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": null,
+      "system": "Stinger",
+      "type": "SAM (IR SHORAD/MANPAD)",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Optical / IR",
+      "notes": "No RWR indication.",
+      "source": "BMS Threat Guide p.43-44 (Bluefor Air Defense Vehicle charts)"
+    },
+    {
+      "symbol": "A/S",
+      "system": "Fire Can (Son-9) AAA radar",
+      "type": "RADAR (AAA radar)",
+      "alr56m": "A/S (alternating)",
+      "alr56mSearch": null,
+      "alr93": "K",
+      "alr93Search": null,
+      "radars": "Fire Can (Son-9) AAA radar",
+      "notes": "Towed radar for KS-12/KS-19/S-60. The entry also lists an \"A\" line.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "B",
+      "system": "Bar Lock-B (P-35 Saturn)",
+      "type": "RADAR (EWR)",
+      "alr56m": "B",
+      "alr56mSearch": null,
+      "alr93": "5",
+      "alr93Search": null,
+      "radars": "Bar Lock-B (P-35 Saturn)",
+      "notes": "SA radar for SA-5; EW/GCI.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "10",
+      "system": "Big Bird (5N64S)",
+      "type": "RADAR (EWR)",
+      "alr56m": "10",
+      "alr56mSearch": null,
+      "alr93": "10",
+      "alr93Search": null,
+      "radars": "Big Bird (5N64S)",
+      "notes": "SA radar for SA-10B. This 10 has lower sound and stays in the outer ring.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "BB",
+      "system": "Big Bird (64N6E)",
+      "type": "RADAR (EWR)",
+      "alr56m": "BB",
+      "alr56mSearch": null,
+      "alr93": "BB",
+      "alr93Search": null,
+      "radars": "Big Bird (64N6E)",
+      "notes": "Long range SA radar for SA-20A.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "CS",
+      "system": "Clam Shell (76N6)",
+      "type": "RADAR (EWR)",
+      "alr56m": "CS",
+      "alr56mSearch": null,
+      "alr93": "CS",
+      "alr93Search": null,
+      "radars": "Clam Shell (76N6)",
+      "notes": "Low altitude SA radar for SA-20A. ALIC 620.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "O",
+      "system": "Dog Ear (9S80 Ovod)",
+      "type": "RADAR (EWR)",
+      "alr56m": "O",
+      "alr56mSearch": null,
+      "alr93": "13",
+      "alr93Search": null,
+      "radars": "Dog Ear (9S80 Ovod)",
+      "notes": "SA radar for SA-9, SA-13, ZSU-23-4.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "2",
+      "system": "Fan Song E (SNR-75)",
+      "type": "RADAR (FCR)",
+      "alr56m": "2",
+      "alr56mSearch": null,
+      "alr93": "2",
+      "alr93Search": null,
+      "radars": "Fan Song E (SNR-75)",
+      "notes": "SA-2 fire control radar. Destroy to neutralize the SA-2 site.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "2",
+      "system": "Fan Song F (SNR-75)",
+      "type": "RADAR (FCR)",
+      "alr56m": "2",
+      "alr56mSearch": null,
+      "alr93": "2",
+      "alr93Search": null,
+      "radars": "Fan Song F (SNR-75)",
+      "notes": "SA-2 fire control radar.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "10",
+      "system": "Flap Lid B (30N6)",
+      "type": "RADAR (FCR)",
+      "alr56m": "10",
+      "alr56mSearch": null,
+      "alr93": "10",
+      "alr93Search": null,
+      "radars": "Flap Lid B (30N6)",
+      "notes": "SA-10B fire control. Can track without 10 on RWR. No launch warning. Higher chirp inner ring.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "F",
+      "system": "Flat Face (P-15 Tropa)",
+      "type": "RADAR (EWR)",
+      "alr56m": "F",
+      "alr56mSearch": null,
+      "alr93": "F",
+      "alr93Search": null,
+      "radars": "Flat Face (P-15 Tropa)",
+      "notes": "SA radar for SA-3, SA-6, SA-13.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "L",
+      "system": "Long Track (P-40 / 1S12)",
+      "type": "RADAR (EWR)",
+      "alr56m": "L",
+      "alr56mSearch": null,
+      "alr93": "L",
+      "alr93Search": null,
+      "radars": "Long Track (P-40 / 1S12)",
+      "notes": "SA radar, primary SA-4, also SA-6, SA-8, SA-11, occasionally SA-13. Sometimes overlaps with F to look like E on the RWR.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "3",
+      "system": "Low Blow (SNR-125)",
+      "type": "RADAR (FCR)",
+      "alr56m": "3",
+      "alr56mSearch": null,
+      "alr93": "3",
+      "alr93Search": null,
+      "radars": "Low Blow (SNR-125)",
+      "notes": "SA-3 fire control radar. Beam + 6 chaff tends to break lock.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "B",
+      "system": "Odd Group (PRV-17)",
+      "type": "RADAR (EWR)",
+      "alr56m": "B",
+      "alr56mSearch": null,
+      "alr93": "5",
+      "alr93Search": null,
+      "radars": "Odd Group (PRV-17)",
+      "notes": "Height finding radar for SA-5.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "4",
+      "system": "Pat Hand (1S32)",
+      "type": "RADAR (FCR)",
+      "alr56m": "4",
+      "alr56mSearch": null,
+      "alr93": "4",
+      "alr93Search": null,
+      "radars": "Pat Hand (1S32)",
+      "notes": "SA-4 fire control radar.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "D",
+      "system": "Snow Drift (9S18M1 Tube Arm)",
+      "type": "RADAR (EWR)",
+      "alr56m": "D",
+      "alr56mSearch": null,
+      "alr93": "D",
+      "alr93Search": null,
+      "radars": "Snow Drift (9S18M1 Tube Arm)",
+      "notes": "SA radar for SA-11 and SA-17.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": null,
+      "system": "Spoon Rest (P-12 Yenisei)",
+      "type": "RADAR (EWR)",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": null,
+      "alr93Search": null,
+      "radars": "Spoon Rest (P-12 Yenisei)",
+      "notes": "SA radar for SA-2, SA-11, SA-6. No RWR symbol listed in the Threat Guide.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "5",
+      "system": "Square Pair (5N62)",
+      "type": "RADAR (FCR)",
+      "alr56m": "5",
+      "alr56mSearch": null,
+      "alr93": "5",
+      "alr93Search": null,
+      "radars": "Square Pair (5N62)",
+      "notes": "SA-5 fire control radar.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "6",
+      "system": "Straight Flush (1S91)",
+      "type": "RADAR (FCR)",
+      "alr56m": "6",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "Straight Flush (1S91)",
+      "notes": "SA-6 fire control radar.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "20",
+      "system": "Tombstone (30N6E1)",
+      "type": "RADAR (FCR)",
+      "alr56m": "20",
+      "alr56mSearch": null,
+      "alr93": "20",
+      "alr93Search": null,
+      "radars": "Tombstone (30N6E1)",
+      "notes": "SA-20A fire control radar. No launch warning.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "N",
+      "system": "AN/MPQ-43 (Nike)",
+      "type": "RADAR (FCR)",
+      "alr56m": "N",
+      "alr56mSearch": null,
+      "alr93": "N",
+      "alr93Search": null,
+      "radars": "AN/MPQ-43 (Nike)",
+      "notes": "Nike Hercules radar; entry also lists \"P\".",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "H",
+      "system": "AN/MPQ-46 HPI (I-Hawk)",
+      "type": "RADAR (FCR)",
+      "alr56m": "H",
+      "alr56mSearch": null,
+      "alr93": "MQ",
+      "alr93Search": null,
+      "radars": "AN/MPQ-46 HPI (I-Hawk)",
+      "notes": "Hawk fire control; FC tone at 19 NM first time in, 33 NM second time.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "50",
+      "system": "AN/MPQ-50 PAR",
+      "type": "RADAR (EWR)",
+      "alr56m": "50",
+      "alr56mSearch": null,
+      "alr93": "H",
+      "alr93Search": null,
+      "radars": "AN/MPQ-50 PAR",
+      "notes": "Hawk search radar.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "P",
+      "system": "AN/MPQ-53 (Patriot)",
+      "type": "RADAR (FCR)",
+      "alr56m": "P",
+      "alr56mSearch": null,
+      "alr93": "P",
+      "alr93Search": null,
+      "radars": "AN/MPQ-53 (Patriot)",
+      "notes": "Patriot radar. No launch warning - assume launch if you hear FC tone.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "55",
+      "system": "AN/MPQ-55 CWAR",
+      "type": "RADAR (EWR)",
+      "alr56m": "55",
+      "alr56mSearch": null,
+      "alr93": "H",
+      "alr93Search": null,
+      "radars": "AN/MPQ-55 CWAR",
+      "notes": "Hawk search radar.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "P",
+      "system": "Sky Guard radar",
+      "type": "RADAR (FCR)",
+      "alr56m": "P",
+      "alr56mSearch": null,
+      "alr93": "R",
+      "alr93Search": null,
+      "radars": "Sky Guard radar",
+      "notes": "SAM and AAA fire control radar.",
+      "source": "BMS Threat Guide - Air Defense Vehicles radar entries"
+    },
+    {
+      "symbol": "21",
+      "system": "J-7G Fishcan",
+      "type": "AIRCRAFT",
+      "alr56m": "21",
+      "alr56mSearch": null,
+      "alr93": "1",
+      "alr93Search": null,
+      "radars": "SL-3 (band E/G)",
+      "notes": "Fighter (Chengdu, PLAAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "21",
+      "system": "J-8I Finback",
+      "type": "AIRCRAFT",
+      "alr56m": "21",
+      "alr56mSearch": null,
+      "alr93": "1",
+      "alr93Search": null,
+      "radars": "SL-7A (band E/G)",
+      "notes": "Interceptor (Shenyang, PLAAF, Finback-A)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "27",
+      "system": "J-11 Flanker",
+      "type": "AIRCRAFT",
+      "alr56m": "27",
+      "alr56mSearch": null,
+      "alr93": "27",
+      "alr93Search": null,
+      "radars": "NIIP N001VE (band I)",
+      "notes": "Multi-role Fighter (PLAAF, Flanker-L)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "30",
+      "system": "J-15 Flanker",
+      "type": "AIRCRAFT",
+      "alr56m": "30",
+      "alr56mSearch": null,
+      "alr93": "30",
+      "alr93Search": null,
+      "radars": "NIIP N011 (band I)",
+      "notes": "Multi-role (Flying Shark, PLAAF, Flnkr-X2)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "J",
+      "system": "J-16 Flanker",
+      "type": "AIRCRAFT",
+      "alr56m": "J",
+      "alr56mSearch": null,
+      "alr93": "20",
+      "alr93Search": null,
+      "radars": "KLJ-5 (band I)",
+      "notes": "Multi-role (Hidden Dragon, PLAAF, Flnkr-N)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "22",
+      "system": "J-20 Black Eagle",
+      "type": "AIRCRAFT",
+      "alr56m": "22",
+      "alr56mSearch": null,
+      "alr93": "20",
+      "alr93Search": null,
+      "radars": "KLJ-5 (band I)",
+      "notes": "Fighter (Mighty Dragon, PLAAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "Mig-17PF Fresco",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "19",
+      "alr93Search": null,
+      "radars": "RP-5 Izumrud-5 (band I)",
+      "notes": "Multi-role Fighter (Fresco-D)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "Mig-19PM/ J-6B",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "19",
+      "alr93Search": null,
+      "radars": "RP-ZU Izumrud-2 (band I)",
+      "notes": "Fighter (Farmer-E)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "21",
+      "system": "Mig-21F-13 Fishbed",
+      "type": "AIRCRAFT",
+      "alr56m": "21",
+      "alr56mSearch": null,
+      "alr93": "21",
+      "alr93Search": null,
+      "radars": "SRD-5M (band I)",
+      "notes": "Multi-role Fighter (Fishbed-E)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "21",
+      "system": "Mig-21bis Fishbed",
+      "type": "AIRCRAFT",
+      "alr56m": "21",
+      "alr56mSearch": null,
+      "alr93": "21",
+      "alr93Search": null,
+      "radars": "SOD-57M (band I)",
+      "notes": "Multi-role Fighter (Fishbed-N)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "21",
+      "system": "Mig-21MF Fishbed",
+      "type": "AIRCRAFT",
+      "alr56m": "21",
+      "alr56mSearch": null,
+      "alr93": "21",
+      "alr93Search": null,
+      "radars": "RP-21M (band I)",
+      "notes": "Multi-role Fighter (Fishbed-J)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "23",
+      "system": "Mig-23ML Flogger",
+      "type": "AIRCRAFT",
+      "alr56m": "23",
+      "alr56mSearch": null,
+      "alr93": "23",
+      "alr93Search": null,
+      "radars": "Sapfir 23ML (band I)",
+      "notes": "Multi-role Fighter (Flogger-G)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "25",
+      "system": "Mig-25 Foxbat",
+      "type": "AIRCRAFT",
+      "alr56m": "25",
+      "alr56mSearch": null,
+      "alr93": "25",
+      "alr93Search": null,
+      "radars": "RP-25 Smerch (band J)",
+      "notes": "Interceptor",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "29",
+      "system": "Mig-29A Fulcrum",
+      "type": "AIRCRAFT",
+      "alr56m": "29",
+      "alr56mSearch": null,
+      "alr93": "29",
+      "alr93Search": null,
+      "radars": "N019 Sapfir 29 (band I)",
+      "notes": "Multi-role Fighter (Fulcrum-A)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "29",
+      "system": "Mig-29G Fulcrum",
+      "type": "AIRCRAFT",
+      "alr56m": "29",
+      "alr56mSearch": null,
+      "alr93": "29",
+      "alr93Search": null,
+      "radars": "N019 Sapfir 29 (band I)",
+      "notes": "Multi-role Fighter (Fulcrum-B, GAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "29",
+      "system": "Mig-29M Fulcrum",
+      "type": "AIRCRAFT",
+      "alr56m": "29",
+      "alr56mSearch": null,
+      "alr93": "29",
+      "alr93Search": null,
+      "radars": "N010 Zhuk-M (band I)",
+      "notes": "Multi-role Ftr (Fulcrum-F, Super Fulcrum)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "29",
+      "system": "Mig-29S Fulcrum",
+      "type": "AIRCRAFT",
+      "alr56m": "29",
+      "alr56mSearch": null,
+      "alr93": "29",
+      "alr93Search": null,
+      "radars": "N019M Topaz (band I)",
+      "notes": "Multi-role Fighter (Fulcrum-C)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "31",
+      "system": "Mig-31 Foxhound",
+      "type": "AIRCRAFT",
+      "alr56m": "31",
+      "alr56mSearch": null,
+      "alr93": "31",
+      "alr93Search": null,
+      "radars": "Zaslon RP-31 (band J)",
+      "notes": "Interceptor",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "Su-7BMK Fitter",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "41",
+      "alr93Search": null,
+      "radars": "SRD-5M (band I)",
+      "notes": "Fighter Bomber",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "P",
+      "system": "Su-15 Flagon-F",
+      "type": "AIRCRAFT",
+      "alr56m": "P",
+      "alr56mSearch": null,
+      "alr93": "43",
+      "alr93Search": null,
+      "radars": "Taifun-M (band I)",
+      "notes": "Interceptor (Su-15TM)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "Su-24 Fencer",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "41",
+      "alr93Search": null,
+      "radars": "Orien (band E/G)",
+      "notes": "Attack (Fencer-C)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "27",
+      "system": "Su-27 Flanker",
+      "type": "AIRCRAFT",
+      "alr56m": "27",
+      "alr56mSearch": null,
+      "alr93": "27",
+      "alr93Search": null,
+      "radars": "NIIP N001 (band I)",
+      "notes": "Multi-role Ftr (Flanker-B, Crane, Azure Ltg)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "27",
+      "system": "Su-27UB Flanker",
+      "type": "AIRCRAFT",
+      "alr56m": "27",
+      "alr56mSearch": null,
+      "alr93": "27",
+      "alr93Search": null,
+      "radars": "NIIP N001 (band I)",
+      "notes": "Multi-role Ftr (2 seat version, Flanker-C)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "30",
+      "system": "Su-30M Flanker",
+      "type": "AIRCRAFT",
+      "alr56m": "30",
+      "alr56mSearch": null,
+      "alr93": "30",
+      "alr93Search": null,
+      "radars": "NIIP N011ME (band I)",
+      "notes": "Multi-role Fighter (Flanker-F2)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "30",
+      "system": "Su-30MKK Flanker",
+      "type": "AIRCRAFT",
+      "alr56m": "30",
+      "alr56mSearch": null,
+      "alr93": "30",
+      "alr93Search": null,
+      "radars": "NIIP N001VE (band I)",
+      "notes": "Multi-role Fighter (Flanker-G, PLAAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "27",
+      "system": "Su-33 Flanker",
+      "type": "AIRCRAFT",
+      "alr56m": "27",
+      "alr56mSearch": null,
+      "alr93": "27",
+      "alr93Search": null,
+      "radars": "NIIP N011 (band I)",
+      "notes": "Multi-role Ftr (Naval Flanker-D, Su-27K)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "30",
+      "system": "Su-34 Fullback",
+      "type": "AIRCRAFT",
+      "alr56m": "30",
+      "alr56mSearch": null,
+      "alr93": "30",
+      "alr93Search": null,
+      "radars": "Leninets V004 (band I)",
+      "notes": "Fighter/ Bomber (Su-27TB)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "30",
+      "system": "Su-35 Flanker",
+      "type": "AIRCRAFT",
+      "alr56m": "30",
+      "alr56mSearch": null,
+      "alr93": "30",
+      "alr93Search": null,
+      "radars": "NIIP N011ME (band I)",
+      "notes": "Multi-role Ftr (Super Flanker-E1, Su-27M)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "25",
+      "system": "Su-39 Frogfoot",
+      "type": "AIRCRAFT",
+      "alr56m": "25",
+      "alr56mSearch": null,
+      "alr93": "39",
+      "alr93Search": null,
+      "radars": "Kopyo-25 (band I)",
+      "notes": "Attack (Su-25TM)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "A-6E Intruder",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "41",
+      "alr93Search": null,
+      "radars": "APQ-148 (band E/G)",
+      "notes": "Attack",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "P",
+      "system": "A-7E Corsair II",
+      "type": "AIRCRAFT",
+      "alr56m": "P",
+      "alr56mSearch": null,
+      "alr93": "41",
+      "alr93Search": null,
+      "radars": "APQ-128 (band E/G)",
+      "notes": "Attack (USN)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "AJ 37 Viggen",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "37",
+      "alr93Search": null,
+      "radars": "PS-37A (band I)",
+      "notes": "Multi-role Fighter (Attack Jakt)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "AMX Ghibli",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "43",
+      "alr93Search": null,
+      "radars": "EL/M20001B (band I)",
+      "notes": "Attack (A-11 Ghibli, ITAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "18",
+      "system": "AV-8B Harrier II+",
+      "type": "AIRCRAFT",
+      "alr56m": "18",
+      "alr56mSearch": null,
+      "alr93": "18",
+      "alr93Search": null,
+      "radars": "AN/APG-65 (band I)",
+      "notes": "Attack",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "18",
+      "system": "CF-188 Hornet",
+      "type": "AIRCRAFT",
+      "alr56m": "18",
+      "alr56mSearch": null,
+      "alr93": "18",
+      "alr93Search": null,
+      "radars": "AN/APG-73 (band I)",
+      "notes": "Multi-role Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "S",
+      "system": "EA-6B Prowler",
+      "type": "AIRCRAFT",
+      "alr56m": "S",
+      "alr56mSearch": null,
+      "alr93": "41",
+      "alr93Search": null,
+      "radars": "APQ-129 (band E/G)",
+      "notes": "Attack (Electronic Intruder, USN, USMC)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "18",
+      "system": "EA-18G Growler",
+      "type": "AIRCRAFT",
+      "alr56m": "18",
+      "alr56mSearch": null,
+      "alr93": "18",
+      "alr93Search": null,
+      "radars": "AN/APG-79 (band I)",
+      "notes": "Attack",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "E",
+      "system": "Eurofighter GAF",
+      "type": "AIRCRAFT",
+      "alr56m": "E",
+      "alr56mSearch": null,
+      "alr93": "E",
+      "alr93Search": null,
+      "radars": "CAPTOR-M (band I)",
+      "notes": "Multi-role Fighter (Eurofighter)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "4",
+      "system": "F-4D ROKAF",
+      "type": "AIRCRAFT",
+      "alr56m": "4",
+      "alr56mSearch": null,
+      "alr93": "4",
+      "alr93Search": null,
+      "radars": null,
+      "notes": "Fighter Bomber (Phantom II)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "4",
+      "system": "F-4E ROKAF",
+      "type": "AIRCRAFT",
+      "alr56m": "4",
+      "alr56mSearch": null,
+      "alr93": "4",
+      "alr93Search": null,
+      "radars": null,
+      "notes": "Fighter Bomber (Phantom II Rhino)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "4",
+      "system": "F-4EJ Phantom",
+      "type": "AIRCRAFT",
+      "alr56m": "4",
+      "alr56mSearch": null,
+      "alr93": "4",
+      "alr93Search": null,
+      "radars": null,
+      "notes": "Fighter (Phantom, Japan)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "4",
+      "system": "F-4F Phantom",
+      "type": "AIRCRAFT",
+      "alr56m": "4",
+      "alr56mSearch": null,
+      "alr93": "4",
+      "alr93Search": null,
+      "radars": null,
+      "notes": "Fighter Bomber (Germany, SK, Japan)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "4",
+      "system": "F-4G Phantom",
+      "type": "AIRCRAFT",
+      "alr56m": "4",
+      "alr56mSearch": null,
+      "alr93": "4",
+      "alr93Search": null,
+      "radars": null,
+      "notes": "Fighter Bomber (Wild Weasel Phantom)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "5",
+      "system": "F-5E Tiger II",
+      "type": "AIRCRAFT",
+      "alr56m": "5",
+      "alr56mSearch": null,
+      "alr93": "5",
+      "alr93Search": null,
+      "radars": "AN/APQ-153 (band I)",
+      "notes": "Fighter (Tiger II)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "14",
+      "system": "F-14A Tomcat",
+      "type": "AIRCRAFT",
+      "alr56m": "14",
+      "alr56mSearch": null,
+      "alr93": "14",
+      "alr93Search": null,
+      "radars": "AN/AWG-9 (band I)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "14",
+      "system": "F-14B Tomcat",
+      "type": "AIRCRAFT",
+      "alr56m": "14",
+      "alr56mSearch": null,
+      "alr93": "14",
+      "alr93Search": null,
+      "radars": "AN/AWG-9 (band I)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "14",
+      "system": "F-14D Tomcat",
+      "type": "AIRCRAFT",
+      "alr56m": "14",
+      "alr56mSearch": null,
+      "alr93": "14",
+      "alr93Search": null,
+      "radars": "AN/APG-71 (band I)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "15",
+      "system": "F-15A Eagle",
+      "type": "AIRCRAFT",
+      "alr56m": "15",
+      "alr56mSearch": null,
+      "alr93": "15",
+      "alr93Search": null,
+      "radars": "AN/APG-63 (band I)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "15",
+      "system": "F-15C Eagle",
+      "type": "AIRCRAFT",
+      "alr56m": "15",
+      "alr56mSearch": null,
+      "alr93": "15",
+      "alr93Search": null,
+      "radars": "APG-63PSP (band J)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "27",
+      "system": "F-15C 65th AS",
+      "type": "AIRCRAFT",
+      "alr56m": "27",
+      "alr56mSearch": null,
+      "alr93": "27",
+      "alr93Search": null,
+      "radars": "APG-63PSP (band J)",
+      "notes": "Fighter (Aggressor Squadron)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "15",
+      "system": "F-15C Baz IDF AF",
+      "type": "AIRCRAFT",
+      "alr56m": "15",
+      "alr56mSearch": null,
+      "alr93": "15",
+      "alr93Search": null,
+      "radars": "APG-63PSP (band J)",
+      "notes": "Fighter (Israel)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "15",
+      "system": "F-15CJ Peace Eagle",
+      "type": "AIRCRAFT",
+      "alr56m": "15",
+      "alr56mSearch": null,
+      "alr93": "15",
+      "alr93Search": null,
+      "radars": "APG-63PSP (band J)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "15",
+      "system": "F-15D Eagle",
+      "type": "AIRCRAFT",
+      "alr56m": "15",
+      "alr56mSearch": null,
+      "alr93": "15",
+      "alr93Search": null,
+      "radars": "APG-63PSP (band J)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "15",
+      "system": "F-15DJ Peace Eagle",
+      "type": "AIRCRAFT",
+      "alr56m": "15",
+      "alr56mSearch": null,
+      "alr93": "15",
+      "alr93Search": null,
+      "radars": "APG-63PSP (band J)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "15",
+      "system": "F-15E-220",
+      "type": "AIRCRAFT",
+      "alr56m": "15",
+      "alr56mSearch": null,
+      "alr93": "15",
+      "alr93Search": null,
+      "radars": "AN/APG-70 (band J)",
+      "notes": "Multi-role Fighter (Strike Eagle, Mud Hen)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "15",
+      "system": "F-15E-229",
+      "type": "AIRCRAFT",
+      "alr56m": "15",
+      "alr56mSearch": null,
+      "alr93": "15",
+      "alr93Search": null,
+      "radars": "AN/APG-70 (band J)",
+      "notes": "Multi-role Fighter (Strike Eagle, Mud Hen)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "15",
+      "system": "F-15I Ra'am IDF",
+      "type": "AIRCRAFT",
+      "alr56m": "15",
+      "alr56mSearch": null,
+      "alr93": "15",
+      "alr93Search": null,
+      "radars": "AN/APG-70I (band J)",
+      "notes": "Fighter (Israel, Thunder)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "15",
+      "system": "F-15K Slam Eagle",
+      "type": "AIRCRAFT",
+      "alr56m": "15",
+      "alr56mSearch": null,
+      "alr93": "15",
+      "alr93Search": null,
+      "radars": "APG-63(V)1 (band J)",
+      "notes": "Fighter (Slam Eagle, ROKAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16A Blk 15",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "AN/APG-66 (band I)",
+      "notes": "Multi-role Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16AM BAC",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-66(V)2 (band I)",
+      "notes": "Multi-role Fighter (BAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16AM RDAF",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-66(V)2 (band I)",
+      "notes": "Multi-role Fighter (RDAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16AM RNLAF",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-66(V)2 (band I)",
+      "notes": "Multi-role Fighter (RNLAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16AM RNoAF",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-66(V)2 (band I)",
+      "notes": "Multi-role Fighter (RNoAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16B Blk 15",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-66 (band I)",
+      "notes": "Multi-role Fighter (MSIP Stage I)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16C Blk 25",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-68(V)",
+      "notes": "Multi-role Fighter (MSIP Stage II)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16C Blk 30",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-68 (band I)",
+      "notes": "Multi-role Fighter (MSIP Stage III)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16C Blk 32",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-68 (band I)",
+      "notes": "Multi-role Fighter (MSIP Stage III)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "29",
+      "system": "F-16C BLK 32 AGRS",
+      "type": "AIRCRAFT",
+      "alr56m": "29",
+      "alr56mSearch": null,
+      "alr93": "9",
+      "alr93Search": null,
+      "radars": "APG-63 (band I)",
+      "notes": "Multi-role Fighter (64th Aggressor)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16CM Blk 40",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-68(V)5 (band I)",
+      "notes": "Multi-role Fighter (MSIP Stage III)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16CM Blk 42",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-68(V)5 (band I)",
+      "notes": "Multi-role Fighter (MSIP Stage III)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16CM Blk 50",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-68(V)5 (band I)",
+      "notes": "Multi-role Fighter (MSIP Stage III)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16CM Blk 52",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-68(V)5 (band I)",
+      "notes": "Multi-role Fighter (MSIP Stage III)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16C Blk 52+PXIV",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-68(V)XM (band I)",
+      "notes": "Multi-role Fighter (HAF CFT)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16DM Blk 40",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-68(V)5 (band I)",
+      "notes": "Multi-role Fighter (MSIP Stage III)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-16DM Blk 52",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-68(V)5 (band I)",
+      "notes": "Multi-role Fighter (MSIP Stage III)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "18",
+      "system": "F/A-18A Hornet",
+      "type": "AIRCRAFT",
+      "alr56m": "18",
+      "alr56mSearch": null,
+      "alr93": "18",
+      "alr93Search": null,
+      "radars": "AN/APG-65 (band I)",
+      "notes": "Multi-role Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "18",
+      "system": "F/A-18B Hornet",
+      "type": "AIRCRAFT",
+      "alr56m": "18",
+      "alr56mSearch": null,
+      "alr93": "18",
+      "alr93Search": null,
+      "radars": "AN/APG-65 (band I)",
+      "notes": "Multi-role Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "18",
+      "system": "F/A-18C Hornet",
+      "type": "AIRCRAFT",
+      "alr56m": "18",
+      "alr56mSearch": null,
+      "alr93": "18",
+      "alr93Search": null,
+      "radars": "AN/APG-65 (band I)",
+      "notes": "Multi-role Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "18",
+      "system": "F/A-18D Hornet",
+      "type": "AIRCRAFT",
+      "alr56m": "18",
+      "alr56mSearch": null,
+      "alr93": "18",
+      "alr93Search": null,
+      "radars": "AN/APG-65 (band I)",
+      "notes": "Multi-role Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "18",
+      "system": "F/A-18E",
+      "type": "AIRCRAFT",
+      "alr56m": "18",
+      "alr56mSearch": null,
+      "alr93": "18",
+      "alr93Search": null,
+      "radars": "AN/APG-73 (band I)",
+      "notes": "Multi-role Fighter (Super Hornet)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "18",
+      "system": "F/A-18F",
+      "type": "AIRCRAFT",
+      "alr56m": "18",
+      "alr56mSearch": null,
+      "alr93": "18",
+      "alr93Search": null,
+      "radars": "AN/APG-79 (band I)",
+      "notes": "Multi-role Fighter (Super Hornet)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "22",
+      "system": "F-22A Raptor",
+      "type": "AIRCRAFT",
+      "alr56m": "22",
+      "alr56mSearch": null,
+      "alr93": "22",
+      "alr93Search": null,
+      "radars": "AN/APG-77 (band I)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "43",
+      "system": "F-100D Super Sabre",
+      "type": "AIRCRAFT",
+      "alr56m": null,
+      "alr56mSearch": null,
+      "alr93": "43",
+      "alr93Search": null,
+      "radars": "APR-25V",
+      "notes": "Fighter Bomber (The Hun) (no ALR-69/56M symbol listed)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "F-104DJ Starfighter",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "T",
+      "alr93Search": null,
+      "radars": "ASG-14T (band I)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "F-105D Thud",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "4",
+      "alr93Search": null,
+      "radars": "NASARR R-14A",
+      "notes": "Fighter Bomber (Thunderchief)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "F-111E Aardvark",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "T",
+      "alr93Search": null,
+      "radars": "AN/APQ-113",
+      "notes": "Attack (Mark I)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "F-111F Aardvark",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "T",
+      "alr93Search": null,
+      "radars": "AN/APQ-144 (band I)",
+      "notes": "Attack (Mark IIB)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "F-CK-1C Ching-Kuo",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "F",
+      "alr93Search": null,
+      "radars": "GD-53 (band I)",
+      "notes": "Multi-role Fighter (ROCAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "JA 37 Viggen",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "37",
+      "alr93Search": null,
+      "radars": "PS46/A (band I)",
+      "notes": "Interceptor (Jakt)(SAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "KF-16C Blk 32",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "AN/APG-68 (band I)",
+      "notes": "Multi-role Fighter (Korean Peace Bridge 1)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "16",
+      "system": "KF-16C Blk 52",
+      "type": "AIRCRAFT",
+      "alr56m": "16",
+      "alr56mSearch": null,
+      "alr93": "6",
+      "alr93Search": null,
+      "radars": "APG-68(V)7 (band I)",
+      "notes": "Multi-role Fighter (Korean Peace Bridge II)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "20",
+      "system": "Mirage 2000C",
+      "type": "AIRCRAFT",
+      "alr56m": "20",
+      "alr56mSearch": null,
+      "alr93": "2",
+      "alr93Search": null,
+      "radars": "CSF-RDI (band I)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "20",
+      "system": "Mirage 2000D",
+      "type": "AIRCRAFT",
+      "alr56m": "20",
+      "alr56mSearch": null,
+      "alr93": "2",
+      "alr93Search": null,
+      "radars": "Antilope 50 (band I)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "20",
+      "system": "Mirage 2000-5F",
+      "type": "AIRCRAFT",
+      "alr56m": "20",
+      "alr56mSearch": null,
+      "alr93": "2",
+      "alr93Search": null,
+      "radars": "Thales RDY (band I)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "20",
+      "system": "Mirage 2000EGM",
+      "type": "AIRCRAFT",
+      "alr56m": "20",
+      "alr56mSearch": null,
+      "alr93": "2",
+      "alr93Search": null,
+      "radars": "Thales RDY (band I)",
+      "notes": "Fighter (EGM HAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "20",
+      "system": "Mirage 2000N",
+      "type": "AIRCRAFT",
+      "alr56m": "20",
+      "alr56mSearch": null,
+      "alr93": "2",
+      "alr93Search": null,
+      "radars": "Antelope",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "P",
+      "system": "Mirage F-1CT",
+      "type": "AIRCRAFT",
+      "alr56m": "P",
+      "alr56mSearch": null,
+      "alr93": "44",
+      "alr93Search": null,
+      "radars": "CSF-Cyrano IV-1 (band I)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "P",
+      "system": "Mirage IIIE",
+      "type": "AIRCRAFT",
+      "alr56m": "P",
+      "alr56mSearch": null,
+      "alr93": "3",
+      "alr93Search": null,
+      "radars": "CSF-Cyrano II (band I)",
+      "notes": "Fighter",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "S",
+      "system": "MQ-9 Reaper",
+      "type": "AIRCRAFT",
+      "alr56m": "S",
+      "alr56mSearch": null,
+      "alr93": "41",
+      "alr93Search": null,
+      "radars": "N/A",
+      "notes": "Attack/ Unmanned Aerial Vehicle",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "22",
+      "system": "Rafale C",
+      "type": "AIRCRAFT",
+      "alr56m": "22",
+      "alr56mSearch": null,
+      "alr93": "R",
+      "alr93Search": null,
+      "radars": "Thales RBE2 (band I)",
+      "notes": "Multi-role Fighter (FAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "T",
+      "system": "Tornado F3",
+      "type": "AIRCRAFT",
+      "alr56m": "T",
+      "alr56mSearch": null,
+      "alr93": "T",
+      "alr93Search": null,
+      "radars": "AI24 Foxhunter (band I)",
+      "notes": "Interceptor (Air Defense Varient)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "Tornado ECR AMI",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "T",
+      "alr93Search": null,
+      "radars": "Decca 72 (band I)",
+      "notes": "Attack (Wild Weasel, ITAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "Tornado ECR GAF",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "T",
+      "alr93Search": null,
+      "radars": "Decca 72 (band I)",
+      "notes": "Attack (Wild Weasel, GAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "Tornado IDS AMI",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "T",
+      "alr93Search": null,
+      "radars": "Decca 72 (band I)",
+      "notes": "Attack (InterDiction Strike, ITAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "Tornado IDS GAF",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "T",
+      "alr93Search": null,
+      "radars": "Decca 72 (band I)",
+      "notes": "Attack (InterDiction Strike, GAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "A",
+      "system": "Tornado GR. 4",
+      "type": "AIRCRAFT",
+      "alr56m": "A",
+      "alr56mSearch": null,
+      "alr93": "T",
+      "alr93Search": null,
+      "radars": "Decca 72 (band I)",
+      "notes": "Attack (RSAF, RAF)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    },
+    {
+      "symbol": "E",
+      "system": "Typhoon FGR.4",
+      "type": "AIRCRAFT",
+      "alr56m": "E",
+      "alr56mSearch": null,
+      "alr93": "E",
+      "alr93Search": null,
+      "radars": "CAPTOR-M (band I)",
+      "notes": "Multi-role Fighter (RAF UK)",
+      "source": "BMS Threat Guide - Opfor/Bluefor Aircraft entries"
+    }
+  ],
+  "tones": [
+    {
+      "name": "New guy alert",
+      "description": "In normal mode threat audio is limited to the new guy alert and launch audio: 3 bursts of the new emitter's sound in 1.5 seconds.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.1.1"
+    },
+    {
+      "name": "Priority / handoff emitter audio",
+      "description": "In diamond float, transient and latch modes the sound of the diamond-enhanced emitter is heard continuously (composite audio); each emitter type has its own sound.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.1.2-4"
+    },
+    {
+      "name": "Search (SA) to fire control (FC) tone change",
+      "description": "RWR sounds are subtle: listen for the tone change from SA to FC - most SAMs will shoot shortly after it. Examples: Hawk FC tone at 19 NM on the first run in (33 NM second time); Patriot has no launch warning - assume a launch if you hear the FC tone.",
+      "source": "BMS Threat Guide (General notes, AN/MPQ-46, AN/MPQ-53)"
+    },
+    {
+      "name": "Chirp / pitch by ring",
+      "description": "Threat Guide notes: SA-10 Flap Lid \"higher chirp inner ring\"; the Big Bird 5N64S \"10 has lower sound and stays in outer ring\".",
+      "source": "BMS Threat Guide (Flap Lid B, Big Bird)"
+    },
+    {
+      "name": "Missile launch tone",
+      "description": "TWS missile launch tone in the headset when a radar missile is being guided on ownship, with the flashing circle on the scope and flashing red LAUNCH light. It is a fixed-volume warning tone.",
+      "source": "TO 1F-16CM/AM-1 BMS 24.2; TO 1F-16CMAM-34-1-1 BMS 2.5.6"
+    },
+    {
+      "name": "TWS composite tone volume",
+      "description": "THREAT knob on AUDIO 1 panel: clockwise increases the TWS composite tone volume (can be mapped to an analog axis). The launch tone is not affected (fixed volume).",
+      "source": "TO 1F-16CM/AM-1 BMS 24.2.5; TO 1F-16CMAM-34-1-1 BMS 2.1.1"
+    },
+    {
+      "name": "ALR-93 lock beep",
+      "description": "Octagon plus a beep every 7 seconds = STT lock; no beep = track (SAM/TWS).",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.4.3"
+    },
+    {
+      "name": "CARAPACE voice",
+      "description": "After power-up a female voice informs of any faults (FAIL light; clears only by power cycle).",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.5.1"
+    }
+  ],
+  "controls": [
+    {
+      "name": "HANDOFF (ALR-56M/69, diamond \"H\" lamp)",
+      "panel": "Threat Warning Prime",
+      "description": "Short push (<1 s): toggles normal <-> diamond float mode. Press and hold (>1 s): transient mode, diamond steps down the priority list; release = latch on the last symbol (returns to float if that emitter times out). Lamp on when a handoff mode is engaged. Mouse: left-click = short push, right-click = long push (click again to release). Recommended: diamond float for maximum SA.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.1-2, 2.7.3.1.4"
+    },
+    {
+      "name": "MODE (PRI / OPEN)",
+      "panel": "Threat Warning Prime",
+      "description": "Toggles PRIORITY (only the 5 most lethal tracks) and OPEN (up to 12 tracks, 16 with UNKNOWN). PRI lamp flashes at 4 Hz in PRIORITY mode when more than 5 radars are painting ownship.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.4"
+    },
+    {
+      "name": "LAUNCH (MISSILE LAUNCH)",
+      "panel": "Threat Warning Prime",
+      "description": "Red, flashes at 4 Hz when a radar missile is being guided on ownship. Pressing tests the launch light (and audio during the preflight BIT).",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.4, 2.7.3.2.1; Training Manual ramp start"
+    },
+    {
+      "name": "SYS TEST",
+      "panel": "Threat Warning Prime",
+      "description": "Initiates self-test (two test screens, then fault list/F if faulty). Can be used to reset the RWR if it gets stuck. ALR-69: SYS TEST then UNKNOWN within 0.5 s toggles naval (SEA) mode.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.4, 2.7.3.3.1"
+    },
+    {
+      "name": "T / TGT SEP",
+      "panel": "Threat Warning Prime",
+      "description": "Spreads out overlapping emitter symbols for 5 seconds, then the display returns to normal.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.4"
+    },
+    {
+      "name": "UNKNOWN (U)",
+      "panel": "Threat Warning Prime",
+      "description": "Toggles UNKNOWN mode (shows up to 16 symbols including unknown-type emitters). U flashes when unknown radars are painting but filtered.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.4"
+    },
+    {
+      "name": "SEARCH (S)",
+      "panel": "Threat Warning Aux",
+      "description": "Toggles SEARCH mode (S symbols for emitters in air search mode). S flashes when search radars paint ownship while filtered.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.4"
+    },
+    {
+      "name": "ACT/PWR (ACTIVITY / POWER)",
+      "panel": "Threat Warning Aux",
+      "description": "ACTIVITY on when missile activity (guide or tracking modes) is detected; POWER on whenever the RWR is powered. No button function.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.4"
+    },
+    {
+      "name": "ALTITUDE (LOW / ALT)",
+      "panel": "Threat Warning Aux",
+      "description": "Toggles LOW and HIGH altitude threat assessment biasing (SAM dat files hold LOW and HIGH lethality scores). L shown in scope center when LOW is selected.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.4, 2.7.3.2.1"
+    },
+    {
+      "name": "SYSTEM POWER",
+      "panel": "Threat Warning Aux",
+      "description": "Toggles RWR power. First step of the defensive suite power-up on the ramp (SYSTEM POWER light illuminates); RWR and jammer are also switched ON on the CMDS panel.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.1.4; Training Manual ramp start"
+    },
+    {
+      "name": "THREAT volume knob",
+      "panel": "AUDIO 1",
+      "description": "Sets TWS composite tone volume.",
+      "source": "TO 1F-16CM/AM-1 BMS 24.2.5"
+    },
+    {
+      "name": "RWR DSPLY (HMCS DISPLAY DED page)",
+      "panel": "UFC / HMCS",
+      "description": "Displays the RWR priority (diamond) threat on the HMCS. Requires a priority threat and float, transient or latch mode; in handoff OFF (normal) nothing is shown. Do not rely on it if the threat is latched.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.5.6"
+    },
+    {
+      "name": "ALR-93: POWER / BIT / LIB SET / PRIORITY",
+      "panel": "ALR-93(V)1 control",
+      "description": "POWER powers the system; BIT initiates self-test (FAULT light if a fault is found); LIB SET toggles normal and training libraries (normal library does not contain search radars); PRIORITY selects priority mode.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.4.1"
+    },
+    {
+      "name": "SPS-3000: PRI / OPN / JMR",
+      "panel": "Elisra SPS-3000 (IAF F-16C-40/52+)",
+      "description": "PRI: only the 5 highest priority threats displayed (yellow light); OPN: all threats displayed; JMR light: internal jammer ON or STBY. Otherwise same as ALR-93(V)1.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.8.1"
+    },
+    {
+      "name": "CARAPACE: EXP / PRIO / MODE / PWR",
+      "panel": "Thales CARAPACE",
+      "description": "EXP separates overlapping contacts (double click within 1 s = self-test, BIT light); PRIO selects priority mode; MODE toggles libraries (search radars included when AI indicator on); PWR powers up. EDS AUTO / MAN ON lights show CMDS auto/manual mode.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.5.1"
+    },
+    {
+      "name": "ALR-67(V)3: ENABLE OFFSET / ENABLE SPECIAL / LIMIT DISPLAY / POWER",
+      "panel": "F/A-18 RWR",
+      "description": "ENABLE OFFSET (Alt+Num 9, SimRWRHandoff): highest priority target for composite audio, hold to browse. ENABLE SPECIAL (Alt+Num 3, SimRWRSetTargetSep): separates overlapping contacts. LIMIT DISPLAY (Alt+Num 6, SimRWRSetPriority): priority mode. POWER (Alt+Num 0, SimRwrPower).",
+      "source": "BMS Naval Ops (AN/ALR-67(V)3)"
+    }
+  ],
+  "preflight": [
+    "Threat Warning Aux: press SYSTEM POWER - SYSTEM POWER light on.",
+    "CMDS panel: RWR and JMR switches ON.",
+    "Threat Warning Prime: press SYS TEST and check the RWR display test.",
+    "Press the MSL LAUNCH indicator to test the light and audio.",
+    "Press HANDOFF once to set diamond float mode (often overlooked - without it the RWR will not warn properly)."
+  ],
+  "gaps": [
+    "Ship emitters: the BMS Threat Guide ship pages/charts list radars and weapons but no RWR symbols, so no ship entries are included.",
+    "Generic RWR display symbology (hat, boat, lethality rings, figures of each RWR scope) is only shown as images in the Dash-34; the \"Hat\" entry is flagged source \"general\".",
+    "Air-to-air missile pages and the aircraft/AA-missile charts (Threat Guide p.45-46) are images only; aircraft symbols were taken from the individual aircraft entries.",
+    "ALR-69 naval mode indication and ALR-93/CARAPACE symbol pages are images in the Dash-34.",
+    "Nike Hercules shows both N and P lines in the ALR-56M chart; recorded as N with a note."
+  ],
+  "preflightSource": "BMS Training Manual 4.38.1 ramp start steps 7-10 (ALR-56)",
+  "aircraftWithoutRwrSymbol": [
+    "G4 Super Galeb",
+    "J-5/Mig-17F Fresco",
+    "Mig-19SF Farmer",
+    "Mig-27 Flogger",
+    "Q-5N Fantan",
+    "Su-17 Fitter-C",
+    "Su-20 Fitter-C",
+    "Su-22 Fitter-F",
+    "Su-25 Frogfoot",
+    "A-1H Skyraider",
+    "A-4E Skyhawk",
+    "A-4E Agressor",
+    "A-4PTM Skyhawk",
+    "A-4SU Super Skyhawk",
+    "A-10A/ C Warthog",
+    "AV-8B Harrier II",
+    "F-5A Freedom Fighter",
+    "F-117A Nighthawk",
+    "Jaguar GR3 RAF",
+    "MB-339",
+    "OV-10 Bronco"
+  ]
+}

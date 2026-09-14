@@ -1,0 +1,2563 @@
+{
+  "id": "f15c",
+  "title": "F-15C/D Checklist",
+  "document": "TO 1F-15C-1CL-1 BMS",
+  "sections": [
+    {
+      "id": "normal-cockpit-designation-code",
+      "group": "Normal Procedures",
+      "title": "Cockpit Designation Code",
+      "items": [
+        {
+          "type": "note",
+          "text": "System and/or component effectivity for a particular aircraft version/cockpit and engine version is denoted by a letter code enclosed in a box located in the text or on an illustration."
+        },
+        {
+          "type": "table",
+          "title": "Aircraft, Cockpit",
+          "columns": [
+            "Code",
+            "Designation"
+          ],
+          "rows": [
+            [
+              "C",
+              "F-15C aircraft"
+            ],
+            [
+              "D",
+              "F-15D aircraft"
+            ],
+            [
+              "DF",
+              "F-15D aircraft, forward cockpit"
+            ],
+            [
+              "DR",
+              "F-15D aircraft, rear cockpit"
+            ]
+          ]
+        },
+        {
+          "type": "note",
+          "text": "An asterisk (*) preceding steps is used to highlight procedures for D aircraft which apply to both DF Front and DR Rear cockpits."
+        },
+        {
+          "type": "note",
+          "text": "Software: FALCON BMS."
+        }
+      ]
+    },
+    {
+      "id": "normal-warnings-cautions-notes-comms",
+      "group": "Normal Procedures",
+      "title": "Warnings, Cautions, Notes, Comms",
+      "items": [
+        {
+          "type": "note",
+          "text": "The following definitions apply to Warnings, Cautions, Notes, and Comms found throughout the manual:"
+        },
+        {
+          "type": "warning",
+          "text": "Operating procedures, techniques, etc., which could result in personal injury or loss of life if not carefully followed."
+        },
+        {
+          "type": "caution",
+          "text": "Operating procedures, techniques, etc., which could result in damage to equipment if not carefully followed."
+        },
+        {
+          "type": "note",
+          "text": "An operating procedure, technique, etc., which is considered essential to emphasize with additional information."
+        },
+        {
+          "type": "note",
+          "text": "EPU CHECK (boxed warning heading): Aircraft system, component, procedure, that special attention, techniques, etc., is required."
+        },
+        {
+          "type": "subhead",
+          "text": "Use of words As Desired and As Required"
+        },
+        {
+          "type": "note",
+          "text": "As desired allows pilot preference in switch/control positioning."
+        },
+        {
+          "type": "note",
+          "text": "As required indicates those actions which vary based on mission requirements or dedicated SOP instructions."
+        }
+      ]
+    },
+    {
+      "id": "fam-cockpit-interior-check",
+      "group": "Familiarization Procedures",
+      "title": "Cockpit Interior Check",
+      "items": [
+        {
+          "type": "note",
+          "text": "This section is furnished for familiarization use. It will normally be inserted between BEFORE ENTERING COCKPIT and COCKPIT INTERIOR CHECK. It may also be inserted in another part of the checklist, removed, parts removed, or discarded as desired."
+        },
+        {
+          "type": "note",
+          "text": "A thorough cockpit interior preflight shall be accomplished prior to each flight. The design features of the aircraft greatly simplify this task, but do not alleviate the requirement. Switch positions designated AS DESIRED allow pilot preference in switch/control positioning. AS REQUIRED indicates those switches that will differ with mission requirements. If no specific requirement exists, pilot preference may be used. Normally, those avionics switches designated AS DESIRED or AS REQUIRED should be OFF for start."
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Interior check",
+          "action": "COMPLETE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "subhead",
+          "text": "Left Console"
+        },
+        {
+          "type": "step",
+          "n": "a",
+          "text": "JTIDS",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "b",
+          "text": "AAI",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "c",
+          "text": "IFF M1,M2,M3/A, MC",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "d",
+          "text": "IFF MASTER",
+          "action": "NORM/LOW",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "e",
+          "text": "EW panel",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "f",
+          "text": "Integrated communication controls",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "g",
+          "text": "External light controls",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "(1)",
+          "text": "Anti-collision",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "(2)",
+          "text": "Formation",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "h",
+          "text": "Flap switch",
+          "action": "UP",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "i",
+          "text": "Throttles",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "j",
+          "text": "Radar controls",
+          "action": "AS DESIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "(1)",
+          "text": "Rader power knob",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "k",
+          "text": "Fuel control panel",
+          "action": "SET",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "(1)",
+          "text": "Slipway switch",
+          "action": "CLOSE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "l",
+          "text": "CAS switches",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "m",
+          "text": "Miscellaneous control panel",
+          "action": "SET",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "(1)",
+          "text": "Landing/taxi light switch",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "n",
+          "text": "ILS/TACAN controls",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "(1)",
+          "text": "Emergency landing gear handle",
+          "action": "IN",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "(2)",
+          "text": "Arresting hook switch",
+          "action": "UP",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "subhead",
+          "text": "Main Instrument Panel"
+        },
+        {
+          "type": "step",
+          "n": "a",
+          "text": "Landing gear handle",
+          "action": "DOWN",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "b",
+          "text": "Pitch ration switch",
+          "action": "AUTO",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "c",
+          "text": "Master arm switch",
+          "action": "SAFE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "d",
+          "text": "Fire/overheat lights",
+          "action": "NOT PRESSED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "e",
+          "text": "VSD controls",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "f",
+          "text": "Main comm controls",
+          "action": "ON AND SET",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "g",
+          "text": "HUD control panel",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "h",
+          "text": "Emergency jett button",
+          "action": "NOT PRESSED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "i",
+          "text": "Steer mode knob",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "j",
+          "text": "Emergency brake/steer handle",
+          "action": "IN",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "k",
+          "text": "Standby altimeter",
+          "action": "SET TO FIELD ELEVATION",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "subhead",
+          "text": "Right Console"
+        },
+        {
+          "type": "step",
+          "n": "a",
+          "text": "Oxygen",
+          "action": "SUPPLY ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "b",
+          "text": "Engine control panel",
+          "action": "SET",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "(1)",
+          "text": "Generator switches",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "(2)",
+          "text": "Emergency generator switch",
+          "action": "AUTO",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "(3)",
+          "text": "EEC/ENG CONTR switches",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "(4)",
+          "text": "JFS starter switch",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "(5)",
+          "text": "Engine master switches",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "c",
+          "text": "INS mode knob",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "d",
+          "text": "Interior lights controls",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "e",
+          "text": "TEWS panel",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "f",
+          "text": "Countermeasures control panel",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "normal-verify",
+      "group": "Normal Procedures",
+      "title": "Verify (After Cockpit Check is Complete)",
+      "items": [
+        {
+          "type": "subhead",
+          "text": "After Cockpit Check is Complete"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Throttles",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Formation lights",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "Emergency landing gear handle",
+          "action": "IN",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "Arresting hook switch",
+          "action": "UP",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "5",
+          "text": "Landing gear handle",
+          "action": "DOWN",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "6",
+          "text": "Master arm switch",
+          "action": "SAFE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "7",
+          "text": "Emergency jettison button",
+          "action": "NOT PRESSED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "8",
+          "text": "EEC/ENG CONTR switches",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "9",
+          "text": "Generator switches",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "10",
+          "text": "Engine master switches",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "11",
+          "text": "JFS starter switch",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "12",
+          "text": "Avionics",
+          "action": "OFF (CC, AAI, IFF, RADAR, ILS/TACAN, VSD, HUD, INS, TEWS)",
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "normal-starting-engines",
+      "group": "Normal Procedures",
+      "title": "Starting Engines",
+      "items": [
+        {
+          "type": "note",
+          "text": "Normal engine start procedure does not use external power. With the JFS running, power is available to operate the AMAD fire warning system, the intercom system between pilot and the ground, and the cockpit utility light. Engine RPM and FTIT gages are inoperative until the emergency generator comes on line during start. The rest of the engine instruments are inoperative until a main generator comes on line at about 44% RPM during the first engine start."
+        },
+        {
+          "type": "caution",
+          "text": "(PW-220) ENG CONTR switch position should not be changed until 60 seconds after start initiation due to the possible failure of the CGB shear section, hot start, start-stall, or torching during start. Switch may be positioned to desired setting once engine achieves idle."
+        },
+        {
+          "type": "note",
+          "text": "Because a JFS accumulator was discharged to start the JFS, the JFS LOW light will illuminate when power is available to light the caution panel. It will go out when the accumulators are recharged by a running engine."
+        },
+        {
+          "type": "note",
+          "text": "When the finger lift is raised, the JFS will engage and accelerate the engine. JFS engagement is indicated by an audible decrease in JFS whine when the JFS clutch engages (BMS sounds WIP). A normal start is indicated by RPM acceleration occurring before initial FTIT movement."
+        },
+        {
+          "type": "note",
+          "text": "Monitor engine instruments and compare against the operating limitations listed in section V. After first engine start, the JFS automatically decouples from that engine and is ready for the second engine start. After second engine start, the JFS shuts down automatically."
+        },
+        {
+          "type": "note",
+          "text": "If an engine must be shut down and restarted before the JFS low light has extinguished, avoid starting the JFS on a partially charged bottle. Service the JFS via the ground comm menu (T, 7) prior to a second JFS start attempt."
+        },
+        {
+          "type": "note",
+          "text": "The following procedure is applicable to either engine. The right engine is normally started first to permit checking utility hydraulic pressure with only the right pump operating."
+        },
+        {
+          "type": "subhead",
+          "text": "JFS Start"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Engine master switches",
+          "action": "CHECK ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "JFS switch",
+          "action": "CHECK ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "JFS handle",
+          "action": "PULL AND RELEASE (RIGHT CLICK)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "Starter READY light",
+          "action": "ON (within 10 seconds; 15 if temp below 0°F)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "5",
+          "text": "Fire extinguisher switch",
+          "action": "TEST",
+          "critical": false,
+          "note": "Observe the AMAD fire warning light on and voice warning activated."
+        },
+        {
+          "type": "subhead",
+          "text": "Engine Start"
+        },
+        {
+          "type": "step",
+          "n": "6",
+          "text": "AIR SOURCE knob",
+          "action": "BOTH",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "7",
+          "text": "Finger lift",
+          "action": "RAISE AND RELEASE",
+          "critical": false,
+          "note": "This engages the JFS to the engine."
+        },
+        {
+          "type": "step",
+          "n": "8",
+          "text": "Tachometer",
+          "action": "OBSERVE INDICATING",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "9",
+          "text": "Fire extinguisher switch",
+          "action": "TEST",
+          "critical": false,
+          "note": "Check AMAD, left and right ENG FIRE lights ON, and voice warning activated."
+        },
+        {
+          "type": "step",
+          "n": "10",
+          "text": "Throttle",
+          "action": "IDLE 25%",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "11",
+          "text": "Engine instruments",
+          "action": "CHECK",
+          "critical": false,
+          "note": "Monitor FTIT for hot start.\nMonitor oil pressure rises into green arc."
+        },
+        {
+          "type": "step",
+          "n": "12",
+          "text": "JFS deceleration",
+          "action": "CONFIRM (WIP)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "13",
+          "text": "Warning and caution lights",
+          "action": "TEST (WIP)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "14",
+          "text": "EMER BST ON light",
+          "action": "OBSERVE ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "15",
+          "text": "Total fuel quantity",
+          "action": "CHECK",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "16",
+          "text": "Fire extinguisher switch",
+          "action": "TEST",
+          "critical": false,
+          "note": "Check AB BURN THRU lights ON and voice warning activated, (main generator must be on line). The AMAD and ENG FIRE lights will also be activated."
+        },
+        {
+          "type": "step",
+          "n": "17",
+          "text": "Other engine",
+          "action": "START",
+          "critical": false,
+          "note": "Finger lift – RAISE AND RELEASE\nOther throttle – IDLE 25%\nOther engine instruments – CHECK"
+        },
+        {
+          "type": "step",
+          "n": "18",
+          "text": "Engine instruments",
+          "action": "CHECK",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "19",
+          "text": "JFS",
+          "action": "CONFIRM OFF; start light out JFS SWITCH remains ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "20",
+          "text": "Ramps",
+          "action": "DOWN",
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "normal-before-taxiing",
+      "group": "Normal Procedures",
+      "title": "Before Taxiing",
+      "items": [
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Canopy",
+          "action": "AS DESIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "INS",
+          "action": "ALIGN",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "A",
+          "text": "NCI DATA knob",
+          "action": "PP",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "B",
+          "text": "NCI MODE knob",
+          "action": "GC",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "C",
+          "text": "Numpad",
+          "action": "press RDY",
+          "critical": false,
+          "note": "Verify NCI lights on."
+        },
+        {
+          "type": "step",
+          "n": "D",
+          "text": "Numpad",
+          "action": "press ENTR",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "note",
+          "text": "INS alignment is initiated.\nAfter 60sec - End Coarse - solid ALN light\nAfter 120sec - End partial - 1Hz flash ALN light\nAfter 240sec - full align - 4Hz flash ALN light"
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "JTIDS switch",
+          "action": "NORM",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "MPCD",
+          "action": "ON (DAY/NIGHT as desired)",
+          "critical": false,
+          "note": "Wait for \"TERMINAL LOAD: INITIALIZE\" to display."
+        },
+        {
+          "type": "step",
+          "n": "5",
+          "text": "CLEAR CC BUF (PB10)",
+          "action": "PRESS",
+          "critical": false,
+          "note": "The CC buffer must be cleared to ensure data from the previous flight does not contaminate data for this flight (WIP)"
+        },
+        {
+          "type": "step",
+          "n": "6",
+          "text": "DTM",
+          "action": "READ",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "7",
+          "text": "Avionics",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "A",
+          "text": "AAI",
+          "action": "AUTO",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "B",
+          "text": "RADAR",
+          "action": "STANDBY",
+          "critical": false,
+          "note": "Initiates Radar BIT (90 sec)"
+        },
+        {
+          "type": "step",
+          "n": "C",
+          "text": "ILS/TACAN",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "D",
+          "text": "VSD",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "E",
+          "text": "HUD",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "8",
+          "text": "TEWS",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "A",
+          "text": "ICS",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "B",
+          "text": "SET 1/2/3",
+          "action": "CYCLE MAN/AUTO, then AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "C",
+          "text": "RWR",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "D",
+          "text": "EWWS",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "9",
+          "text": "Radios",
+          "action": "AS DESIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "10",
+          "text": "Speed brake",
+          "action": "CYCLE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "11",
+          "text": "Flaps",
+          "action": "DOWN",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "12",
+          "text": "Slipway door",
+          "action": "CHECK",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "13",
+          "text": "T/O trim",
+          "action": "SET (WIP)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "warning",
+          "text": "F-15C trim system is WIP – trim inputs on ground will give no feedback until airborne. Extreme care should be taken not to make inadvertent trim inputs while on ground."
+        },
+        {
+          "type": "step",
+          "n": "14",
+          "text": "PTC",
+          "action": "CHECK (N/I)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "15",
+          "text": "FLIGHT CONTROLS",
+          "action": "CHECK",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "a",
+          "text": "Stick full aft and full left",
+          "action": "Observe stabilator trailing edge up (left further up than the right) rudders 30° left, left aileron up, right aileron down",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "b",
+          "text": "Stick full forward and full left",
+          "action": "Observer right stabilator leading edge moves into view and rudders move 30° right (ailerons should not move)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "c",
+          "text": "Stick full forward and full right",
+          "action": "Observe left aileron moves down and right aileron moves up, rudders move 30° left, and left stabilator leading edge in view",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "d",
+          "text": "Stick full aft and full right",
+          "action": "Observe stabilator trailing edge moves to full up (right higher than left) and rudders move 30° right (ailerons do not move)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "e",
+          "text": "Rudder",
+          "action": "Check. Hold stick neutral and paddle switch pressed. Move rudder pedals left and right and observe 15° rudder travel (CAS off)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "warning",
+          "text": "Failure to ensure all flight control surfaces move to the proper position for each stick movement may result in loss of control. Malfunctions can exist which would cause the flight controls to be correct with stick in one position and incorrect in another position."
+        },
+        {
+          "type": "step",
+          "n": "16",
+          "text": "CAS",
+          "action": "RESET (N/I)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "17",
+          "text": "EEC/ENG CONTR switches",
+          "action": "CYCLE (warning lights out)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "18",
+          "text": "Brakes",
+          "action": "CHECK",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "19",
+          "text": "JFS LOW light",
+          "action": "OUT",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "20",
+          "text": "VSD BIT",
+          "action": "INITIATE (N/I)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "21",
+          "text": "Oxygen",
+          "action": "CHECK",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "a",
+          "text": "Quantity",
+          "action": "CHECK",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "b",
+          "text": "Oxygen Supply",
+          "action": "ON",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "22",
+          "text": "Fuel quantity gage",
+          "action": "CHECK",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "23",
+          "text": "INS",
+          "action": "CHECK aligned/NAV INS",
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "normal-taxiing",
+      "group": "Normal Procedures",
+      "title": "Taxiing",
+      "items": [
+        {
+          "type": "note",
+          "text": "Release brakes and advance power slightly if necessary. As aircraft starts to roll, apply brakes to check operation. When clear, actuate nose gear steering in both directions to ensure proper operation. During taxi, check all flight instruments. Due to excess thrust at idle power, taxi speed requires continual attention. At high gross weights, make all turns at minimum practicable speed and maximum practicable radius."
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Brakes",
+          "action": "CHECK",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Nose gear steering",
+          "action": "CHECK",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "Flight instruments",
+          "action": "CHECK",
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "normal-before-takeoff",
+      "group": "Normal Procedures",
+      "title": "Before Takeoff",
+      "items": [
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Radar power knob",
+          "action": "OPERATE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Ejection controls safety lever",
+          "action": "CHECK ARMED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "Flights controls",
+          "action": "CHECK FREE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "Flaps",
+          "action": "CHECK DOWN",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "5",
+          "text": "IFF",
+          "action": "ON/AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "6",
+          "text": "T/O trim",
+          "action": "CHECK (N/I)",
+          "critical": false,
+          "note": "If the aircraft is manually trimmed nose down from takeoff trim, nosewheel lift-off speed may be increased."
+        },
+        {
+          "type": "step",
+          "n": "7",
+          "text": "Canopy",
+          "action": "CLOSED AND LOCKED",
+          "critical": false,
+          "note": "The canopy may bounce slightly as it lowers on canopy sill."
+        },
+        {
+          "type": "step",
+          "n": "8",
+          "text": "Warning, caution lights",
+          "action": "CHECK",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "9",
+          "text": "Pitot heat",
+          "action": "ON (N/I)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "10",
+          "text": "Fuel/tank quantities",
+          "action": "CHECK",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "11",
+          "text": "Landing light",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "normal-takeoff",
+      "group": "Normal Procedures",
+      "title": "Takeoff",
+      "items": [
+        {
+          "type": "note",
+          "text": "Advance engines to 80% (some aircraft creep may occur) and check instruments. When ready for takeoff, release brakes and advance throttles to MIL or MAX as desired."
+        },
+        {
+          "type": "note",
+          "text": "Monitor engine instruments for proper operation, assuring that nozzles remain below 30% at MIL."
+        },
+        {
+          "type": "note",
+          "text": "For normal takeoffs, move the stick to approximately 10° pitch attitude. For maximum performance takeoffs (minimum ground roll), move the stick full aft at a speed below the nose wheel lift-off speed and rotate 12° pitch attitude."
+        },
+        {
+          "type": "note",
+          "text": "Retract gear and flaps when airborne."
+        },
+        {
+          "type": "subhead",
+          "text": "Afterburner Operation"
+        },
+        {
+          "type": "note",
+          "text": "During normal afterburner operation, observe exhaust nozzles open progressively with each afterburner segment; thrust and fuel flow increase proportionately. As throttles are advanced from minimum to maximum afterburner, the increase in thrust is fairly smooth and continuous."
+        }
+      ]
+    },
+    {
+      "id": "normal-climb-techniques",
+      "group": "Normal Procedures",
+      "title": "Climb Techniques",
+      "items": [
+        {
+          "type": "note",
+          "text": "MIL Power - Climb at 350 knots to 0.90 Mach, then maintain 0.90 MACH."
+        },
+        {
+          "type": "note",
+          "text": "MAX Power - Climb at 350 knots to 0,95 Mach. If Mach increases above 0,95 at 40° pitch attitude, hold 40° and allow the Mach to increase."
+        }
+      ]
+    },
+    {
+      "id": "normal-in-flight",
+      "group": "Normal Procedures",
+      "title": "In-Flight",
+      "items": [
+        {
+          "type": "note",
+          "text": "Continually monitor aircraft systems operation throughout the flight. Frequently check engine instruments, cabin pressure, oxygen system operation, fuel quantity and fuel transfer."
+        },
+        {
+          "type": "note",
+          "text": "Optimal cruise and maximum endurance should be found in the performance data section and is attained by flying the correct Mach number for configuration and altitude. If the performance charts are not available and accuracy is not a significant factor, 12 units AOA may be used for optimum cruise and 14.5 units AOA may be used for maximum endurance."
+        }
+      ]
+    },
+    {
+      "id": "normal-descent-before-landing",
+      "group": "Normal Procedures",
+      "title": "Descent/Before Landing",
+      "items": [
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Armament master switch",
+          "action": "SAFE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Altimeter",
+          "action": "SET",
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "normal-after-landing",
+      "group": "Normal Procedures",
+      "title": "After Landing",
+      "items": [
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Ejection controls safety lever",
+          "action": "LOCKED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Speed brake",
+          "action": "IN",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "Flaps",
+          "action": "UP",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "Slipway",
+          "action": "CHECK",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "5",
+          "text": "IFF mode switches",
+          "action": "OUT",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "6",
+          "text": "Radar power switch",
+          "action": "STBY",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "7",
+          "text": "Landing/taxi light",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "8",
+          "text": "Formation lights",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "normal-engine-shutdown",
+      "group": "Normal Procedures",
+      "title": "Engine Shutdown",
+      "items": [
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Slipway switch",
+          "action": "OPEN (if required)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Radar power knob",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "Avionics switches",
+          "action": "OFF (AAI, IFF, ILS/TACAN, VSD, MPCD, HUD, INS(NCI), and TEWS)",
+          "critical": false,
+          "note": "Turn avionics OFF before engine shutdown to prevent false BIT warnings on the status panel (N/I)"
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "Oxygen supply lever",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "5",
+          "text": "Prior to engine shutdown, advance throttle(s) to 75-78% for 5-10 seconds (local safety conditions permitting)",
+          "action": null,
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "6",
+          "text": "Retard throttle(s) to IDLE, stabilize minimum of 1-2 seconds",
+          "action": null,
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "7",
+          "text": "Throttles",
+          "action": "OFF 10 SECONDS AFTER INS OFF",
+          "critical": false,
+          "note": "Wait 10 seconds after INS shutoff before placing throttle(s) off. After the last generator is off and before the emergency generator drops off line, ensure that the L and R GEN OUT lights and the landing gear indicator lights come on. Illumination of these lights indicates that the generator failure circuit is functioning and the emergency generator is supplying both AC and DC essential power."
+        }
+      ]
+    },
+    {
+      "id": "normal-scramble",
+      "group": "Normal Procedures",
+      "title": "Scramble",
+      "items": [
+        {
+          "type": "subhead",
+          "text": "Aircraft Setup"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Complete your Before Flight procedures through Before Taxiing",
+          "action": null,
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Perform Engine Shutdown procedure",
+          "action": null,
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "Ejection controls safety lever",
+          "action": "LOCKED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "Avionics switches",
+          "action": "ON (EXCEPT RADAR, INS and TEWS)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "5",
+          "text": "Do not move the aircraft",
+          "action": null,
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "normal-quick-turnaround",
+      "group": "Normal Procedures",
+      "title": "Quick Turnaround",
+      "items": [
+        {
+          "type": "step",
+          "n": "1",
+          "text": "AFTER LANDING checks",
+          "action": "Complete",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "PRIOR TO ENGINE SHUTDOWN checks",
+          "action": "Complete",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "Communication with ground crew",
+          "action": "Establish (if required)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "ENGINE SHUTDOWN",
+          "action": "COMPLETE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "5",
+          "text": "Aircraft setup",
+          "action": "COMPLETE (if required)",
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "normal-exterior-inspection",
+      "group": "Normal Procedures",
+      "title": "Exterior Inspection (Typical)",
+      "items": [
+        {
+          "type": "note",
+          "text": "Check aircraft for loose doors and fasteners, cracks, dents, leaks, and other discrepancies."
+        },
+        {
+          "type": "note",
+          "text": "See chart in document, page N-14 (Figure N-3, Exterior Inspection)."
+        },
+        {
+          "type": "subhead",
+          "text": "Nose - A"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "UNDERSIDE:",
+          "action": null,
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "A",
+          "text": "NLG TIRE WHEEL AND STRUT",
+          "action": "CONDITION",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "B",
+          "text": "NLG DOORS & LINKAGE",
+          "action": "SECURE, GROUND LOCK REMOVED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "C",
+          "text": "ANTENNAE",
+          "action": "CONDITION",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "FORWARD FUSELAGE:",
+          "action": null,
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "A",
+          "text": "PITOT-STATIC PROBE",
+          "action": "CONDITION (2)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "B",
+          "text": "AOA PROBE",
+          "action": "SECURE CONDITION (2)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "C",
+          "text": "ENGINE INTAKE DUCT",
+          "action": "CLEAR (2)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "subhead",
+          "text": "Center Fuselage & Wing - B"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "WING:",
+          "action": null,
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "A",
+          "text": "EXTERNAL STORES & PYLONS",
+          "action": "SECURE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "B",
+          "text": "NAVIGATION & FORMATIONS LIGHTS",
+          "action": "CONDITION",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "C",
+          "text": "AIRLERON & FLAP",
+          "action": "CONDITION",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "D",
+          "text": "FUEL DUMP/VENT MAST",
+          "action": "CONDITION",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "subhead",
+          "text": "Aft Fuselage - C"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "GENERAL AREA:",
+          "action": null,
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "A",
+          "text": "ARRESTING HOOK",
+          "action": null,
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "B",
+          "text": "STABILATOR",
+          "action": "CONDITION",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "C",
+          "text": "RUDDER",
+          "action": "CONDITION",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "D",
+          "text": "ANTENNA COVER",
+          "action": "CONDITION (VERTICAL STABELIZER)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "E",
+          "text": "NAVIGATION & FORMATION LIGHTS",
+          "action": "CONDITION",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "F",
+          "text": "ENGINE EXHAUST AREA",
+          "action": "CONDITION",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "subhead",
+          "text": "Underside of Fuselage - D"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "GENERAL AREA:",
+          "action": null,
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "A",
+          "text": "STORE & PYLON",
+          "action": "SECURE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "MAIN GEAR AND WHEELWELL:",
+          "action": null,
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "A",
+          "text": "WHEEL, TIRE AND STRUT",
+          "action": "CONDITION",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "B",
+          "text": "DOORS & LINKAGE",
+          "action": "SECURE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "C",
+          "text": "GROUND LOCK",
+          "action": "REMOVED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "subhead",
+          "text": "Top of Fuselage - E"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "GENERAL AREA:",
+          "action": null,
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "A",
+          "text": "SECONDARY HEAT EXCHANGER EXHAUST COVER",
+          "action": "REMOVED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "B",
+          "text": "EQUIPMENT BAY FIVE",
+          "action": "SECURE",
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "normal-aircraft-servicing",
+      "group": "Normal Procedures",
+      "title": "Aircraft Servicing",
+      "items": [
+        {
+          "type": "note",
+          "text": "See chart in document, page N-17 (Figure N-4, Servicing Diagram)."
+        }
+      ]
+    },
+    {
+      "id": "normal-takeoff-and-landing-data-card",
+      "group": "Normal Procedures",
+      "title": "Takeoff and Landing Data Card",
+      "items": [
+        {
+          "type": "note",
+          "text": "Blank TOLD card form (Conditions: GW, Runway Condition, Runway Temp, Pressure Altitude, Wind, Runway Length, Runway Slope for Takeoff/Landing; Takeoff: Rotation Speed, Takeoff Speed/Dist., Refusal Speed, Max Brake Speed; Landing: Approach Speed, Touchdown Speed, Landing Distance for Immediately After Takeoff and Final Landing GW). See chart in document, page N-18 (Figure N-5)."
+        }
+      ]
+    },
+    {
+      "id": "normal-engine-limitations-pw-220",
+      "group": "Normal Procedures",
+      "title": "Engine Limitations PW 220",
+      "items": [
+        {
+          "type": "table",
+          "title": "Ground",
+          "columns": [
+            "Condition",
+            "FTIT °C",
+            "RPM %",
+            "Oil PSI",
+            "Remarks"
+          ],
+          "rows": [
+            [
+              "START",
+              "900",
+              "--",
+              "--",
+              "Note 1"
+            ],
+            [
+              "IDLE",
+              "-",
+              "-",
+              "15-80",
+              "--"
+            ],
+            [
+              "MIL/AB",
+              "960",
+              "94",
+              "30-80",
+              "Notes 2,5 and 6"
+            ],
+            [
+              "TRANSIENT",
+              "970",
+              "94",
+              "30-80",
+              "Notes 2,5 and 7"
+            ],
+            [
+              "FLUCTUATION",
+              "±10",
+              "±1",
+              "±10",
+              "Notes 2,3 and 4"
+            ]
+          ]
+        },
+        {
+          "type": "table",
+          "title": "Flight",
+          "columns": [
+            "Condition",
+            "FTIT °C",
+            "RPM %",
+            "Oil PSI",
+            "Remarks"
+          ],
+          "rows": [
+            [
+              "AIRSTART",
+              "800",
+              "--",
+              "--",
+              "--"
+            ],
+            [
+              "IDLE",
+              "-",
+              "-",
+              "15-80",
+              "--"
+            ],
+            [
+              "MIL/AB",
+              "970",
+              "96",
+              "30-80",
+              "Notes 1 and 2"
+            ],
+            [
+              "TRANSIENT",
+              "990",
+              "96",
+              "30-80",
+              "Notes 2 and 8"
+            ],
+            [
+              "FLUCTUATION",
+              "±10",
+              "±1",
+              "±10",
+              "Notes 2,3 and 4"
+            ]
+          ]
+        },
+        {
+          "type": "subhead",
+          "text": "Notes"
+        },
+        {
+          "type": "note",
+          "text": "1. BMS F-15 PW220 ENGINE MODEL IS WIP AND USES START LIMITS FROM THE REAL AIRCRAFT."
+        },
+        {
+          "type": "note",
+          "text": "2. LIMITATIONS INCLUDE FLUCTUATIONS."
+        },
+        {
+          "type": "note",
+          "text": "3. IN PHASE FLUCTUATION OF MORE THEN ONE INSTRUMENT, OR SHORT TERM CYCLIC FLUCTUATIONS ACCOMPANIED BY THRUST SURGES, INDICATE ENGINE ENTROL PROBLEMS."
+        },
+        {
+          "type": "note",
+          "text": "4. NOZZLE FLUCTUATIONS ARE LIMIED TO +- 2% AT MILITARY POWER AND ABOVE. FLUCTUATIONS ARE NOT PERMITTED BELOW MILITARY POWER."
+        },
+        {
+          "type": "note",
+          "text": "5. FOR ENGINE OPERATION AT MILITARY OR ABOVE, OIL PRESSURE MUST INCREASE 15 PSI MINIMUM ABOVE IDLE OIL PRESSURE."
+        },
+        {
+          "type": "note",
+          "text": "6. ENGINE NOZZLE POSITION IS LIMITED TO 30% OPEN OR LESS AT MILITARY POWER."
+        },
+        {
+          "type": "note",
+          "text": "7. MAXIMUM TEMPERATURE LIMITED TO 30 SECONDS."
+        },
+        {
+          "type": "note",
+          "text": "8. MAXIMUM TEMPERATURE LIMITED TO 10 SECOUDS."
+        }
+      ]
+    },
+    {
+      "id": "ep-jfs-fails-to-engage-or-abnormal-engagement-disengagement",
+      "group": "Emergency Procedures",
+      "title": "JFS Fails to Engage or Abnormal Engagement/Disengagement",
+      "items": [
+        {
+          "type": "subhead",
+          "text": "If JFS fails to engage"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Throttle",
+          "action": "ENSURE FULL OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Engine master switch",
+          "action": "CYCLE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "Fingerlift",
+          "action": "RAISE AND RELEASE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "subhead",
+          "text": "If still no engagement"
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "Engine master switch",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "5",
+          "text": "JFS switch",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "6",
+          "text": "Do not attempt another start",
+          "action": null,
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "subhead",
+          "text": "If engagement/disengagement is abnormal"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Throttle",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Engine master switch",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "JFS switch",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "Do not attempt another start",
+          "action": null,
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "ep-abnormal-engine-start",
+      "group": "Emergency Procedures",
+      "title": "Abnormal Engine Start",
+      "items": [
+        {
+          "type": "subhead",
+          "text": "Engine Fails to Start (PW-220 Engine)"
+        },
+        {
+          "type": "subhead",
+          "text": "If no indication of light off 30 seconds after throttle is advanced to IDLE:"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Throttle",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "subhead",
+          "text": "If another start attempt desired:"
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Engine",
+          "action": "WINDMILL FOR 10 SECONDS",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "Throttle",
+          "action": "IDLE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "subhead",
+          "text": "Engine Fails to Accelerate Normally (PW-220 Engine)"
+        },
+        {
+          "type": "subhead",
+          "text": "If both FTIT and RPM appear to stop increasing during start sequence:"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Throttle",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Engine master switch",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "JFS switch",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "Complete shutdown procedure",
+          "action": null,
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "ep-hot-start",
+      "group": "Emergency Procedures",
+      "title": "Hot Start",
+      "items": [
+        {
+          "type": "note",
+          "text": "If one of the following conditions occur during engine start, the starting FTIT limit of 680°C may be exceeded:\na. RPM acceleration simultaneous with or after after initial FTIT movement.\nb. FTIT above 580°C with RPM below 40%.\nc. FTIT rapidly rises thru 900°C.\nd. RPM stops increasing then decreases while FTIT is stable or increases."
+        },
+        {
+          "type": "subhead",
+          "text": "If starting FTIT NOT exceeded:"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Throttle",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Engine",
+          "action": "WINDMILL (until FTIT below 200°C)",
+          "critical": false,
+          "note": "The JFS can be engaged when RPM below 30%."
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "Air souce knob",
+          "action": "SELECT ENGINE TO BE STARTED",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "Throttle",
+          "action": "IDLE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "5",
+          "text": "Air source knob",
+          "action": "BOTH (idle RPM)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "subhead",
+          "text": "If FTIT EXCEEDED starting limit:"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Throttle",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Engine",
+          "action": "WINDMILL (if practical)",
+          "critical": false,
+          "note": "The JFS can be engaged when RPM below 30%."
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "Engine master switch",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "JFS switch",
+          "action": "OFF",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "5",
+          "text": "Complete Engine shutdown procedure",
+          "action": null,
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "ep-ins-problems",
+      "group": "Emergency Procedures",
+      "title": "INS Problems",
+      "items": [
+        {
+          "type": "subhead",
+          "text": "ALN Light Not On or Not Flashing (During Alignment)"
+        },
+        {
+          "type": "note",
+          "text": "If the ALN light does not illuminate within approximately 60 seconds, check that the ADI is erect (INS selected on the ADI mode switch), current present position (within 600ft/0.1 arc minutes) is displayed, and the ALN light tests good. If the ADI has not started to erect, the align cycle did not initialize. If the INS is shutdown (NCI mode selector knob in OFF), leave NCI mode selector knob in OFF for a minimum 2 seconds before initiating another alignment. Switching the NCI mode selector knob from NAV to GC or STOR causes the INS to start a new alignment cycle."
+        },
+        {
+          "type": "subhead",
+          "text": "Aircraft Movement While in Align Mode"
+        },
+        {
+          "type": "note",
+          "text": "If the aircraft is moved while the INS is in an align mode, the INS auto-transitions to NAV mode and the ALN light stops flashing. After stopping the aircraft, the INU reenters the align mode and the ALN light begins flashing again after approximately 1 minute. As soon as the light begins flashing, the NCI mode selector knob may be placed in the NAV mode. If the alignment is not completed, the INS provides degraded navigational performance and should be restarted by turning the INS off (INS mode selector knob to OFF) for a minimum of 2 seconds, then to GC ALIGN for a full GC alignment. The NCI mode selector knob can then be switched to INS or the INS will automatically transition to Nav (INS) at aircraft takeoff."
+        }
+      ]
+    },
+    {
+      "id": "ep-loss-of-brakes",
+      "group": "Emergency Procedures",
+      "title": "Loss of Brakes",
+      "items": [
+        {
+          "type": "note",
+          "text": "Loss of normal brakes may be caused by a defective anti-skid system, faulty brakes, or a UTL A hydraulic pressure loss. Malfunction of the anti-skid system may not illuminate the anti-skid light; however, failures may be recognized by no apparent braking action. In any case, it is important to remember when assessing the status of brakes, that very little deceleration will be sensed by the pilot at speeds above 100 knots regardless of whether the anti-skid system has failed. Therefore, aerodynamic braking should be accomplished first during the landing roll, followed by braking action as required."
+        },
+        {
+          "type": "caution",
+          "text": "If brake failure occurs during landing roll, consider lowering the hook before attempting to restore braking."
+        },
+        {
+          "type": "note",
+          "text": "If loss of the brakes is determined, turn the anti-skid switch to PULSER at high speed or OFF at taxi speed."
+        },
+        {
+          "type": "caution",
+          "text": "During pulser operation, pedal pressure over that required for safe deceleration may cause excessive tire wear and/or blown tires."
+        },
+        {
+          "type": "note",
+          "text": "If braking is not restored, pulling the emergency brake/steering handle provides an alternate power source for brakes/steering and bypasses the anti-skid/pulser system. Sufficient accumulator pressure is available to safely stop the aircraft. Repeated brakes applications deplete the system faster than a smooth steady application. If UTL B is operating, the JFS accumulator remains charged. If the JFS LOW light is on, the emergency brake system is not reliable for taxi since the accumulator pressure can no longer be monitored. Do not pull the emergency brake/steering handle in flight as the nosewheel may follow rudder commands, and touchdown steering/wheel brake protection is lost. If UTL A is available, normal operation can be restored by pushing the emergency brake/steering handing and releasing the paddle switch. While taxiing, if stopping distance is critical, use the emergency brake/steering handle first."
+        }
+      ]
+    },
+    {
+      "id": "ep-loss-of-directional-control",
+      "group": "Emergency Procedures",
+      "title": "Loss of Directional Control",
+      "items": [
+        {
+          "type": "note",
+          "text": "Directional control problems with the nose gear on the ground may be caused by a blown tire, nose gear shimmy, defective nose gear steering, defective anti-skid, overextended strut, or a faulty brake. For a known blown tire or brake loss, refer to the appropriate emergency procedure. If the cause of the directional control problem cannot be determined, time spend in fault isolation may worsen the situation. In this case, a single procedure (pulling the emergency brake/steering handle) is recommended. This provides an alternate source for powered braking/steering and disables the anti-skid and pulser system(s), thereby accommodating all of the various failure modes which may have caused the directional control problems. NORMAL/MANEUVERING range steering continues to be available with the emergency brake/steering handle pulled."
+        },
+        {
+          "type": "note",
+          "text": "If departure from a prepared runway, taxiway or ramp is unavoidable, consider shutting down the engines (time and conditions permitting) to minimize foreign object damage. Directional control while skidding or sliding across an unprepared surface may be impossible. If the aircraft develops a sideways skid or slide, failure of the landing gear is probable due to high side load forces. At higher speeds, aircraft roll, tumble, or groundloop is a possibility and consideration should be given to ground ejection if the situation warrants. Ground egress should not be attempted until the aircraft has come to a stop."
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Brakes",
+          "action": "RELEASE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Emergency brake/steer handle",
+          "action": "PULL",
+          "critical": false,
+          "note": "Because the anti-skid has been disabled, be prepared for a possible wheel lockup and a subsequent blown tire(s)."
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "Paddle switch",
+          "action": "HOLD PRESSED",
+          "critical": false,
+          "note": "This ensures that the nose gear steering shifts to JFS hydraulic accumulator pressure."
+        },
+        {
+          "type": "subhead",
+          "text": "If departing a prepared surface:"
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "Throttles",
+          "action": "OFF (conditions permitting)",
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "ep-abort",
+      "group": "Emergency Procedures",
+      "title": "Abort",
+      "items": [
+        {
+          "type": "note",
+          "text": "The decision to abort or continue the takeoff depends on many factors, most of which relate to a specific takeoff situation. Considerations should include, but are not limited to, the following:\na. Runway factors: Runway remaining, surface condition (wet, dry, etc.), type and/or number of arresting gear available, obstructions alongside or at the departure end, wind direction and velocity, weather and visibility.\nb. Aircraft factors: Weight, stores configuration, nature of the emergency, velocity at decision point, and importance of getting airborne.\nc. Stopping factors: Maximum braking, speed brake, hook, jettisoning stores, engine shutdown.\nd. Full aft stick: Full aft stick will reduce stopping distance below computed TOLD data (up to 500 feet at max abort speed) by increasing drag and weight on wheels. However, full aft stick must be applied below rotation speed to avoid raising the nose."
+        },
+        {
+          "type": "note",
+          "text": "Consider aborting after airborne where sufficient runway is available. Normally, with the short takeoff distances of the aircraft, abort is not a problem, but an early decision provides the most favorable circumstances."
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Throttles",
+          "action": "IDLE",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Brakes",
+          "action": "APPLY",
+          "critical": false,
+          "note": "If aborting with a blown tire or if a main tire blows during abort, place the anti-skid switch in PULSER, and use light braking on the good tire."
+        },
+        {
+          "type": "warning",
+          "text": "After an abort where unusual braking is required, do not shut down engines until adequate firefighting equipment is available. Hot wheels and brakes can provide an ignition source for fuel drained overboard during engine shutdown."
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "Hook",
+          "action": "AS REQUIRED",
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "ep-external-stores-jettison",
+      "group": "Emergency Procedures",
+      "title": "External Stores Jettison",
+      "items": [
+        {
+          "type": "note",
+          "text": "Two means exist to jettison external stores: the emergency jettison button, on the center instrument panel, and the select jettison button, on the ACP."
+        },
+        {
+          "type": "warning",
+          "text": "The emergency jettison button simultaneously jettisons all pylons and fuselage/CFT mounted missiles (N/I)."
+        },
+        {
+          "type": "note",
+          "text": "Do not use emergency jettison on the ground, or with fuseslage/CFT mounted missiles aboard, except as a last resort or in extreme emergency."
+        }
+      ]
+    },
+    {
+      "id": "ep-engine-failure-loss-of-thrust-afterburner-failure-on-takeoff",
+      "group": "Emergency Procedures",
+      "title": "Engine Failure/Loss of Thrust/Afterburner Failure on Takeoff",
+      "items": [
+        {
+          "type": "note",
+          "text": "Do Depending on the type of failure and aircraft conditions, MIL power may not be sufficient to continue takeoff or sustain flight at low airspeed. If takeoff is continued use maximum power available in a three point attitude and accelerate to single engine takeoff speed. Once single engine rotation speed is attained, input 1/2 aft stick, and rotate to a 10° attitude. Reducing pitch (if able) and selecting maximum afterburner will allow the aircraft to accelerate."
+        },
+        {
+          "type": "note",
+          "text": "If engine failure occurs after rotation, it may be necessary to lower the nose to the runway to attain single engine rotation speed. This is especially important at high gross weights and low-density altitudes. If an engine fails immediately after becoming airborne, it may be necessary to allow the aircraft to settle back to the runway until single engine rotation speed is attained. Immediately after becoming airborne, establish near level flight for acceleration prior to climb. Lateral and directional control can be maintained if the aircraft remains above stall speed, but the ability to climb depends upon the aircraft gross weight, configuration, airspeed, altitude and temperature."
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "If conditions permit",
+          "action": "ABORT",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "warning",
+          "text": "Following an AB anomaly on takeoff and TOLD data requires afterburner, consideration should be given to aborting if conditions warrant."
+        },
+        {
+          "type": "subhead",
+          "text": "If takeoff is continued:"
+        },
+        {
+          "type": "step",
+          "n": "1",
+          "text": "Throttle(s)",
+          "action": "maximum power available",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "2",
+          "text": "Pitch",
+          "action": "lower to three-point attitude and accelerate to SETOS",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "warning",
+          "text": "With an engine failure or significant loss of thrust, if SETOS is not obtained by lowering nose to the runway, sustained flight may not be possible."
+        },
+        {
+          "type": "note",
+          "text": "Delaying rotation until higher speeds improves single engine climb performance. Consider runway remaining and tire speed limits (nose 200, mains 225)."
+        },
+        {
+          "type": "step",
+          "n": "3",
+          "text": "Gear",
+          "action": "retract as soon as practical after takeoff",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "note",
+          "text": "Gear retraction increases single engine rate of climb by 300-500FPM."
+        },
+        {
+          "type": "step",
+          "n": "4",
+          "text": "External stores",
+          "action": "JETTISON (if required)",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "5",
+          "text": "Flaps",
+          "action": "retract at SETOS +25 KCAS",
+          "critical": false,
+          "note": null
+        },
+        {
+          "type": "step",
+          "n": "6",
+          "text": "Accelerate and climb to a safe altitude and investigate",
+          "action": null,
+          "critical": false,
+          "note": null
+        }
+      ]
+    },
+    {
+      "id": "ar-air-refueling-procedures",
+      "group": "Air Refueling Procedures",
+      "title": "Air Refueling Procedures (with KC-135, KC-10, and KDC-10)",
+      "items": [
+        {
+          "type": "note",
+          "text": "WIP — air refueling procedures are not yet published in this checklist (Section AR, page AR-1)."
+        }
+      ]
+    }
+  ]
+}

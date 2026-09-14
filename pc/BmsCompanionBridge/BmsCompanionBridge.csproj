@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <RootNamespace>BmsCompanion.Bridge</RootNamespace>
+    <AssemblyName>BMSCompanionBridge</AssemblyName>
+    <Product>BMS Companion Bridge</Product>
+    <Description>Streams Falcon BMS mission data to the BMS Companion Android app.</Description>
+    <Version>1.0.0</Version>
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\demo_briefing.txt" LogicalName="demo_briefing.txt" />
+    <EmbeddedResource Include="Resources\app.ico" LogicalName="app.ico" />
+  </ItemGroup>
+
+</Project>

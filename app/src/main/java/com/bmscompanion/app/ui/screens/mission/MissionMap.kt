@@ -1,0 +1,578 @@
+package com.bmscompanion.app.ui.screens.mission
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.bmscompanion.app.data.Airport
+import com.bmscompanion.app.data.Repo
+import com.bmscompanion.app.data.mission.Contact
+import com.bmscompanion.app.data.mission.MissionLink
+import com.bmscompanion.app.ui.components.HudChip
+import com.bmscompanion.app.ui.components.MapProjection
+import com.bmscompanion.app.ui.components.MapState
+import com.bmscompanion.app.ui.components.Tag
+import com.bmscompanion.app.ui.components.TheaterMap
+import com.bmscompanion.app.ui.components.isWide
+import com.bmscompanion.app.ui.components.safeText
+import com.bmscompanion.app.ui.go
+import com.bmscompanion.app.ui.theme.Hud
+import com.bmscompanion.app.ui.theme.LocalExtra
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.sin
+
+sealed interface MapSel {
+    data class Ctc(val id: String) : MapSel
+    data class Stp(val n: Int) : MapSel
+    data class Field(val id: Int) : MapSel
+    data class Ppt(val index: Int) : MapSel
+    data class Pt(val x: Double, val y: Double) : MapSel
+}
+
+/** Map layer toggles, remembered across launches. */
+object MapLayers {
+    var follow by mutableStateOf(Repo.getInt("m_follow", 1) == 1)
+    var route by mutableStateOf(Repo.getInt("m_route", 1) == 1)
+    var threats by mutableStateOf(Repo.getInt("m_threats", 1) == 1)
+    var traffic by mutableStateOf(Repo.getInt("m_traffic", 1) == 1)
+    var hostiles by mutableStateOf(Repo.getInt("m_hostiles", 1) == 1)
+    var labels by mutableStateOf(Repo.getInt("m_labels", 1) == 1)
+    var fields by mutableStateOf(Repo.getInt("m_fields", 1) == 1)
+    fun save() {
+        Repo.putInt("m_follow", if (follow) 1 else 0); Repo.putInt("m_route", if (route) 1 else 0); Repo.putInt("m_threats", if (threats) 1 else 0)
+        Repo.putInt("m_traffic", if (traffic) 1 else 0); Repo.putInt("m_hostiles", if (hostiles) 1 else 0); Repo.putInt("m_labels", if (labels) 1 else 0)
+        Repo.putInt("m_fields", if (fields) 1 else 0)
+    }
+}
+
+val Friendly = Color(0xFF56C8F5)
+val Hostile = Color(0xFFFF5A5F)
+val Neutral = Color(0xFFFFD27A)
+
+fun contactColor(c: Contact) = when {
+    c.own -> Hud.Amber
+    c.friendly -> Friendly
+    c.coalition.isNullOrBlank() -> Neutral
+    else -> Hostile
+}
+
+@Composable
+fun MissionMapPane(env: MissionEnv, state: MapState, sel: MapSel?, onSel: (MapSel?) -> Unit, onOpenTab: (MissionTab) -> Unit) {
+    val th = env.theater
+    val live by MissionLink.live.collectAsState()
+    val contacts by MissionLink.contacts.collectAsState()
+    val mission by MissionLink.mission.collectAsState()
+    val link by MissionLink.state.collectAsState()
+    if (th == null) {
+        PaneEmpty("No theater yet", "Connect to the bridge to load the mission theater.", "Setup") { onOpenTab(MissionTab.SETUP) }
+        return
+    }
+    val wide = isWide()
+    val tm = rememberTextMeasurer()
+    val density = LocalDensity.current
+    val hitPx = with(density) { 30.dp.toPx() }
+
+    val stpts = remember(mission, live?.navPoints) { steerpoints(mission, live) }
+    val route = stpts.filter { it.hasPos }
+    val ppts = remember(mission, live?.navPoints) { preplannedThreats(mission, live) }
+    val marks = markpoints(live)
+    val own = ownship(live)
+    val ctcs = contacts?.contacts.orEmpty()
+    val ownContact = ctcs.firstOrNull { it.own }
+    val ownPos = own ?: ownContact?.let { it.x to it.y }
+    val ownHdg = if (own != null) live!!.hdgTrue else ownContact?.hdg ?: 0.0
+    val bull = bullseye(live, ctcs)
+    val bases = airbases(live, mission?.briefing)
+    val depField = matchAirport(env.set, bases.departure)
+    val arrField = matchAirport(env.set, bases.arrival)
+    val altField = matchAirport(env.set, bases.alternate)
+    val visibleContacts = ctcs.filter { c ->
+        c.kind != "bullseye" && !c.own && MapLayers.traffic && (c.friendly || MapLayers.hostiles)
+    }
+
+    // First view: the route (or ownship) instead of the whole theater.
+    var framed by remember(th.id) { mutableStateOf(false) }
+    LaunchedEffect(th.id, route.isNotEmpty(), ownPos != null) {
+        if (framed) return@LaunchedEffect
+        val target = ownPos ?: route.firstOrNull()?.let { it.x!! to it.y!! } ?: return@LaunchedEffect
+        state.flyTo(target.first, target.second, 3.5f)
+        framed = true
+    }
+    LaunchedEffect(live?.t, MapLayers.follow) {
+        if (MapLayers.follow && own != null) state.flyTo(own.first, own.second, maxOf(state.scale, 3f))
+    }
+
+    val selPos: Pair<Double, Double>? = when (sel) {
+        is MapSel.Ctc -> ctcs.firstOrNull { it.id == sel.id }?.let { it.x to it.y }
+        is MapSel.Stp -> stpts.firstOrNull { it.n == sel.n && it.hasPos }?.let { it.x!! to it.y!! }
+        is MapSel.Field -> env.set?.airports?.firstOrNull { it.id == sel.id }?.let { it.x to it.y }
+        is MapSel.Ppt -> ppts.getOrNull(sel.index)?.let { it.x to it.y }
+        is MapSel.Pt -> sel.x to sel.y
+        null -> null
+    }
+
+    val shadow = Shadow(Color.Black, blurRadius = 5f)
+    val labelStyle = remember { TextStyle(color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, shadow = shadow) }
+    val stptStyle = remember { TextStyle(color = Hud.Amber, fontSize = 11.sp, fontWeight = FontWeight.Bold, shadow = shadow) }
+    val fieldStyle = remember { TextStyle(color = Hud.Green, fontSize = 11.sp, fontWeight = FontWeight.Bold, shadow = shadow) }
+
+    val map: @Composable (Modifier) -> Unit = { mod ->
+        Box(mod) {
+            TheaterMap(
+                th.map, th.sizeFt, Modifier.fillMaxSize(), state, maxScale = 24f, fillWidth = false,
+                onUserGesture = { if (MapLayers.follow) { MapLayers.follow = false; MapLayers.save() } },
+                onTap = { x, y, pr ->
+                    val tap = pr.toScreen(x, y)
+                    fun d(px: Double, py: Double) = pr.toScreen(px, py).let { hypot((it.x - tap.x).toDouble(), (it.y - tap.y).toDouble()) }
+                    val cands = buildList<Pair<MapSel, Double>> {
+                        visibleContacts.forEach { add(MapSel.Ctc(it.id) to d(it.x, it.y)) }
+                        if (MapLayers.route) route.forEach { add(MapSel.Stp(it.n) to d(it.x!!, it.y!!) + 4) }
+                        if (MapLayers.threats) ppts.forEachIndexed { i, p -> add(MapSel.Ppt(i) to d(p.x, p.y) + 6) }
+                        if (MapLayers.fields) env.set?.airports?.forEach { add(MapSel.Field(it.id) to d(it.x, it.y) + 8) }
+                    }
+                    val best = cands.minByOrNull { it.second }
+                    onSel(if (best != null && best.second < hitPx * 1.6) best.first else MapSel.Pt(x, y))
+                },
+            ) { pr ->
+                val placed = ArrayList<androidx.compose.ui.geometry.Rect>()
+                fun on(p: Offset) = p.x > -60 && p.y > -60 && p.x < size.width + 60 && p.y < size.height + 60
+
+                // airfields: mission bases highlighted, others as small dots
+                if (MapLayers.fields) env.set?.airports?.forEach { a ->
+                    val p = pr.toScreen(a.x, a.y)
+                    if (!on(p)) return@forEach
+                    val role = when (a.id) { depField?.id -> "DEP"; arrField?.id -> "ARR"; altField?.id -> "ALT"; else -> null }
+                    if (role != null) {
+                        drawCircle(Color.Black.copy(alpha = 0.6f), 11f, p)
+                        drawCircle(Hud.Green, 8f, p)
+                        val tag = if (depField?.id == arrField?.id && role != "ALT") "HOME" else role
+                        placeText(tm, "$tag ${a.icao ?: a.name}", p + Offset(12f, -8f), fieldStyle, placed)
+                    } else {
+                        drawCircle(Color.Black.copy(alpha = 0.5f), 5.5f, p)
+                        drawCircle(Hud.Green.copy(alpha = 0.55f), 3.5f, p)
+                    }
+                }
+
+                // pre-planned threat rings
+                if (MapLayers.threats) ppts.forEach { t ->
+                    val c = pr.toScreen(t.x, t.y)
+                    val r = (t.rangeNm * pr.pxPerNm).toFloat()
+                    if (c.x + r < 0 || c.y + r < 0 || c.x - r > size.width || c.y - r > size.height) return@forEach
+                    drawCircle(Hostile.copy(alpha = 0.08f), r, c)
+                    drawCircle(Hostile.copy(alpha = 0.75f), r, c, style = Stroke(2.5f))
+                    drawCircle(Hostile, 5f, c)
+                    placeText(tm, t.name, c + Offset(8f, 2f), labelStyle.copy(color = Hostile), placed)
+                }
+
+                // bullseye
+                bull?.let { (bx, by) ->
+                    val c = pr.toScreen(bx, by)
+                    for (ring in 1..5) drawCircle(Hud.Cyan.copy(alpha = if (ring % 2 == 0) 0.25f else 0.16f), pr.pxPerNm * 20 * ring, c, style = Stroke(1.2f))
+                    drawCircle(Hud.Cyan, 9f, c, style = Stroke(2.5f))
+                    drawCircle(Hud.Cyan, 3f, c)
+                    for (a in 0 until 360 step 90) {
+                        val rad = Math.toRadians(a.toDouble())
+                        drawLine(Hud.Cyan.copy(alpha = 0.35f), c, c + Offset((sin(rad) * pr.pxPerNm * 100).toFloat(), (-cos(rad) * pr.pxPerNm * 100).toFloat()), 1f)
+                    }
+                }
+
+                // flight plan
+                if (MapLayers.route && route.size > 1) {
+                    val main = route.filterNot { it.isAlternate }
+                    for (i in 0 until main.size - 1) {
+                        val a = pr.toScreen(main[i].x!!, main[i].y!!)
+                        val b = pr.toScreen(main[i + 1].x!!, main[i + 1].y!!)
+                        drawLine(Color.Black.copy(alpha = 0.5f), a, b, 6f)
+                        drawLine(Hud.Amber, a, b, 3f)
+                    }
+                    route.filter { it.isAlternate }.forEach { alt ->
+                        main.lastOrNull()?.let { last ->
+                            drawLine(Hud.Amber.copy(alpha = 0.7f), pr.toScreen(last.x!!, last.y!!), pr.toScreen(alt.x!!, alt.y!!), 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f)))
+                        }
+                    }
+                }
+                if (MapLayers.route) route.forEach { s ->
+                    val p = pr.toScreen(s.x!!, s.y!!)
+                    if (!on(p)) return@forEach
+                    if (s.isTarget) {
+                        val path = Path().apply { moveTo(p.x, p.y - 11f); lineTo(p.x + 11f, p.y); lineTo(p.x, p.y + 11f); lineTo(p.x - 11f, p.y); close() }
+                        drawPath(path, Color.Black.copy(alpha = 0.6f), style = Stroke(6f))
+                        drawPath(path, Hostile, style = Stroke(3f))
+                    } else {
+                        drawCircle(Color.Black.copy(alpha = 0.6f), 9f, p)
+                        drawCircle(Hud.Amber, 7f, p, style = Stroke(3f))
+                    }
+                    val text = if (MapLayers.labels && pr.scale >= 2.5f) "${s.n} ${s.desc ?: ""}".trim() else "${s.n}"
+                    placeText(tm, text, p + Offset(11f, -18f), stptStyle, placed)
+                }
+                // markpoints and datalink points
+                if (MapLayers.route) marks.forEach { m ->
+                    val p = pr.toScreen(m.x, m.y)
+                    drawRect(Hud.Magenta, p - Offset(6f, 6f), androidx.compose.ui.geometry.Size(12f, 12f), style = Stroke(2.5f))
+                    placeText(tm, "${m.type} ${m.i}", p + Offset(9f, 2f), labelStyle.copy(color = Hud.Magenta), placed)
+                }
+
+                // traffic from the Tacview feed
+                visibleContacts.forEach { c ->
+                    val p = pr.toScreen(c.x, c.y)
+                    if (!on(p)) return@forEach
+                    val col = contactColor(c)
+                    drawContact(c, p, col, pr)
+                    if (MapLayers.labels && c.kind != "missile") {
+                        val who = c.group ?: c.name ?: c.kind
+                        placeText(tm, "$who ${flightLevel(c.altFt)}", p + Offset(10f, 4f), labelStyle.copy(color = col), placed)
+                    }
+                }
+
+                // ownship
+                ownPos?.let { (ox, oy) ->
+                    val p = pr.toScreen(ox, oy)
+                    val len = (pr.pxPerNm * 5).coerceIn(30f, 160f)
+                    val rad = Math.toRadians(ownHdg)
+                    drawLine(Hud.Amber.copy(alpha = 0.8f), p, p + Offset((sin(rad) * len).toFloat(), (-cos(rad) * len).toFloat()), 2.5f)
+                    rotate(ownHdg.toFloat(), p) {
+                        val jet = Path().apply {
+                            moveTo(p.x, p.y - 16f); lineTo(p.x + 3f, p.y - 4f); lineTo(p.x + 13f, p.y + 4f); lineTo(p.x + 13f, p.y + 7f); lineTo(p.x + 3f, p.y + 5f)
+                            lineTo(p.x + 3f, p.y + 11f); lineTo(p.x + 7f, p.y + 15f); lineTo(p.x - 7f, p.y + 15f); lineTo(p.x - 3f, p.y + 11f); lineTo(p.x - 3f, p.y + 5f)
+                            lineTo(p.x - 13f, p.y + 7f); lineTo(p.x - 13f, p.y + 4f); lineTo(p.x - 3f, p.y - 4f); close()
+                        }
+                        drawPath(jet, Color.Black, style = Stroke(5f))
+                        drawPath(jet, Hud.Amber)
+                    }
+                }
+
+                // selection
+                selPos?.let { (sx, sy) ->
+                    val p = pr.toScreen(sx, sy)
+                    drawCircle(Hud.Magenta, 22f, p, style = Stroke(3f))
+                    ownPos?.let { (ox, oy) -> drawLine(Hud.Magenta.copy(alpha = 0.6f), pr.toScreen(ox, oy), p, 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))) }
+                }
+            }
+
+            // top controls
+            Column(Modifier.align(Alignment.TopStart).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    Modifier.clip(RoundedCornerShape(12.dp)).background(Hud.Bg.copy(alpha = 0.82f)).horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    HudChip("Follow", MapLayers.follow) { MapLayers.follow = !MapLayers.follow; MapLayers.save() }
+                    HudChip("Route", MapLayers.route) { MapLayers.route = !MapLayers.route; MapLayers.save() }
+                    HudChip("Threats", MapLayers.threats) { MapLayers.threats = !MapLayers.threats; MapLayers.save() }
+                    HudChip("Traffic", MapLayers.traffic) { MapLayers.traffic = !MapLayers.traffic; MapLayers.save() }
+                    HudChip("Hostiles", MapLayers.hostiles) { MapLayers.hostiles = !MapLayers.hostiles; MapLayers.save() }
+                    HudChip("Labels", MapLayers.labels) { MapLayers.labels = !MapLayers.labels; MapLayers.save() }
+                    HudChip("Fields", MapLayers.fields) { MapLayers.fields = !MapLayers.fields; MapLayers.save() }
+                }
+                if (!wide) FlightStrip(live, bull)
+                if (contacts?.connected == false && link is com.bmscompanion.app.data.mission.LinkState.Online && live?.flying == true) {
+                    OverlayPill("No AWACS feed: enable the Tacview real-time stream (Setup)", Hud.TextDim)
+                }
+            }
+            // recenter
+            Box(
+                Modifier.align(Alignment.BottomEnd).padding(12.dp).size(46.dp).clip(RoundedCornerShape(23.dp)).background(Hud.Surface.copy(alpha = 0.95f))
+                    .border(1.dp, Hud.Outline, RoundedCornerShape(23.dp)).clickable {
+                        val t = ownPos ?: route.firstOrNull()?.let { it.x!! to it.y!! }
+                        if (t != null) state.flyTo(t.first, t.second, maxOf(state.scale, 4f))
+                        if (own != null) { MapLayers.follow = true; MapLayers.save() }
+                    },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Default.MyLocation, "Center", tint = if (MapLayers.follow) Hud.Amber else Hud.TextDim) }
+        }
+    }
+
+    val card: @Composable (Modifier) -> Unit = { mod ->
+        if (sel != null) SelectionCard(env, sel, stpts, ppts, ctcs, ownPos, bull, mod) { onSel(null) }
+    }
+
+    if (wide) {
+        Row(Modifier.fillMaxSize()) {
+            map(Modifier.weight(1f).fillMaxHeight())
+            Box(Modifier.width(1.dp).fillMaxHeight().background(Hud.Outline.copy(alpha = 0.5f)))
+            Column(Modifier.width(400.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                card(Modifier.fillMaxWidth())
+                FlightTiles(live, bull, compact = true)
+                PictureCard(ctcs, ownPos, ownHdg, bull, onPick = { onSel(MapSel.Ctc(it.id)) })
+                SteerpointList(stpts, ownPos, bull, selected = (sel as? MapSel.Stp)?.n) { s -> onSel(MapSel.Stp(s.n)); state.flyTo(s.x!!, s.y!!, maxOf(state.scale, 4f)); MapLayers.follow = false }
+            }
+        }
+    } else {
+        Box(Modifier.fillMaxSize()) {
+            map(Modifier.fillMaxSize())
+            card(Modifier.align(Alignment.BottomCenter).padding(start = 10.dp, end = 64.dp, bottom = 10.dp).widthIn(max = 520.dp).fillMaxWidth())
+        }
+    }
+}
+
+private fun DrawScope.drawContact(c: Contact, p: Offset, col: Color, pr: MapProjection) {
+    // one-minute speed vector
+    if (c.gsKts > 30 && c.kind != "ship") {
+        val len = (c.gsKts / 60.0 * pr.pxPerNm).toFloat().coerceIn(10f, 120f)
+        val rad = Math.toRadians(c.hdg)
+        drawLine(col.copy(alpha = 0.85f), p, p + Offset((sin(rad) * len).toFloat(), (-cos(rad) * len).toFloat()), 2f)
+    }
+    when (c.kind) {
+        "missile" -> {
+            drawCircle(Color.Black, 5f, p); drawCircle(col, 3.5f, p)
+        }
+        "ship" -> {
+            drawRect(Color.Black.copy(alpha = 0.6f), p - Offset(8f, 8f), androidx.compose.ui.geometry.Size(16f, 16f))
+            drawRect(col, p - Offset(6f, 6f), androidx.compose.ui.geometry.Size(12f, 12f), style = Stroke(2.5f))
+        }
+        else -> if (c.friendly) {
+            drawCircle(Color.Black.copy(alpha = 0.6f), 9f, p)
+            drawCircle(col, 7f, p, style = Stroke(3f))
+            if (c.kind == "heli") drawCircle(col, 2.5f, p)
+        } else {
+            val path = Path().apply { moveTo(p.x, p.y - 9f); lineTo(p.x + 9f, p.y); lineTo(p.x, p.y + 9f); lineTo(p.x - 9f, p.y); close() }
+            drawPath(path, Color.Black.copy(alpha = 0.6f), style = Stroke(6f))
+            drawPath(path, col, style = Stroke(3f))
+        }
+    }
+}
+
+/** Label with simple declutter: skipped if it would overlap one already drawn. */
+private fun DrawScope.placeText(tm: androidx.compose.ui.text.TextMeasurer, text: String, topLeft: Offset, style: TextStyle, placed: MutableList<androidx.compose.ui.geometry.Rect>) {
+    if (topLeft.x > size.width || topLeft.y > size.height || text.isBlank()) return
+    val layout = tm.measure(text, style)
+    val r = androidx.compose.ui.geometry.Rect(topLeft.x, topLeft.y, topLeft.x + layout.size.width, topLeft.y + layout.size.height)
+    if (r.right < 0 || r.bottom < 0 || placed.any { it.overlaps(r) }) return
+    placed += r
+    safeText(tm, text, topLeft, style)
+}
+
+@Composable
+private fun FlightStrip(live: com.bmscompanion.app.data.mission.Live?, bull: Pair<Double, Double>?) {
+    val l = live?.takeIf { it.flying } ?: return
+    Row(
+        Modifier.clip(RoundedCornerShape(10.dp)).background(Hud.Bg.copy(alpha = 0.85f)).border(1.dp, Hud.Outline.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+            .horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 5.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        StripItem("ALT", "%,d".format(l.altFt.toInt()))
+        StripItem("KIAS", "${l.kias.toInt()}")
+        StripItem("HDG", "%03d".format(l.hdgMag.toInt()))
+        StripItem("FUEL", "%,d".format(l.fuelTotal.toInt()), if (l.bingo > 0 && l.fuelTotal < l.bingo) Hud.Red else Hud.Text)
+        bull?.let { StripItem("BULLS", bra(it.first, it.second, l.x, l.y), Hud.Cyan) }
+    }
+}
+
+@Composable
+private fun StripItem(label: String, value: String, color: Color = Hud.Text) {
+    Column {
+        Text(label, fontSize = 9.sp, color = Hud.TextDim, fontWeight = FontWeight.SemiBold)
+        Text(value, style = LocalExtra.current.monoSmall.copy(fontSize = 13.sp, fontWeight = FontWeight.Bold), color = color)
+    }
+}
+
+@Composable
+private fun SelectionCard(
+    env: MissionEnv, sel: MapSel, stpts: List<Stpt>, ppts: List<Threat>, ctcs: List<Contact>,
+    own: Pair<Double, Double>?, bull: Pair<Double, Double>?, modifier: Modifier, onClose: () -> Unit,
+) {
+    var title = ""
+    var subtitle: String? = null
+    val rows = ArrayList<Pair<String, String>>()
+    var accent = Hud.Magenta
+    var field: Airport? = null
+    var pos: Pair<Double, Double>? = null
+    when (sel) {
+        is MapSel.Ctc -> {
+            val c = ctcs.firstOrNull { it.id == sel.id } ?: return
+            accent = contactColor(c)
+            title = c.group ?: c.name ?: "Contact"
+            subtitle = listOfNotNull(c.name?.takeIf { it != title }, c.pilot, c.coalition).joinToString(" · ")
+            rows += "ALT" to "%,d ft".format(c.altFt.toInt())
+            rows += "HDG" to "%03d°T".format(c.hdg.toInt())
+            if (c.gsKts > 0) rows += "GS" to "${c.gsKts.toInt()} kt"
+            own?.let { rows += "BRAA" to "${bra(it.first, it.second, c.x, c.y)} · ${flightLevel(c.altFt)} · ${aspect(c.hdg, c.x, c.y, it.first, it.second)}" }
+            pos = c.x to c.y
+        }
+        is MapSel.Stp -> {
+            val s = stpts.firstOrNull { it.n == sel.n } ?: return
+            accent = if (s.isTarget) Hostile else Hud.Amber
+            title = "STPT ${s.n} · ${s.title}"
+            subtitle = listOfNotNull(s.action, s.comments).joinToString(" · ").ifBlank { null }
+            s.time?.let { rows += "TOS" to it }
+            s.altText?.let { rows += "ALT" to it }
+            s.cas?.let { rows += "CAS" to "$it kt" }
+            s.targetName?.let { rows += "TGT" to it }
+            if (s.hasPos) pos = s.x!! to s.y!!
+            // takeoff / landing steerpoints sit on an airfield: offer its charts too
+            if (s.hasPos) field = env.set?.airports?.minByOrNull { rangeNm(it.x, it.y, s.x!!, s.y!!) }?.takeIf { rangeNm(it.x, it.y, s.x!!, s.y!!) < 3 }
+        }
+        is MapSel.Ppt -> {
+            val t = ppts.getOrNull(sel.index) ?: return
+            accent = Hostile
+            title = "Threat · ${t.name}"
+            rows += "RANGE" to "%.0f nm".format(t.rangeNm)
+            own?.let { if (rangeNm(it.first, it.second, t.x, t.y) < t.rangeNm) rows += "!" to "You are inside this ring" }
+            pos = t.x to t.y
+        }
+        is MapSel.Field -> {
+            val a = env.set?.airports?.firstOrNull { it.id == sel.id } ?: return
+            field = a
+            accent = Hud.Green
+            title = a.name
+            subtitle = listOfNotNull(a.icao, airportKindShort(a)).joinToString(" · ")
+            a.tacan?.let { rows += "TACAN" to it.label }
+            a.freqs?.towerUhf?.let { rows += "TOWER" to (it + (a.freqs.towerVhf?.let { v -> " / $v" } ?: "")) }
+            a.runways.flatMap { r -> r.ends.filter { it.ils != null } }.takeIf { it.isNotEmpty() }?.let { ils -> rows += "ILS" to ils.joinToString("  ") { "${it.designator} ${it.ils}" } }
+            if (a.runways.isNotEmpty()) rows += "RWY" to a.runways.joinToString("  ") { it.name }
+            pos = a.x to a.y
+        }
+        is MapSel.Pt -> {
+            title = "Map point"
+            pos = sel.x to sel.y
+        }
+    }
+    pos?.let { (px, py) ->
+        bull?.let { rows += "BULLS" to bra(it.first, it.second, px, py) }
+        if (sel !is MapSel.Ctc) own?.let { rows += "FROM YOU" to bra(it.first, it.second, px, py) }
+    }
+
+    Column(
+        modifier.clip(RoundedCornerShape(14.dp)).background(Hud.Surface.copy(alpha = 0.97f)).border(1.dp, accent.copy(alpha = 0.6f), RoundedCornerShape(14.dp)).padding(12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (!subtitle.isNullOrBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Hud.TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Icon(Icons.Default.Close, "Close", tint = Hud.TextDim, modifier = Modifier.size(22.dp).clickable(onClick = onClose))
+        }
+        Spacer(Modifier.height(6.dp))
+        androidx.compose.foundation.layout.BoxWithConstraints { val boxW = maxWidth; Column {
+        // two columns when the card is wide (tablet side panel), one on phones
+        val perRow = if (boxW >= 460.dp) 2 else 1
+        rows.chunked(perRow).forEach { pair ->
+            Row(Modifier.fillMaxWidth()) {
+                pair.forEach { (k, v) ->
+                    Row(Modifier.weight(1f).padding(vertical = 2.dp)) {
+                        Text(k, fontSize = 11.sp, color = if (k == "!") Hostile else Hud.TextDim, modifier = Modifier.width(72.dp))
+                        Text(v, style = LocalExtra.current.monoSmall.copy(fontSize = 13.sp), color = if (k == "!") Hostile else Hud.Text, maxLines = 2)
+                    }
+                }
+                if (pair.size < perRow) Spacer(Modifier.weight(1f))
+            }
+        }
+        } }
+        field?.let { a ->
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Airfield details & charts ›",
+                Modifier.clip(RoundedCornerShape(8.dp)).background(Hud.Green.copy(alpha = 0.15f)).clickable { env.theater?.let { th -> env.nav.go(missionAirportRoute(th.id, a.id)) } }.padding(horizontal = 10.dp, vertical = 6.dp),
+                color = Hud.Green, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+            )
+        }
+    }
+}
+
+fun missionAirportRoute(theater: String, id: Int) = "m/airport/${android.net.Uri.encode(theater)}/$id"
+
+private fun airportKindShort(a: Airport) = com.bmscompanion.app.ui.screens.airportKind(a)
+
+/** AWACS-style picture: hostile air contacts sorted by range, with bullseye position and BRAA. */
+@Composable
+fun PictureCard(ctcs: List<Contact>, own: Pair<Double, Double>?, ownHdg: Double, bull: Pair<Double, Double>?, onPick: (Contact) -> Unit) {
+    val hostiles = ctcs.filter { !it.friendly && !it.own && it.kind in setOf("air", "heli", "missile") }
+    val ref = own ?: bull
+    val sorted = if (ref != null) hostiles.sortedBy { rangeNm(ref.first, ref.second, it.x, it.y) } else hostiles
+    com.bmscompanion.app.ui.components.SectionCard("Picture", accent = Hostile, trailing = { Text("${hostiles.size} hostile", fontSize = 11.sp, color = Hud.TextDim) }) {
+        if (ctcs.isEmpty()) {
+            Text("No AWACS feed. Enable the Tacview real-time stream in BMS (see Setup).", style = MaterialTheme.typography.bodySmall, color = Hud.TextDim)
+            return@SectionCard
+        }
+        if (sorted.isEmpty()) { Text("Picture clean", color = Hud.Green, style = LocalExtra.current.mono); return@SectionCard }
+        sorted.take(10).forEach { c ->
+            Row(Modifier.fillMaxWidth().clickable { onPick(c) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                Tag(if (c.kind == "missile") "MSL" else "HOST", Hostile, filled = true)
+                Spacer(Modifier.width(8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(listOfNotNull(c.group, c.name).distinct().joinToString(" · "), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        listOfNotNull(
+                            bull?.let { "BULLS ${bra(it.first, it.second, c.x, c.y)}" },
+                            own?.let { "BRAA ${bra(it.first, it.second, c.x, c.y)} ${aspect(c.hdg, c.x, c.y, it.first, it.second)}" },
+                        ).joinToString("  "),
+                        style = LocalExtra.current.monoSmall, color = Hud.TextDim,
+                    )
+                }
+                Text(flightLevel(c.altFt), style = LocalExtra.current.mono, color = Hostile)
+            }
+        }
+    }
+}
+
+@Composable
+fun SteerpointList(stpts: List<Stpt>, own: Pair<Double, Double>?, bull: Pair<Double, Double>?, selected: Int?, onPick: (Stpt) -> Unit) {
+    if (stpts.isEmpty()) return
+    com.bmscompanion.app.ui.components.SectionCard("Steerpoints", accent = Hud.Amber) {
+        stpts.forEach { s ->
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (selected == s.n) Hud.Amber.copy(alpha = 0.12f) else Color.Transparent)
+                    .clickable(enabled = s.hasPos) { onPick(s) }.padding(horizontal = 4.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("%2d".format(s.n), style = LocalExtra.current.mono, color = if (s.isTarget) Hostile else Hud.Amber, modifier = Modifier.width(30.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(s.title, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (s.isTarget) Hostile else Hud.Text)
+                    Text(listOfNotNull(s.time, s.altText, s.action).joinToString(" · "), fontSize = 11.sp, color = Hud.TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (s.hasPos) {
+                    val ref = own ?: bull
+                    ref?.let { Text(bra(it.first, it.second, s.x!!, s.y!!), style = LocalExtra.current.monoSmall, color = if (own != null) Hud.Text else Hud.Cyan) }
+                }
+            }
+        }
+        Text(if (own != null) "Bearing/range from you" else "Bearing/range from bullseye", fontSize = 10.sp, color = Hud.TextFaint)
+    }
+}

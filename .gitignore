@@ -1,0 +1,31 @@
+# Build & IDE
+.gradle/
+.kotlin/
+build/
+.idea/
+*.iml
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Node
+tools/extractor/node_modules/
+
+# Release artifacts (publish APKs as GitHub Releases instead)
+dist/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Text dumps of the BMS manuals used only during research (BMS documentation is copyrighted)
+tools/pdftext/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PC bridge build output
+pc/**/bin/
+pc/**/obj/

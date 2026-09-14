@@ -1,0 +1,11 @@
+{
+  "name": "bms-extractor",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "extract": "node src/main.mjs"
+  },
+  "dependencies": {
+    "sharp": "^0.33.5"
+  }
+}

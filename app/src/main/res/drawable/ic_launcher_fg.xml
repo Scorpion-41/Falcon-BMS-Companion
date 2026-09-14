@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- HUD ring -->
+    <path android:strokeColor="#5BE38A" android:strokeWidth="2.2" android:fillColor="#00000000"
+        android:pathData="M54,24 A30,30 0 1,1 53.99,24 Z" />
+    <!-- bullseye inner -->
+    <path android:strokeColor="#5BE38A" android:strokeWidth="1.6" android:fillColor="#00000000"
+        android:pathData="M54,44 A10,10 0 1,1 53.99,44 Z" />
+    <!-- tick marks -->
+    <path android:strokeColor="#5BE38A" android:strokeWidth="2.2" android:pathData="M54,18 L54,26 M54,82 L54,90 M18,54 L26,54 M82,54 L90,54" />
+    <!-- F-16 style delta silhouette -->
+    <path android:fillColor="#FFB547"
+        android:pathData="M54,30 L57,44 L57,52 L72,62 L72,66 L57,62 L56.5,70 L62,75 L62,78 L54,76 L46,78 L46,75 L51.5,70 L51,62 L36,66 L36,62 L51,52 L51,44 Z" />
+</vector>
