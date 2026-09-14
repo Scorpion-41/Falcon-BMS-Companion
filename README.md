@@ -105,7 +105,7 @@ pc/BmsCompanionBridge/   Windows bridge (C#, .NET 8 WinForms, no NuGet dependenc
 pc/publish.ps1           builds the single-file BMSCompanionBridge.exe into dist/
 tools/extractor/         Node.js extractor: BMS install -> app assets (read-only)
 tools/curated/           data transcribed from the BMS manuals (threats, HOTAS, checklists, comms, HARM/RWR)
-docs/                    SETUP, PROTOCOL, UPDATING, Reddit post, screenshots
+docs/                    SETUP, PROTOCOL, UPDATING, screenshots
 CLAUDE.md                orientation notes for AI-assisted maintenance (Claude Code)
 ```
 

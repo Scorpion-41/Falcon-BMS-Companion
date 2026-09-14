@@ -160,7 +160,7 @@ public sealed class PilotDto
 public sealed class ContactDto
 {
     public string Id { get; set; } = "";
-    /// <summary>air, heli, missile, ship, bullseye, sam</summary>
+    /// <summary>air, heli, missile, ship, bullseye, crew (ejected crew), sam</summary>
     public string Kind { get; set; } = "air";
     public double X { get; set; }
     public double Y { get; set; }

@@ -58,10 +58,10 @@ Responses larger than 1 KB are gzip-compressed when the client sends `Accept-Enc
 ### ContactsDto (Tacview real-time stream)
 ```json
 { "t": 0, "connected": true, "state": "connected",
-  "contacts": [ { "id": "a07", "kind": "air|heli|missile|ship|bullseye", "x": 0, "y": 0, "altFt": 0, "hdg": 0, "gsKts": 0,
+  "contacts": [ { "id": "a07", "kind": "air|heli|missile|ship|crew|bullseye", "x": 0, "y": 0, "altFt": 0, "hdg": 0, "gsKts": 0,
                   "name": "F-16CM-52", "pilot": "…", "group": "Viper1", "coalition": "…", "color": "Blue", "own": false, "friendly": true } ] }
 ```
-`own` = the air contact nearest to the shared-memory ownship (within 2 nm). `friendly` = same coalition as `own`. `gsKts` is derived from position deltas.
+`own` = the air contact nearest to the shared-memory ownship (within 2 nm). `friendly` = same coalition as `own`. `gsKts` is derived from position deltas. `crew` = an ejected crew (Tacview type `…Human+Parachutist`); older bridges sent these as `air` named "Ejected Crew", so the app also matches the name.
 
 ### Mission
 - `briefing`: parsed `briefing.txt` (`overview`, `situation`, `roster`, `package`, `threats`, `steerpoints`, `comms`, `ordnance`, `weather`, `support`, `roe`, `emergency`, `alternate`). It also always includes `sections[]` with the **raw tab-separated rows** of every section, as a fallback if a BMS update changes a layout.

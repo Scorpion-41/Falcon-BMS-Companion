@@ -104,6 +104,9 @@ fun contactColor(c: Contact) = when {
     else -> Hostile
 }
 
+/** Ejected crew in a parachute or on the ground. Older bridges sent them as "air" named "Ejected Crew". */
+fun Contact.isCrew() = kind == "crew" || name?.contains("Ejected", ignoreCase = true) == true
+
 @Composable
 fun MissionMapPane(env: MissionEnv, state: MapState, sel: MapSel?, onSel: (MapSel?) -> Unit, onOpenTab: (MissionTab) -> Unit) {
     val th = env.theater
@@ -520,24 +523,33 @@ fun missionAirportRoute(theater: String, id: Int) = "m/airport/${android.net.Uri
 
 private fun airportKindShort(a: Airport) = com.bmscompanion.app.ui.screens.airportKind(a)
 
-/** AWACS-style picture: hostile air contacts sorted by range, with bullseye position and BRAA. */
+/** AWACS-style picture: nearest hostile air contacts first, ejected crews last, with bullseye position and BRAA. */
 @Composable
 fun PictureCard(ctcs: List<Contact>, own: Pair<Double, Double>?, ownHdg: Double, bull: Pair<Double, Double>?, onPick: (Contact) -> Unit) {
-    val hostiles = ctcs.filter { !it.friendly && !it.own && it.kind in setOf("air", "heli", "missile") }
+    val hostiles = ctcs.filter { !it.friendly && !it.own && (it.kind in setOf("air", "heli", "missile") || it.isCrew()) }
     val ref = own ?: bull
-    val sorted = if (ref != null) hostiles.sortedBy { rangeNm(ref.first, ref.second, it.x, it.y) } else hostiles
-    com.bmscompanion.app.ui.components.SectionCard("Picture", accent = Hostile, trailing = { Text("${hostiles.size} hostile", fontSize = 11.sp, color = Hud.TextDim) }) {
+    val sorted = hostiles.sortedWith(compareBy({ it.isCrew() }, { c -> ref?.let { rangeNm(it.first, it.second, c.x, c.y) } ?: 0.0 }))
+    val threats = hostiles.count { !it.isCrew() }
+    com.bmscompanion.app.ui.components.SectionCard("Picture", accent = Hostile, trailing = {
+        Text("$threats hostile", fontSize = 11.sp, color = Hud.TextDim)
+        // same setting as the map's Hostiles chip
+        Box(Modifier.padding(start = 6.dp).clip(RoundedCornerShape(8.dp)).clickable { MapLayers.hostiles = !MapLayers.hostiles; MapLayers.save() }.padding(4.dp)) {
+            Tag("HOSTILES", if (MapLayers.hostiles) Hostile else Hud.TextDim, filled = MapLayers.hostiles)
+        }
+    }) {
         if (ctcs.isEmpty()) {
             Text("No AWACS feed. Enable the Tacview real-time stream in BMS (see Setup).", style = MaterialTheme.typography.bodySmall, color = Hud.TextDim)
             return@SectionCard
         }
+        if (!MapLayers.hostiles) { Text("Hostiles hidden. Tap HOSTILES to show them.", style = MaterialTheme.typography.bodySmall, color = Hud.TextDim); return@SectionCard }
         if (sorted.isEmpty()) { Text("Picture clean", color = Hud.Green, style = LocalExtra.current.mono); return@SectionCard }
         sorted.take(10).forEach { c ->
+            val crew = c.isCrew()
             Row(Modifier.fillMaxWidth().clickable { onPick(c) }.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-                Tag(if (c.kind == "missile") "MSL" else "HOST", Hostile, filled = true)
+                Tag(if (crew) "CREW" else if (c.kind == "missile") "MSL" else "HOST", if (crew) Hud.TextDim else Hostile, filled = !crew)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
-                    Text(listOfNotNull(c.group, c.name).distinct().joinToString(" · "), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(listOfNotNull(c.group, c.name).distinct().joinToString(" · "), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (crew) Hud.TextDim else Hud.Text)
                     Text(
                         listOfNotNull(
                             bull?.let { "BULLS ${bra(it.first, it.second, c.x, c.y)}" },
@@ -546,7 +558,7 @@ fun PictureCard(ctcs: List<Contact>, own: Pair<Double, Double>?, ownHdg: Double,
                         style = LocalExtra.current.monoSmall, color = Hud.TextDim,
                     )
                 }
-                Text(flightLevel(c.altFt), style = LocalExtra.current.mono, color = Hostile)
+                Text(flightLevel(c.altFt), style = LocalExtra.current.mono, color = if (crew) Hud.TextDim else Hostile)
             }
         }
     }

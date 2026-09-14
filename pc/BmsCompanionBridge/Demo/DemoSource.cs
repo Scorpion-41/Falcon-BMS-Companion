@@ -130,6 +130,8 @@ public sealed class DemoSource
         Add("11", "air", 2850000 + Math.Cos(m) * 12 * FtPerNm - 8000, 420000 + Math.Sin(m) * 20 * FtPerNm + 6000, 25000, (m * 180 / Math.PI + 90) % 360, 450, "MiG-29A", "Falcon2", "Albania", false);
         Add("12", "heli", 2560000, 640000 + (t % 600) * 200, 800, 90, 110, "UH-60", "Pedro1", "Greece", true);
         Add("20", "ship", 2400000, 330000, 0, 150, 12, "Elli class frigate", null, "Greece", true);
+        // hostile ejected crew close to ownship: the Picture list must still show the MiGs first
+        Add("40", "crew", own.X + 4 * FtPerNm, own.Y - 3 * FtPerNm, 0, 0, 0, "Ejected Crew", null, "Albania", false);
         if ((t % 120) < 25)
         {
             double f = (t % 120) / 25;

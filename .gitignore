@@ -29,3 +29,6 @@ Thumbs.db
 # PC bridge build output
 pc/**/bin/
 pc/**/obj/
+
+# Announcement drafts for Reddit / forums (local only)
+posts/

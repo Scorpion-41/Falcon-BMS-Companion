@@ -236,6 +236,8 @@ public sealed class TacviewClient : IDisposable
     {
         if (type.Contains("Bullseye")) return "bullseye";
         if (type.Contains("Missile") || type.Contains("Weapon")) return type.Contains("Missile") ? "missile" : null;
+        // BMS sends ejected crews as "Ground+Air+Light+Human+Parachutist": check before "Air"
+        if (type.Contains("Parachutist") || type.Contains("Human")) return "crew";
         if (type.Contains("Rotorcraft")) return "heli";
         if (type.Contains("Air")) return "air";
         if (type.Contains("Sea") || type.Contains("Watercraft")) return "ship";

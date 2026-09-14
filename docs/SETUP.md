@@ -69,7 +69,7 @@ set g_bTacviewAcmi 1         // Tacview ACMI recording (default 1)
 
 - The stream only runs while **ACMI recording is on**. Start it in 3D with the recording key (default **F**) or enable recording in the Launcher.
 - Multiplayer: the host decides with `g_bMPTacviewRtAllowedByServer` (default 1).
-- By default the map shows everything the stream contains, like a full AWACS picture. Use the **Hostiles** chip on the map to show friendlies only.
+- By default the map shows everything the stream contains, like a full AWACS picture. Use the **Hostiles** chip on the map (or **HOSTILES** on the Picture card) to show friendlies only. The Picture list puts the nearest threats first and ejected crews last.
 
 ### EZBoards (in-cockpit kneeboards)
 - EZBoards (by Logic) ships with BMS 4.38 in `Tools\EZBoards` and needs the **.NET 8 runtime** (Console Apps).

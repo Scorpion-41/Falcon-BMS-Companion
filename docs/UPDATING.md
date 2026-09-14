@@ -48,7 +48,7 @@ File: `pc/BmsCompanionBridge/Bms/SharedMemoryLayout.cs`, from `<BMS>/Tools/Share
 ## 5. Versions & release
 - [ ] `app/build.gradle.kts`: bump `versionCode`, and `versionName = "x.y (BMS 4.39)"`.
 - [ ] `pc/BmsCompanionBridge/BmsCompanionBridge.csproj`: `<Version>`. Bump `Api.Version` in `ApiModels.cs` **only** for breaking JSON changes (and handle it in the app).
-- [ ] Update counts and version mentions in `README.md` and `docs/REDDIT_POST.md`.
+- [ ] Update counts and version mentions in `README.md`.
 - [ ] Build:
   ```bash
   ./gradlew assembleRelease
