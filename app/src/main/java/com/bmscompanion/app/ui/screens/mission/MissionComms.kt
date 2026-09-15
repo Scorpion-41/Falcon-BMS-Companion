@@ -49,6 +49,7 @@ fun MissionCommsPane(env: MissionEnv) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
         Masonry(minColumn = 440.dp, maxColumns = 2) {
             if (b != null && b.comms.isNotEmpty()) LadderCard(b.comms, live?.uhfFreq ?: 0)
+            SupportCard(rememberSupportAssets(env))
             if (dtc != null && (dtc.uhf.isNotEmpty() || dtc.vhf.isNotEmpty())) PresetCard(dtc.uhf, dtc.vhf, live?.uhfPreset ?: 0)
             if (dtc != null && dtc.iff.isNotEmpty()) SectionCard("IFF (DTC)", accent = Hud.Green) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -69,7 +70,7 @@ fun MissionCommsPane(env: MissionEnv) {
 }
 
 @Composable
-private fun LadderCard(comms: List<CommEntry>, tunedUhf: Int) {
+fun LadderCard(comms: List<CommEntry>, tunedUhf: Int) {
     val tuned = if (tunedUhf > 0) String.format(java.util.Locale.US, "%.3f", tunedUhf / 1000.0) else null
     SectionCard("Comm ladder", accent = Hud.Amber, trailing = { tuned?.let { Text("UHF tuned $it", style = LocalExtra.current.monoSmall, color = Hud.Green) } }) {
         Row(Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
@@ -106,7 +107,7 @@ private fun Freq(f: String?, ch: Int?, modifier: Modifier) {
 }
 
 @Composable
-private fun PresetCard(uhf: List<Preset>, vhf: List<Preset>, activePreset: Int) {
+fun PresetCard(uhf: List<Preset>, vhf: List<Preset>, activePreset: Int) {
     SectionCard("DTC presets", accent = Hud.Cyan) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f)) {

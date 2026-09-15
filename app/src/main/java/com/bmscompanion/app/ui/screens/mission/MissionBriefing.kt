@@ -75,7 +75,7 @@ fun MissionBriefingPane(env: MissionEnv, showOnMap: (MapSel, Double, Double) -> 
             PackageCard(b)
             LoadoutCard(b, weapons) { w -> env.nav.go("m/weapon/${android.net.Uri.encode(w.key)}") }
             ThreatCard(b, threats) { t -> env.nav.go("m/threat/${android.net.Uri.encode(t.id)}") }
-            SupportCard(b, live?.voice)
+            SupportCard(rememberSupportAssets(env))
             WeatherCard(b)
             TextCard("Situation", b.situation, Hud.Cyan, threshold = 200)
             if (b.roe.isNotEmpty()) TextCard("Rules of engagement", b.roe.joinToString("\n"), Hud.Amber, threshold = 200)
@@ -91,7 +91,7 @@ fun MissionBriefingPane(env: MissionEnv, showOnMap: (MapSel, Double, Double) -> 
 }
 
 @Composable
-private fun OverviewCard(b: Briefing, flight: String?) {
+fun OverviewCard(b: Briefing, flight: String?) {
     val o = b.overview
     val mine = b.`package`.firstOrNull { it.primary } ?: b.`package`.firstOrNull { it.callsign == (flight ?: o.flight) }
     SectionCard("Mission", accent = Hud.Amber) {
@@ -143,7 +143,7 @@ fun KV(label: String, value: String?, mono: Boolean = false, color: Color = Hud.
 }
 
 @Composable
-private fun AirbasesCard(env: MissionEnv, bases: Airbases) {
+fun AirbasesCard(env: MissionEnv, bases: Airbases) {
     val rows = listOf("DEPARTURE" to bases.departure, "RECOVERY" to bases.arrival, "ALTERNATE" to bases.alternate).filter { it.second != null }
     if (rows.isEmpty()) return
     SectionCard("Airbases", accent = Hud.Green) {
@@ -323,29 +323,6 @@ private fun ThreatCard(b: Briefing, threats: List<com.bmscompanion.app.data.Thre
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SupportCard(b: Briefing, voice: com.bmscompanion.app.data.mission.Voice?) {
-    val tanker = voice?.tanker
-    if (b.support.isEmpty() && tanker == null && voice?.awacs == null) return
-    SectionCard("Support", accent = Hud.Cyan) {
-        b.support.forEach { s ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(s.callsign, style = MaterialTheme.typography.titleSmall)
-                Spacer(Modifier.width(8.dp))
-                s.role?.let { Tag(it, Hud.Cyan, filled = true) }
-                Spacer(Modifier.weight(1f))
-                s.aircraft?.let { Text(it, fontSize = 12.sp, color = Hud.TextDim) }
-            }
-            s.notes?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Hud.TextDim, modifier = Modifier.padding(bottom = 6.dp)) }
-            b.comms.filter { it.callsign == s.callsign }.forEach { c ->
-                Text("${c.agency}: ${listOfNotNull(c.uhf?.let { u -> "UHF $u${c.uhfCh?.let { " [$it]" } ?: ""}" }, c.vhf?.let { "VHF $it" }).joinToString(" · ")}", style = LocalExtra.current.monoSmall, color = Hud.Amber)
-            }
-        }
-        if (voice?.awacs != null && b.support.none { it.callsign == voice.awacs }) KV("AWACS", voice.awacs)
-        KV("Tanker", tanker)
     }
 }
 

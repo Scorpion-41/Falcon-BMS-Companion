@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.FlightLand
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material.icons.filled.Home
@@ -80,6 +81,7 @@ object Routes {
     const val AIRPORTS = "airports"
     const val COCKPIT = "cockpit"
     const val MISSION = "mission"
+    const val MEDIA = "media"
     fun aircraft(key: String) = "aircraft/${Uri.encode(key)}"
     fun weapon(key: String) = "weapon/${Uri.encode(key)}"
     fun threat(id: String) = "threat/${Uri.encode(id)}"
@@ -106,6 +108,7 @@ private val tabs = listOf(
     Tab(Routes.THREATS, "Threats", Icons.Default.Radar),
     Tab(Routes.AIRPORTS, "Airfields", Icons.Default.FlightLand),
     Tab(Routes.COCKPIT, "Cockpit", Icons.Default.SportsEsports),
+    Tab(Routes.MEDIA, "Media", Icons.Default.PhotoLibrary),
 )
 
 private val tabOwner = mapOf(
@@ -121,14 +124,13 @@ private val tabOwner = mapOf(
 fun NavHostController.go(route: String) = navigate(route) { launchSingleTop = true }
 
 @Composable
-fun AppRoot(startRoute: String? = null) {
-    val nav = rememberNavController()
+fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavController()) {
     androidx.compose.runtime.LaunchedEffect(startRoute) { if (startRoute != null) nav.navigate(startRoute) }
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: Routes.HOME
     val head = route.substringBefore('/').substringBefore('?')
     val currentTab = tabs.firstOrNull { it.route == head }?.route ?: tabOwner[head] ?: Routes.HOME
-    val immersive = head == "bullseye" || head == "chart"
+    val immersive = head == "bullseye" || head == "chart" || route.startsWith("media/view")
     val rail = isMedium() && !immersive
 
     val onTab: (String) -> Unit = { r ->
@@ -195,6 +197,10 @@ fun AppRoot(startRoute: String? = null) {
                     composable(Routes.AIRPORTS) { AirportsScreen(nav) }
                     composable(Routes.COCKPIT) { CockpitHubScreen(nav) }
                     composable(Routes.MISSION) { com.bmscompanion.app.ui.screens.mission.MissionScreen(nav) }
+                    composable(Routes.MEDIA) { com.bmscompanion.app.ui.screens.MediaScreen(nav) }
+                    composable("media/view?name={name}", arguments = listOf(navArgument("name") { defaultValue = "" })) {
+                        com.bmscompanion.app.ui.screens.MediaViewerScreen(nav, it.arguments?.getString("name").orEmpty())
+                    }
                     composable(
                         "m/airport/{theater}/{id}",
                         arguments = listOf(navArgument("id") { type = NavType.IntType }),

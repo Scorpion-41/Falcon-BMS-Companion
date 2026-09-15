@@ -26,9 +26,8 @@ tools/pdftext/
 .DS_Store
 Thumbs.db
 
-# PC bridge build output
-pc/**/bin/
-pc/**/obj/
-
 # Announcement drafts for Reddit / forums (local only)
 posts/
+
+# Downloaded open data used by the extractor (Natural Earth, OurAirports)
+tools/extractor/cache/

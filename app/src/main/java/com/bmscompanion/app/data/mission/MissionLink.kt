@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.decodeFromString
 import java.io.IOException
 import java.net.DatagramPacket
@@ -79,6 +80,11 @@ object MissionLink {
         _info.value = null; _live.value = null; _contacts.value = null; _mission.value = null
     }
 
+    @Volatile private var fastUsers = 0
+
+    /** The AWACS page wants contacts twice a second instead of once. */
+    @Synchronized fun fastContacts(on: Boolean) { fastUsers = (fastUsers + if (on) 1 else -1).coerceAtLeast(0) }
+
     @Synchronized fun acquire() { users++; if (job == null) restart() }
     @Synchronized fun release() { users = (users - 1).coerceAtLeast(0); if (users == 0) stop() }
 
@@ -113,10 +119,10 @@ object MissionLink {
             if (want != missionVersion || _mission.value == null) {
                 runCatching { get<MissionData>("/api/mission") }.onSuccess { _mission.value = it; missionVersion = want }
             }
-            // ~4 Hz live data, 1 Hz contacts, info every ~2 s (the info call above doubles as the heartbeat)
+            // ~4 Hz live data, 1 Hz contacts (2 Hz on the AWACS page), info every ~2 s (the info call above doubles as the heartbeat)
             repeat(8) {
                 runCatching { get<Live>("/api/live") }.onSuccess { _live.value = it }
-                if (tick % 4 == 0L) runCatching { get<Contacts>("/api/contacts") }.onSuccess { _contacts.value = it }
+                if (tick % (if (fastUsers > 0) 2 else 4) == 0L) runCatching { get<Contacts>("/api/contacts") }.onSuccess { _contacts.value = it }
                 tick++
                 delay(250)
             }
@@ -124,8 +130,8 @@ object MissionLink {
     }
 
     private fun reasonOf(e: Throwable?): String = when (e) {
-        is SocketTimeoutException -> "timed out: is the bridge running and allowed through the Windows firewall?"
-        is java.net.ConnectException -> "connection refused: start BMS Companion Bridge on the PC"
+        is SocketTimeoutException -> "timed out: is BMS Companion running on the PC and allowed through the Windows firewall?"
+        is java.net.ConnectException -> "connection refused: start BMS Companion on the PC"
         is java.net.UnknownHostException -> "unknown host"
         is IOException -> e.message ?: "network error"
         else -> e?.message ?: "error"
@@ -137,7 +143,7 @@ object MissionLink {
     }
 
     private fun request(method: String, path: String, timeoutMs: Int): String {
-        val b = base() ?: throw IOException("no bridge set")
+        val b = base() ?: throw IOException("no BMS PC set")
         val c = URL(b + path).openConnection() as HttpURLConnection
         try {
             c.requestMethod = method
@@ -163,11 +169,46 @@ object MissionLink {
             val r = runCatching {
                 val text = request("POST", "/api/ezboards/generate", timeoutMs = 95_000)
                 Repo.json.decodeFromString<EzRun>(text)
-            }.getOrElse { EzRun(time = System.currentTimeMillis(), ok = false, message = "Could not reach the bridge: ${reasonOf(it)}") }
+            }.getOrElse { EzRun(time = System.currentTimeMillis(), ok = false, message = "Could not reach the PC: ${reasonOf(it)}") }
             _ez.value = EzUi(running = false, result = r)
             runCatching { get<MissionData>("/api/mission") }.onSuccess { _mission.value = it }
         }
     }
+
+    // ---------- screenshots on the BMS PC ----------
+
+    suspend fun mediaList(): MediaList? = withContext(Dispatchers.IO) { runCatching { get<MediaList>("/api/media") }.getOrNull() }
+
+    /** Raw bytes of a bridge resource (screenshot thumbnail, preview or original), or null. */
+    suspend fun fetchBytes(path: String, timeoutMs: Int = 15_000): ByteArray? = withContext(Dispatchers.IO) {
+        runCatching {
+            val b = base() ?: throw IOException("no BMS PC set")
+            val c = URL(b + path).openConnection() as HttpURLConnection
+            try {
+                c.connectTimeout = 2500; c.readTimeout = timeoutMs
+                if (c.responseCode !in 200..299) null else c.inputStream.use { it.readBytes() }
+            } finally { c.disconnect() }
+        }.getOrNull()
+    }
+
+    /** Moves screenshots on the BMS PC to its Recycle Bin. Returns how many were deleted, or null when the bridge is unreachable. */
+    suspend fun deleteMedia(names: List<String>): Int? = withContext(Dispatchers.IO) {
+        runCatching {
+            val b = base() ?: throw IOException("no BMS PC set")
+            val c = URL("$b/api/media/delete").openConnection() as HttpURLConnection
+            try {
+                val body = Repo.json.encodeToString(kotlinx.serialization.builtins.ListSerializer(String.serializer()), names).toByteArray()
+                c.requestMethod = "POST"; c.doOutput = true; c.connectTimeout = 2500; c.readTimeout = 15_000
+                c.setFixedLengthStreamingMode(body.size)
+                c.outputStream.use { it.write(body) }
+                val text = c.inputStream.use { it.readBytes().decodeToString() }
+                Regex("\"deleted\"\\s*:\\s*(\\d+)").find(text)?.groupValues?.get(1)?.toInt() ?: 0
+            } finally { c.disconnect() }
+        }.getOrNull()
+    }
+
+    fun mediaPath(kind: String, name: String, max: Int? = null) =
+        "/api/media/$kind?name=" + java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20") + (max?.let { "&max=$it" } ?: "")
 
     /** One-off connection test used by the setup screen. */
     suspend fun probe(host: String, port: Int): Result<BridgeInfo> = withContext(Dispatchers.IO) {

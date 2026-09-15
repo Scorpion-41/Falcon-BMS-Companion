@@ -16,7 +16,13 @@ data class BridgeInfo(
     val tacview: TacviewStatus = TacviewStatus(),
     val briefing: BriefingStatus = BriefingStatus(),
     val ezBoards: EzStatus = EzStatus(),
+    val media: MediaInfo = MediaInfo(),
 )
+
+/** Screenshots on the BMS PC (User\Pictures): summary in /api/info, list from /api/media. */
+@Serializable data class MediaInfo(val available: Boolean = false, val count: Int = 0, val latest: Long = 0)
+@Serializable data class MediaList(val dir: String? = null, val available: Boolean = false, val shots: List<Shot> = emptyList())
+@Serializable data class Shot(val name: String = "", val time: Long = 0, val size: Long = 0, val w: Int? = null, val h: Int? = null)
 
 @Serializable
 data class BmsStatus(
@@ -75,6 +81,9 @@ data class Live(
     val lat: Double = 0.0,
     val lon: Double = 0.0,
     val tacan: String? = null,
+    /** UFC (DED) and AUX COMM panel channels; [tacan] is the one the bridge picked (A/A or Y band first). */
+    val tacanUfc: String? = null,
+    val tacanAux: String? = null,
     val beaconBrg: Double? = null,
     val beaconNm: Double? = null,
     val desiredCourse: Double = 0.0,
@@ -119,6 +128,11 @@ data class Contact(
     val color: String? = null,
     val own: Boolean = false,
     val friendly: Boolean = false,
+    /** Tacview extras when BMS sends them: indicated airspeed (kt), Mach, fuel (lb), id of the contact this one has locked. */
+    val ias: Double? = null,
+    val mach: Double? = null,
+    val fuelLb: Double? = null,
+    val locked: String? = null,
 )
 
 @Serializable

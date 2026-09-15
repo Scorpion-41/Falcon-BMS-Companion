@@ -92,8 +92,11 @@ object Repo {
     /** Theater display name lookup (synchronous after index loaded). */
     suspend fun theaterNames(): Map<String, String> = index().theaters.associate { it.id to it.name }
 
+    /** Map landmarks (borders, provinces, labels, places) for a map id such as "korea". */
+    suspend fun geo(mapId: String): GeoLayers? = load<GeoLayers>("data/geo/$mapId.json").await()
+
     // ---------- images ----------
-    private val bitmaps = object : LruCache<String, Bitmap>(48 * 1024 * 1024) {
+    private val bitmaps = object : LruCache<String, Bitmap>(96 * 1024 * 1024) {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
 
@@ -104,6 +107,11 @@ object Repo {
             val opts = BitmapFactory.Options().apply { inSampleSize = sample }
             runCatching { app.assets.open(path).use { BitmapFactory.decodeStream(it, null, opts) } }.getOrNull()?.also { bitmaps.put(key, it) }
         }
+    }
+
+    /** Decodes downloaded image bytes (e.g. screenshots from the BMS PC); [sample] > 1 decodes a smaller copy. */
+    suspend fun decodeBitmap(bytes: ByteArray, sample: Int = 1): Bitmap? = withContext(Dispatchers.Default) {
+        runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }) }.getOrNull()
     }
 
     fun tacrefImagePath(pic: String?) = pic?.let { "img/tacref/${it.lowercase()}.webp" }

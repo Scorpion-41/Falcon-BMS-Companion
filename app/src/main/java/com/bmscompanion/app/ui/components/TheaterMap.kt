@@ -14,15 +14,16 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntSize
 import com.bmscompanion.app.data.Repo
 import com.bmscompanion.app.ui.theme.Hud
 import kotlin.math.min
@@ -62,9 +63,17 @@ fun TheaterMap(
     onTap: ((xFt: Double, yFt: Double, proj: MapProjection) -> Unit)? = null,
     /** called when the user pans or zooms (e.g. to stop following a moving aircraft) */
     onUserGesture: (() -> Unit)? = null,
+    /** borders, provinces, country/region names and towns (MapLook settings) */
+    landmarks: Boolean = true,
+    /** + / − buttons (bottom right, above a map's own corner button) */
+    zoomButtons: Boolean = true,
     overlay: DrawScope.(MapProjection) -> Unit = {},
 ) {
-    val bmp by produceState<Bitmap?>(null, imagePath) { value = imagePath?.let { Repo.bitmap(it) } }
+    // map style overview + zoom-level tiles, and the landmark layers (MapBase.kt)
+    val base = rememberMapBase(imagePath)
+    val geo = if (landmarks) rememberGeo(imagePath, sizeFt) else null
+    val landmarkText = androidx.compose.ui.text.rememberTextMeasurer(cacheSize = 192)
+    val legacy by produceState<Bitmap?>(null, imagePath) { value = imagePath?.takeIf { mapIdOf(it) == null }?.let { Repo.bitmap(it) } }
     // Callers pass fresh lambdas on every recomposition (live data); keying the gesture detectors on them
     // would restart detection mid-tap, so read the latest callbacks through state instead.
     val tapCb = androidx.compose.runtime.rememberUpdatedState(onTap)
@@ -128,14 +137,21 @@ fun TheaterMap(
                 },
         ) {
             val pr = proj()
-            bmp?.let { b ->
-                drawImage(
-                    b.asImageBitmap(),
-                    dstOffset = IntOffset(pr.left.toInt(), pr.top.toInt()),
-                    dstSize = IntSize(pr.side.toInt(), pr.side.toInt()),
-                )
-            }
+            drawMapBase(pr, base, legacy?.asImageBitmap())
+            geo?.let { drawLandmarks(pr, it, landmarkText) }
             overlay(pr)
         }
+        if (zoomButtons) MapZoomButtons(
+            onZoom = { factor ->
+                gestureCb.value?.invoke()
+                val newScale = (state.scale * factor).coerceIn(1f, maxScale)
+                val f = newScale / state.scale
+                state.panX *= f
+                state.panY *= f
+                state.scale = newScale
+                state.initialized = true
+            },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 17.dp, bottom = 70.dp),
+        )
     }
 }

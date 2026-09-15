@@ -22,6 +22,8 @@ data class Theater(
     val addon: Boolean = false,
     val sizeFt: Double = 3358700.0,
     val map: String? = null,
+    /** map folder id under assets/maps and data/geo, e.g. "korea" (shared by add-ons on the same terrain) */
+    val mapId: String? = null,
     val airportSet: String = "",
     val radioSet: String = "",
     val airportCount: Int = 0,
@@ -153,6 +155,20 @@ data class AirportSet(val airports: List<Airport> = emptyList(), val navaids: Li
 /** City / town / village from the campaign objectives (t = "city" | "town" | "village"). */
 @Serializable
 data class Place(val n: String = "", val t: String = "village", val x: Double = 0.0, val y: Double = 0.0)
+
+// ---------- map landmarks (data/geo/<mapId>.json, from Natural Earth, projected onto the theater grid) ----------
+/** A border line as flat theater-feet pairs [x, y, x, y, …]: [lo] simplified for zoomed-out views, [hi] detailed; d = 1 disputed. */
+@Serializable data class GeoLine(val d: Int = 0, val lo: List<Int> = emptyList(), val hi: List<Int> = emptyList())
+/** A label in theater feet; r = size of its area in nautical miles. */
+@Serializable data class GeoLabel(val n: String = "", val x: Double = 0.0, val y: Double = 0.0, val r: Int = 0)
+@Serializable
+data class GeoLayers(
+    val borders: List<GeoLine> = emptyList(),
+    val provinces: List<GeoLine> = emptyList(),
+    val countries: List<GeoLabel> = emptyList(),
+    val regions: List<GeoLabel> = emptyList(),
+    val places: List<Place> = emptyList(),
+)
 
 @Serializable
 data class Airport(

@@ -63,7 +63,7 @@ fun MissionFlightPane(env: MissionEnv) {
     if (l == null || !l.flying) {
         PaneEmpty(
             "Not flying",
-            if (info?.bms?.running == true) "Live flight data appears once you are in the 3D world." else "Start Falcon BMS and the bridge on your PC.",
+            if (info?.bms?.running == true) "Live flight data appears once you are in the 3D world." else "Start Falcon BMS and BMS Companion on your PC.",
         )
         return
     }
@@ -121,6 +121,9 @@ fun FlightTiles(live: Live?, bull: Pair<Double, Double>?, compact: Boolean) {
                 "NAV & RADIO" to listOfNotNull(
                     bull?.let { FlightRow("Bullseye", bra(it.first, it.second, l.x, l.y), "you", Hud.Cyan) },
                     l.tacan?.let { FlightRow("TACAN", it, l.beaconNm?.takeIf { d -> d > 0 }?.let { d -> "%03d° %.0fnm".format(Locale.US, (l.beaconBrg ?: 0.0).toInt(), d) }) },
+                    // the other source (UFC/DED or AUX COMM panel) when it holds a different channel, e.g. the home base
+                    listOfNotNull(l.tacanUfc?.let { "UFC" to it }, l.tacanAux?.let { "AUX" to it }).firstOrNull { it.second != l.tacan }
+                        ?.let { (src, ch) -> FlightRow("TACAN $src", ch, null, Hud.TextDim) },
                     if (l.uhfFreq > 0) FlightRow("UHF", "%.3f".format(Locale.US, l.uhfFreq / 1000.0), "ch ${l.uhfPreset}") else null,
                     if (!compact && l.timeSec > 0) FlightRow("Time", zulu(l.timeSec), null) else null,
                 ),
@@ -253,7 +256,7 @@ fun RwrScope(l: Live, modifier: Modifier) {
 }
 
 @Composable
-private fun RwrList(l: Live) {
+fun RwrList(l: Live) {
     if (l.rwr.isEmpty()) {
         Text("Scope clean", color = Hud.Green, style = LocalExtra.current.monoSmall, modifier = Modifier.padding(top = 8.dp))
         return

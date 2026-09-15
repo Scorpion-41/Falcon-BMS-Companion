@@ -272,11 +272,10 @@ private fun AirportMap(th: Theater, set: AirportSet, directOpen: Boolean = false
     val tm = rememberTextMeasurer()
     val state = rememberMapState()
     var picked by remember { mutableStateOf<Airport?>(null) }
-    // label settings (persisted): field labels 0=off 1=ICAO 2=name; places 0=off 1=cities 2=+towns 3=+villages
+    // label settings (persisted): field labels 0=off 1=ICAO 2=name; towns, borders and map style are the shared MapLook settings
     var fieldLabels by remember { mutableIntStateOf(Repo.getInt("map_field_labels", 1)) }
     var tacanLabels by remember { mutableStateOf(Repo.getInt("map_tacan_labels", 0) == 1) }
     var navLabels by remember { mutableStateOf(Repo.getInt("map_nav_labels", 0) == 1) }
-    var townsOn by remember { mutableStateOf(Repo.getInt("map_towns", 0) == 1) }
     var query by remember { mutableStateOf("") }
     var searchFocused by remember { mutableStateOf(false) }
     var marker by remember { mutableStateOf<MapHit?>(null) }
@@ -289,7 +288,6 @@ private fun AirportMap(th: Theater, set: AirportSet, directOpen: Boolean = false
     val labelStyle = remember { TextStyle(color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, shadow = shadow) }
     val subStyle = remember { TextStyle(color = Hud.Green, fontSize = 10.sp, fontWeight = FontWeight.Bold, shadow = shadow) }
     val navStyle = remember { TextStyle(color = Hud.Cyan, fontSize = 10.sp, fontWeight = FontWeight.Medium, shadow = shadow) }
-    val townStyle = remember { TextStyle(color = Color(0xFFFFE6A8), fontSize = 10.sp, fontWeight = FontWeight.SemiBold, shadow = shadow) }
 
     val index = remember(set) {
         buildList {
@@ -330,18 +328,6 @@ private fun AirportMap(th: Theater, set: AirportSet, directOpen: Boolean = false
             },
         ) { pr ->
             val placed = ArrayList<androidx.compose.ui.geometry.Rect>()
-            // Towns: larger places come first (label priority) and smaller ones appear as you zoom in,
-            // so the map never turns into a wall of text.
-            val visiblePlaces = if (!townsOn) emptyList() else set.places.filter { p ->
-                when (p.t) { "city" -> true; "town" -> pr.scale >= 1.6f; else -> pr.scale >= 3f }
-            }
-            // place symbols (under everything)
-            visiblePlaces.forEach { p ->
-                val c = pr.toScreen(p.x, p.y)
-                if (c.x < -20 || c.y < -20 || c.x > size.width + 20 || c.y > size.height + 20) return@forEach
-                drawRect(Color.Black.copy(alpha = 0.7f), c - Offset(5f, 5f), androidx.compose.ui.geometry.Size(10f, 10f))
-                drawRect(Color(0xFFFFD27A), c - Offset(3.5f, 3.5f), androidx.compose.ui.geometry.Size(7f, 7f))
-            }
             set.navaids.forEach { n ->
                 val p = pr.toScreen(n.x, n.y)
                 drawCircle(Hud.Cyan, 5f, p, style = Stroke(2f))
@@ -358,10 +344,6 @@ private fun AirportMap(th: Theater, set: AirportSet, directOpen: Boolean = false
                 val shown = text != null && (sel || placeLabel(tm, text, p + Offset(11f, -14f), labelStyle, placed))
                 if (sel && text != null) safeText(tm, text, p + Offset(11f, -14f), labelStyle)
                 if (tacanLabels && a.tacan != null) placeLabel(tm, a.tacan.label, p + Offset(11f, if (shown) 6f else -8f), subStyle, placed)
-            }
-            visiblePlaces.forEach { p ->
-                val c = pr.toScreen(p.x, p.y)
-                placeLabel(tm, p.n, c + Offset(8f, -7f), townStyle, placed)
             }
             // search result marker
             marker?.let { m ->
@@ -441,16 +423,11 @@ private fun AirportMap(th: Theater, set: AirportSet, directOpen: Boolean = false
             ) {
                 val names = listOf("Labels off", "ICAO", "Names")
                 com.bmscompanion.app.ui.components.HudChip(names[fieldLabels], fieldLabels != 0) { fieldLabels = (fieldLabels + 1) % 3; Repo.putInt("map_field_labels", fieldLabels) }
-                com.bmscompanion.app.ui.components.HudChip("Towns", townsOn) { townsOn = !townsOn; Repo.putInt("map_towns", if (townsOn) 1 else 0) }
+                com.bmscompanion.app.ui.components.MapLookButton()
                 com.bmscompanion.app.ui.components.HudChip("TACAN", tacanLabels) { tacanLabels = !tacanLabels; Repo.putInt("map_tacan_labels", if (tacanLabels) 1 else 0) }
                 com.bmscompanion.app.ui.components.HudChip("Navaids", navLabels) { navLabels = !navLabels; Repo.putInt("map_nav_labels", if (navLabels) 1 else 0) }
             }
         }
-        if (townsOn && state.scale < 3f) Text(
-            "Zoom in to see more towns",
-            Modifier.align(Alignment.BottomStart).padding(10.dp).clip(RoundedCornerShape(6.dp)).background(Hud.Bg.copy(alpha = 0.7f)).padding(horizontal = 6.dp, vertical = 2.dp),
-            fontSize = 10.sp, color = Hud.TextDim,
-        )
     }
 }
 

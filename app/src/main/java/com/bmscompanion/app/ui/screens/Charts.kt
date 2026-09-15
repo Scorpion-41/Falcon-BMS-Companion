@@ -86,12 +86,12 @@ fun ChartViewerScreen(nav: NavHostController, file: String, title: String) {
 }
 
 @Composable
-fun ZoomableBitmap(b: Bitmap, modifier: Modifier) {
+fun ZoomableBitmap(b: Bitmap, modifier: Modifier, background: Color = Color.White) {
     var scale by remember { mutableFloatStateOf(1f) }
     var panX by remember { mutableFloatStateOf(0f) }
     var panY by remember { mutableFloatStateOf(0f) }
     val img = remember(b) { b.asImageBitmap() }
-    BoxWithConstraints(modifier.clipToBounds().background(Color.White)) {
+    BoxWithConstraints(modifier.clipToBounds().background(background)) {
         val d = LocalDensity.current
         val w = with(d) { maxWidth.toPx() }; val h = with(d) { maxHeight.toPx() }
         val fit = min(w / b.width, h / b.height)

@@ -7,7 +7,7 @@ import { loadTheaters } from './theaters.mjs';
 import { buildCatalog } from './catalog.mjs';
 import { buildAirports } from './airports.mjs';
 import { loadDb } from './db.mjs';
-import { terrainInfo, renderTerrain } from './terrain.mjs';
+import { terrainInfo } from './terrain.mjs';
 import { findTacRefImage, tgaToWebp } from './images.mjs';
 import { slug, writeJson } from './util.mjs';
 
@@ -22,16 +22,6 @@ const CURATED = path.join(ROOT, 'tools/curated');
 const hash = (o) => crypto.createHash('sha1').update(JSON.stringify(o)).digest('hex').slice(0, 10);
 const skipImages = process.argv.includes('--no-images');
 const DATA_DIR = path.join(process.env.BMS_ROOT || 'G:/Falcon BMS 4.38', 'Data');
-/**
- * Israel's TERRAIN/L2 heightmap spans a larger area than its campaign grid, so a straight relief render
- * puts airfields ~200 km off. The affine below was registered against the coastline of the add-on's
- * official ITO_Map_4K.png (98.8% land/sea agreement; airbases line up). The small strip the heightmap
- * doesn't cover is filled from a heavily blurred copy of that map, so none of its baked-in labels show.
- */
-const TERRAIN_WARP = {
-  israel: { affine: { sx: 1.0585, sy: 0.9195, ox: -29.5, oy: -162 }, fill: path.join(DATA_DIR, 'Add-On Israel/Docs/02 Maps/ITO_Map_4K.png') },
-};
-
 const TACREF_CATS = {
   8100: 'Aircraft', 8200: 'Ground Units', 8300: 'Ships', 8400: 'Missiles', 8500: 'Bombs', 8600: 'Stores & Pods', 8700: 'Other',
 };
@@ -130,7 +120,7 @@ async function main() {
     const ti = terrainInfo(th);
     let mapFile = null;
     if (ti) {
-      if (!maps.has(ti.bil)) maps.set(ti.bil, { file: `maps/${slug(path.basename(path.dirname(ti.dir)))}.webp`, info: ti });
+      if (!maps.has(ti.bil)) maps.set(ti.bil, { id: slug(path.basename(path.dirname(ti.dir))), file: `maps/${slug(path.basename(path.dirname(ti.dir)))}/relief.webp`, info: ti });
       mapFile = maps.get(ti.bil).file;
     }
     // A "main" theater ships its own terrain (base KTO, or an add-on whose terraindir is inside its own folder).
@@ -140,7 +130,7 @@ async function main() {
     const terrRel = path.relative(DATA_DIR, th.terrainDir).split(path.sep).join('/').toLowerCase();
     const primary = !th.addon ? true : !!ownAddon && terrRel.startsWith(ownAddon + '/');
     theaterIndex.push({
-      id: th.id, name: th.name, desc: th.desc, addon: th.addon, sizeFt: ti?.sizeFt ?? 3358700, map: mapFile,
+      id: th.id, name: th.name, desc: th.desc, addon: th.addon, sizeFt: ti?.sizeFt ?? 3358700, map: mapFile, mapId: mapFile?.split('/')[1] ?? null,
       airportSet: ah, radioSet: rh, airportCount: airports.length, aircraftCount: acs.length,
       primary, mapGroup: ti ? ti.bil : th.id,
     });
@@ -202,13 +192,8 @@ async function main() {
   });
 
   // --- images ---
-  for (const { file, info } of maps.values()) {
-    const dst = path.join(ASSETS, file);
-    if (fs.existsSync(dst)) continue;
-    const warp = TERRAIN_WARP[path.basename(file, '.webp')];
-    await renderTerrain(info, dst, 1024, warp || {});
-    console.log(warp ? 'map (registered)' : 'map', file);
-  }
+  // theater maps (all styles and tile levels) and their landmark layers: node src/maps.mjs, then node src/geo.mjs
+  for (const { file } of maps.values()) if (!fs.existsSync(path.join(ASSETS, file))) console.warn('map missing, run node src/maps.mjs:', file);
   if (!skipImages) {
     let n = 0;
     for (const [pic, src] of imageJobs) {

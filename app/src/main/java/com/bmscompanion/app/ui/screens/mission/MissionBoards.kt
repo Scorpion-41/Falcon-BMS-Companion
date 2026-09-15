@@ -57,47 +57,11 @@ import java.util.Locale
 fun MissionBoardsPane(env: MissionEnv, onSetup: () -> Unit) {
     val info by MissionLink.info.collectAsState()
     val mission by MissionLink.mission.collectAsState()
-    val ez by MissionLink.ez.collectAsState()
-    val link by MissionLink.state.collectAsState()
     val board = mission?.board
     val ezInfo = info?.ezBoards
-    // Show the newest result: one we triggered, or one the bridge ran automatically after PRINT.
-    val last: EzRun? = listOfNotNull(ez.result, ezInfo?.lastRun).maxByOrNull { it.time }
-    val running = ez.running || ezInfo?.running == true
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionCard("EZBoards kneeboards", accent = Hud.Amber) {
-            Text(
-                "Writes your briefing onto the in-cockpit kneeboards (EZBoards by Logic). Press PRINT on the BMS briefing screen first, and Save the DTC for target steerpoints.",
-                style = MaterialTheme.typography.bodySmall, color = Hud.TextDim,
-            )
-            Spacer(Modifier.height(12.dp))
-            val enabled = link is LinkState.Online && ezInfo?.configured == true && !running
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Row(
-                    Modifier.clip(RoundedCornerShape(14.dp)).background(if (enabled) Hud.Amber else Hud.Surface3).clickable(enabled = enabled) { MissionLink.generateBoards() }
-                        .padding(horizontal = 22.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (running) {
-                        CircularProgressIndicator(Modifier.size(18.dp), color = Hud.Bg, strokeWidth = 2.dp)
-                        Spacer(Modifier.width(10.dp))
-                    }
-                    Text(if (running) "GENERATING…" else "GENERATE KNEEBOARDS", color = if (enabled || running) Hud.Bg else Hud.TextFaint, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    when {
-                        link !is LinkState.Online -> Text("Bridge not connected", color = Hud.Red, fontSize = 12.sp)
-                        ezInfo?.configured != true -> Text("EZBoards folder not set in the bridge", color = Hud.Amber, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onSetup))
-                        info?.briefing?.available != true -> Text("No briefing printed yet", color = Hud.Amber, fontSize = 12.sp)
-                        else -> Text("Briefing ${info?.briefing?.generated ?: ""}", color = Hud.TextDim, fontSize = 12.sp)
-                    }
-                    if (ezInfo?.autoOnPrint == true) Text("Auto-generate on PRINT is on", color = Hud.Green, fontSize = 11.sp)
-                }
-            }
-            last?.let { ResultBanner(it) }
-        }
+        EzGenerateCard(onSetup)
 
         if (board == null || board.tables.none { it.rows.isNotEmpty() }) {
             if (ezInfo?.configured == true && info?.briefing?.available == true) {
@@ -110,6 +74,49 @@ fun MissionBoardsPane(env: MissionEnv, onSetup: () -> Unit) {
             board.tables.filter { it.rows.isNotEmpty() }.forEach { BoardTableCard(it) }
         }
         board.tables.firstOrNull { it.rows.isEmpty() && it.title.isNotBlank() }?.let { Text(it.title, fontSize = 11.sp, color = Hud.TextFaint, modifier = Modifier.padding(start = 4.dp)) }
+    }
+}
+
+/** The generate button with its status and last result (also a Dashboard card). */
+@Composable
+fun EzGenerateCard(onSetup: () -> Unit) {
+    val info by MissionLink.info.collectAsState()
+    val ez by MissionLink.ez.collectAsState()
+    val link by MissionLink.state.collectAsState()
+    val ezInfo = info?.ezBoards
+    val last: EzRun? = listOfNotNull(ez.result, ezInfo?.lastRun).maxByOrNull { it.time }
+    val running = ez.running || ezInfo?.running == true
+    SectionCard("EZBoards kneeboards", accent = Hud.Amber) {
+        Text(
+            "Writes your briefing onto the in-cockpit kneeboards (EZBoards by Logic). Press PRINT on the BMS briefing screen first, and Save the DTC for target steerpoints.",
+            style = MaterialTheme.typography.bodySmall, color = Hud.TextDim,
+        )
+        Spacer(Modifier.height(12.dp))
+        val enabled = link is LinkState.Online && ezInfo?.configured == true && !running
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.clip(RoundedCornerShape(14.dp)).background(if (enabled) Hud.Amber else Hud.Surface3).clickable(enabled = enabled) { MissionLink.generateBoards() }
+                    .padding(horizontal = 22.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (running) {
+                    CircularProgressIndicator(Modifier.size(18.dp), color = Hud.Bg, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(10.dp))
+                }
+                Text(if (running) "GENERATING…" else "GENERATE KNEEBOARDS", color = if (enabled || running) Hud.Bg else Hud.TextFaint, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                when {
+                    link !is LinkState.Online -> Text("Not connected to the BMS PC", color = Hud.Red, fontSize = 12.sp)
+                    ezInfo?.configured != true -> Text("EZBoards folder not set on the PC", color = Hud.Amber, fontSize = 12.sp, modifier = Modifier.clickable(onClick = onSetup))
+                    info?.briefing?.available != true -> Text("No briefing printed yet", color = Hud.Amber, fontSize = 12.sp)
+                    else -> Text("Briefing ${info?.briefing?.generated ?: ""}", color = Hud.TextDim, fontSize = 12.sp)
+                }
+                if (ezInfo?.autoOnPrint == true) Text("Auto-generate on PRINT is on", color = Hud.Green, fontSize = 11.sp)
+            }
+        }
+        last?.let { ResultBanner(it) }
     }
 }
 

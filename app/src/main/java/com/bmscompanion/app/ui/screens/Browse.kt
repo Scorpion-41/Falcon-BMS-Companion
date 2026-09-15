@@ -160,7 +160,7 @@ fun HomeScreen(nav: NavHostController) {
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Live mission", style = MaterialTheme.typography.titleMedium, color = Hud.Text)
-                        Text("Map & AWACS picture · briefing · loadout · comms · EZBoards (PC bridge)", style = MaterialTheme.typography.bodySmall, color = Hud.TextDim, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        Text("Map & AWACS picture · briefing · loadout · comms · EZBoards (BMS Companion on the PC)", style = MaterialTheme.typography.bodySmall, color = Hud.TextDim, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
                     Text("OPEN ›", color = Hud.Green, style = MaterialTheme.typography.labelLarge)
                 }

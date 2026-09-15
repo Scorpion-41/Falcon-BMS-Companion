@@ -60,20 +60,20 @@ fun MissionSetupPane(onConnected: () -> Unit) {
         Masonry(minColumn = 440.dp, maxColumns = 2) {
             ConnectionCard(onConnected)
             StatusCard()
-            GuideStep(1, "Run the bridge on the BMS PC", Hud.Amber) {
-                Para("Download **BMSCompanionBridge.exe** from the project's GitHub Releases page and start it on the PC that runs Falcon BMS. Keep it open (it minimises to the tray).")
-                Para("On first launch the bridge opens its own **Setup guide**, which checks every step below for you (✔/✖) and has buttons to fix things. Reopen it from the bridge window or the tray menu.")
-                Para("When Windows asks, allow it on **private networks**, or press **Allow through Windows Firewall** in the bridge window. It needs TCP **47474** and UDP **47475**, local network only.")
-                Para("No BMS handy? Tick **Demo mode** in the bridge to try every screen with a fake mission.")
+            GuideStep(1, "Run BMS Companion on the BMS PC", Hud.Amber) {
+                Para("Install **BMS Companion for Windows** (BMS-Companion-PC.msi or the portable zip) from the project's GitHub Releases page on the PC that runs Falcon BMS.")
+                Para("It opens on its **server page** (or the full app, if you use it there too). Either way it reads Falcon BMS and serves this device.")
+                Para("When Windows asks, allow it on **private networks**, or press **Allow through Windows Firewall** on the PC. It needs TCP **47474** and UDP **47475**, local network only.")
+                Para("No BMS handy? Turn on **Demo mode** in the Falcon BMS settings on the PC to try every screen with a fake mission.")
             }
             GuideStep(2, "Connect this device", Hud.Amber) {
-                Para("Put the tablet or phone on the same Wi-Fi/LAN as the PC, then tap **Find bridge** above.")
-                Para("If nothing is found (some routers block broadcasts), type the PC address shown in the bridge window, e.g. **192.168.1.20** port **47474**.")
+                Para("Put the tablet or phone on the same Wi-Fi/LAN as the PC, then tap **Find BMS PC** above.")
+                Para("If nothing is found (some routers block broadcasts), type the address shown on the PC's server page, e.g. **192.168.1.20** port **47474**.")
             }
             GuideStep(3, "Export the briefing from BMS", Hud.Green) {
                 Para("In the BMS Launcher open **CONFIG → General → Briefing / Debriefing**:")
                 Check(true, "Briefing Output to File (enables the PRINT button)")
-                Check(false, "HTML Briefings (must be off: the bridge and EZBoards read the text file)")
+                Check(false, "HTML Briefings (must be off: BMS Companion and EZBoards read the text file)")
                 Check(null, "Append New Briefings is optional; the app always uses the newest one")
                 Para("Plan the mission, open the **Briefing** tab and press **PRINT** (top right). BMS writes User\\Briefings\\briefing.txt and the app updates within a second.")
                 Code("set g_nPrintToFile 1\nset g_bBriefHTML 0")
@@ -88,16 +88,16 @@ fun MissionSetupPane(onConnected: () -> Unit) {
                 Para("Other aircraft come from BMS's built-in **Tacview real-time telemetry** server (Tacview itself is not needed). Add to **User\\Config\\Falcon BMS User.cfg**:")
                 Code("set g_bTacviewRealTime 1\nset g_bTacviewAcmi 1")
                 Para("The stream only runs while **ACMI recording** is on: start it in the cockpit (default key **F**) or enable recording in the Launcher.")
-                Para("Multiplayer: the host must allow it (**g_bMPTacviewRtAllowedByServer 1**). If you set **g_sTacviewPassword**, enter the same password in the bridge.")
+                Para("Multiplayer: the host must allow it (**g_bMPTacviewRtAllowedByServer 1**). If you set **g_sTacviewPassword**, enter the same password in the Falcon BMS settings on the PC.")
             }
             GuideStep(7, "EZBoards kneeboards", Hud.Magenta) {
-                Para("EZBoards ships with BMS 4.38 in **Tools\\EZBoards** and needs the **.NET 8 runtime**. The bridge finds it automatically; if you keep it elsewhere, pick the folder in the bridge settings.")
-                Para("After PRINT, tap **Generate kneeboards** on the Boards tab. The console runs hidden on the PC and you get a success or error message here. You can also tick **Run EZBoards automatically when the briefing is printed**.")
+                Para("EZBoards ships with BMS 4.38 in **Tools\\EZBoards** and needs the **.NET 8 runtime**. BMS Companion finds it automatically; if you keep it elsewhere, pick the folder in its settings on the PC.")
+                Para("After PRINT, tap **Generate kneeboards** on the Boards tab (or its Dashboard card). The console runs hidden on the PC and you get a success or error message here. You can also turn on **Generate kneeboards automatically** on the PC.")
                 Para("To see the kneeboards in the cockpit, enable the 3D pilot model (Setup → Graphics → Pilot Model).")
             }
             GuideStep(8, "Troubleshooting", Hud.Red) {
-                Bullet("**No link / timed out**: the bridge isn't running, the firewall blocks it, or the device is on a guest or other network.")
-                Bullet("**Briefing empty**: PRINT not pressed, HTML briefings still on, or g_sBriefingsDirectory points somewhere else (the bridge follows it).")
+                Bullet("**No link / timed out**: BMS Companion isn't running on the PC, the firewall blocks it, or the device is on a guest or other network.")
+                Bullet("**Briefing empty**: PRINT not pressed, HTML briefings still on, or g_sBriefingsDirectory points somewhere else (it is followed while BMS runs).")
                 Bullet("**No AWACS feed**: check g_bTacviewRealTime and that ACMI recording is running in 3D.")
                 Bullet("**EZBoards fails**: open the log on the Boards tab. Common causes are a missing .NET 8 runtime or no briefing printed.")
                 Bullet("**Map shows the wrong theater**: the app follows the theater BMS reports; add-on theaters use their base map.")
@@ -128,13 +128,13 @@ private fun ConnectionCard(onConnected: () -> Unit) {
             testing = false
             r.onSuccess { info ->
                 MissionLink.setBridge(h, p)
-                testMsg = true to "Connected to ${info.host} (bridge ${info.version})"
+                testMsg = true to "Connected to ${info.host} (BMS Companion ${info.version})"
                 onConnected()
-            }.onFailure { testMsg = false to "Could not reach $h:$p. Check that the bridge is running and the firewall allows it." }
+            }.onFailure { testMsg = false to "Could not reach $h:$p. Check that BMS Companion runs on that PC and the firewall allows it." }
         }
     }
 
-    SectionCard("PC bridge connection", accent = Hud.Amber) {
+    SectionCard("Connection to the BMS PC", accent = Hud.Amber) {
         val (dot, text) = when (val s = state) {
             is LinkState.Online -> Hud.Green to "Connected to ${s.host}:${MissionLink.port}"
             is LinkState.Offline -> Hud.Red to "Can't reach ${s.host}: ${s.reason}"
@@ -148,7 +148,7 @@ private fun ConnectionCard(onConnected: () -> Unit) {
         }
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            ActionButton(if (searching) "Searching…" else "Find bridge", primary = true, enabled = !searching) {
+            ActionButton(if (searching) "Searching…" else "Find BMS PC", primary = true, enabled = !searching) {
                 searching = true
                 found = null
                 scope.launch {
@@ -161,7 +161,7 @@ private fun ConnectionCard(onConnected: () -> Unit) {
         }
         found?.let { list ->
             Spacer(Modifier.height(8.dp))
-            if (list.isEmpty()) Text("No bridge answered. Enter the PC address manually below.", color = Hud.Amber, fontSize = 13.sp)
+            if (list.isEmpty()) Text("No BMS PC answered. Enter its address manually below.", color = Hud.Amber, fontSize = 13.sp)
             list.forEach { f ->
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(10.dp)).background(Hud.Surface2).clickable { host = f.host; port = f.port.toString(); connect(f.host, f.port) }.padding(10.dp),
@@ -169,7 +169,7 @@ private fun ConnectionCard(onConnected: () -> Unit) {
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(f.name, fontWeight = FontWeight.SemiBold)
-                        Text("${f.host}:${f.port} · bridge ${f.version}", style = LocalExtra.current.monoSmall, color = Hud.TextDim)
+                        Text("${f.host}:${f.port} · BMS Companion ${f.version}", style = LocalExtra.current.monoSmall, color = Hud.TextDim)
                     }
                     Text("Connect ›", color = Hud.Amber, fontWeight = FontWeight.SemiBold)
                 }
@@ -198,8 +198,8 @@ private fun ConnectionCard(onConnected: () -> Unit) {
 private fun StatusCard() {
     val info by MissionLink.info.collectAsState()
     val i = info ?: return
-    SectionCard("What the bridge sees", accent = Hud.Green) {
-        Row2("Bridge", "${i.version} on ${i.host}${if (i.demo) " (demo mode)" else ""}", true)
+    SectionCard("What the PC sees", accent = Hud.Green) {
+        Row2("PC", "BMS Companion ${i.version} on ${i.host}${if (i.demo) " (demo mode)" else ""}", true)
         Row2("Falcon BMS", when { i.demo -> "demo"; i.bms.running -> "running ${i.bms.version ?: ""} · ${if (i.bms.flying) "3D" else "UI"}"; i.bms.installed -> "installed, not running"; else -> "not found" }, i.bms.running)
         Row2("Theater", i.bms.theater ?: "—", i.bms.theater != null)
         Row2("Briefing", if (i.briefing.available) "printed ${i.briefing.generated ?: ""}" else "not printed yet", i.briefing.available)
