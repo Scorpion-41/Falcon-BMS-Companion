@@ -94,8 +94,6 @@ object PcServer {
                 if (eq < 0) URLDecoder.decode(kv, Charsets.UTF_8) to ""
                 else URLDecoder.decode(kv.substring(0, eq), Charsets.UTF_8) to URLDecoder.decode(kv.substring(eq + 1), Charsets.UTF_8)
             }
-            ex.responseHeaders.add("Access-Control-Allow-Origin", "*")
-            ex.responseHeaders.add("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             if (ex.requestMethod == "OPTIONS") return send(ex, ApiResponse(204, "text/plain", ByteArray(0)), cache = false)
 
             val isLocal = ex.remoteAddress.address.isLoopbackAddress
@@ -114,6 +112,7 @@ object PcServer {
 
             when {
                 path.startsWith("/api/") -> {
+                    crossSiteRefusal(ex)?.let { return send(ex, it, cache = false) }
                     if (path == "/api/assets") return send(ex, assetList(query["dir"].orEmpty()), cache = false)
                     val body = ex.requestBody.readBytes()
                     val resp = when {
@@ -141,6 +140,33 @@ object PcServer {
             ex.close()
         }
     }
+
+    /**
+     * Refuses API calls a web page from another site makes through a browser on this PC or network: it could otherwise read the
+     * mission and screenshots, delete screenshots or run EZBoards. The apps and client PCs send no Origin, and the browser version
+     * comes from this same address. A host name that isn't local means a site pointed its own domain at this PC (DNS rebinding).
+     */
+    private fun crossSiteRefusal(ex: HttpExchange): ApiResponse? {
+        val host = ex.requestHeaders.getFirst("Host").orEmpty()
+        val origin = ex.requestHeaders.getFirst("Origin")
+        val site = ex.requestHeaders.getFirst("Sec-Fetch-Site")
+        val reason = when {
+            host.isNotEmpty() && !isLocalName(host) -> "Open BMS Companion by this PC's IP address or network name"
+            origin != null && !origin.equals("http://$host", ignoreCase = true) || site == "cross-site" || site == "same-site" ->
+                "Web pages from other sites can't use the BMS Companion API"
+            else -> return null
+        }
+        return ApiResponse.json("""{"error":"$reason"}""", 403)
+    }
+
+    /** An IP address or a local network name (gaming-pc, gaming-pc.local), not a web site's domain. */
+    private fun isLocalName(host: String): Boolean {
+        if (host.startsWith("[")) return true // IPv6 address
+        val name = host.substringBeforeLast(':').lowercase()
+        return ipv4.matches(name) || '.' !in name || name.endsWith(".local")
+    }
+
+    private val ipv4 = Regex("""\d{1,3}(\.\d{1,3}){3}""")
 
     private val assetRoots = setOf("data", "img", "maps", "charts")
 

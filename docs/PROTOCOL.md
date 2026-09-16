@@ -37,7 +37,7 @@ The app sends the UDP datagram `BMSC_DISCOVER` to the broadcast address(es) on p
 | GET | `/api/media/file?name=` | share / download | the original file (`image/png`, `image/jpeg`) |
 | POST | `/api/media/delete` | on user confirm | body: JSON array of file names (or `?name=`); moves them to the BMS PC's Recycle Bin → `{deleted}` |
 
-Responses larger than 1 KB (except images) are gzip-compressed when the client sends `Accept-Encoding: gzip`, and connections are keep-alive. All responses allow any origin (CORS).
+Responses larger than 1 KB (except images) are gzip-compressed when the client sends `Accept-Encoding: gzip`, and connections are keep-alive. There are no CORS headers: browsers can only call the API from the page BMS Companion serves (see [Security](#security)).
 
 When the PC is a **client** of another BMS PC, `/api/...` calls it receives are forwarded to that PC (so browsers near a laptop still get data). With no data source it answers HTTP 502 with `{"error": "…"}`.
 
@@ -99,3 +99,5 @@ With browser access off, `/` shows a short status page instead.
 ## Security
 
 Everything is meant for a trusted home LAN. The server provides read-only data; the actions it exposes to devices are running the configured `EZBOARDS.BAT` (no arguments from the client) and moving chosen screenshots to the Recycle Bin. Settings can only be changed in the PC program itself. The firewall rules it offers are limited to the local subnet. There is no login: anyone on the same network can open the app or the API.
+
+Web pages from other sites can't use the API through a browser on the PC or the network. `/api/...` requests are refused with HTTP 403 and `{"error": "…"}` when they carry an `Origin` other than the address they were sent to, `Sec-Fetch-Site: cross-site` or `same-site`, or a `Host` that isn't an IP address or a local name (`gaming-pc`, `gaming-pc.local`), which blocks DNS rebinding. The apps and client PCs send no `Origin`.
