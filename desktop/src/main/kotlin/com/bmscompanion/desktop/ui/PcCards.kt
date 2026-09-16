@@ -161,14 +161,21 @@ fun FirewallButton() {
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var done by remember { mutableStateOf<Boolean?>(null) }
-    SmallButton(if (busy) "Waiting for Windows…" else if (done == true) "Firewall rules added ✓" else "Allow through Windows Firewall", null, primary = false) {
-        if (busy) return@SmallButton
-        busy = true
-        scope.launch {
-            withContext(Dispatchers.IO) { SystemTools.addFirewallRules(serverPort()) }
-            done = withContext(Dispatchers.IO) { SystemTools.firewallRuleExists() }
-            busy = false
+    Column {
+        SmallButton(if (busy) "Waiting for Windows…" else if (done == true) "Firewall rules added ✓" else "Allow through Windows Firewall", null, primary = false) {
+            if (busy) return@SmallButton
+            busy = true
+            done = null
+            scope.launch {
+                withContext(Dispatchers.IO) { SystemTools.addFirewallRules(serverPort()) }
+                done = withContext(Dispatchers.IO) { SystemTools.firewallRuleExists() }
+                busy = false
+            }
         }
+        if (done == false) Text(
+            "Windows did not add the rules. Choose Yes on the administrator prompt, or add them yourself in Windows Defender Firewall (inbound TCP ${serverPort()} and UDP 47475).",
+            fontSize = 11.sp, color = Hud.Red, lineHeight = 15.sp, modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }
 
@@ -298,7 +305,7 @@ fun SetupChecklistCard(status: PcStatus) {
     val cfg = status.cfg
     val demo = info?.demo == true
 
-    data class Step(val title: String, val state: Check, val text: String, val actions: List<Pair<String, () -> Unit>> = emptyList(), val code: String? = null)
+    data class Step(val title: String, val state: Check, val text: String, val actions: List<Pair<String, () -> Unit>> = emptyList(), val code: String? = null, val content: (@Composable () -> Unit)? = null)
     val userCfg = install.configDir?.let { File(it, "Falcon BMS User.cfg") }
     val steps = buildList {
         add(
@@ -311,8 +318,9 @@ fun SetupChecklistCard(status: PcStatus) {
             when {
                 status.firewallRule -> Step("Allowed on your network", Check.OK, "Firewall rules are in place.")
                 seen -> Step("Allowed on your network", Check.OK, "A device reached this PC, so the network is fine.")
+                // the button reports progress and the result, and runs the elevated command off the UI thread
                 else -> Step("Allowed on your network", Check.TODO, "No firewall rule found yet. Fine if you allowed the Windows prompt; otherwise press the button (one administrator prompt).",
-                    listOf("Allow through Windows Firewall" to { Thread { SystemTools.addFirewallRules(serverPort()) }.start() }))
+                    content = { FirewallButton() })
             }
         )
         val print = cfg["g_nPrintToFile"]
@@ -399,6 +407,7 @@ fun SetupChecklistCard(status: PcStatus) {
                     if (st.actions.isNotEmpty()) FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         st.actions.forEach { (label, action) -> SmallButton(label, null, primary = false) { scope.launch { action() } } }
                     }
+                    st.content?.invoke()
                 }
             }
         }

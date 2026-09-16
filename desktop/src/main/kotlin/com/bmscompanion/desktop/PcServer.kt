@@ -41,7 +41,15 @@ object PcServer {
         private set
 
     private val devices = ConcurrentHashMap<String, Device>()
-    private val gzipCache = ConcurrentHashMap<String, ByteArray>()
+    // gzipped copies of the app files and bundled data; bounded because /assets can serve thousands of files
+    private val gzipCache = object : LinkedHashMap<String, ByteArray>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?): Boolean {
+            if (size <= 16) return false
+            var bytes = 0L
+            for (v in values) bytes += v.size
+            return bytes > 16L * 1024 * 1024
+        }
+    }
 
     /** Devices seen in the last two minutes (this PC itself excluded). */
     fun recentDevices(): List<Device> {
@@ -173,7 +181,7 @@ object PcServer {
         var body = r.body
         val compressible = !r.contentType.startsWith("image/") && body.size > 1024
         if (compressible && ex.requestHeaders.getFirst("Accept-Encoding")?.contains("gzip") == true) {
-            body = if (gzipKey != null) gzipCache.getOrPut(gzipKey) { gzip(r.body) } else gzip(r.body)
+            body = if (gzipKey != null) synchronized(gzipCache) { gzipCache.getOrPut(gzipKey) { gzip(r.body) } } else gzip(r.body)
             ex.responseHeaders.add("Content-Encoding", "gzip")
         }
         if (ex.requestMethod == "HEAD") { ex.sendResponseHeaders(r.status, -1); return }

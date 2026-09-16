@@ -23,8 +23,14 @@ import kotlin.math.roundToInt
  * deleting chosen files to the Recycle Bin. Nothing else in the folder is touched.
  */
 class ScreenshotStore {
+    // thumbnails and previews (JPEG). Previews are a few hundred KB each, so the cache is bounded by size
     private val cache = object : LinkedHashMap<String, ByteArray>(64, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?) = size > 400
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?): Boolean {
+            if (size <= 24) return false
+            var bytes = 0L
+            for (v in values) bytes += v.size
+            return bytes > 24L * 1024 * 1024
+        }
     }
 
     fun list(dir: String?): MediaList {

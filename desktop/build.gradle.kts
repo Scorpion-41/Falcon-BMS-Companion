@@ -8,7 +8,7 @@ plugins {
 }
 
 /** PC version (the installer needs MAJOR.MINOR.BUILD). Keep in step with versionName in app/build.gradle.kts. */
-val pcVersion = "1.3.0"
+val pcVersion = "1.3.1"
 
 kotlin { jvmToolchain(17) }
 
@@ -71,6 +71,17 @@ tasks.named("processResources") { dependsOn(webBundle, versionResource) }
 compose.desktop {
     application {
         mainClass = "com.bmscompanion.desktop.MainKt"
+        // Keep the memory footprint small: a bounded heap, and G1 set to hand free memory back to Windows.
+        // (Map tiles and charts are Skia images in native memory, bounded by the caches in overrides/data/Repo.kt.)
+        jvmArgs(
+            "-Xmx512m",
+            "-XX:MaxMetaspaceSize=192m",
+            "-XX:+UseG1GC",
+            "-XX:MinHeapFreeRatio=10",
+            "-XX:MaxHeapFreeRatio=25",
+            "-XX:G1PeriodicGCInterval=15000",
+            "-XX:+G1PeriodicGCInvokesConcurrent",
+        )
         nativeDistributions {
             targetFormats(TargetFormat.Msi)
             packageName = "BMS Companion"

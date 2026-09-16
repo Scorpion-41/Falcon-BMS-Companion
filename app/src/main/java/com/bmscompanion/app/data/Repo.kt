@@ -96,7 +96,8 @@ object Repo {
     suspend fun geo(mapId: String): GeoLayers? = load<GeoLayers>("data/geo/$mapId.json").await()
 
     // ---------- images ----------
-    private val bitmaps = object : LruCache<String, Bitmap>(96 * 1024 * 1024) {
+    // a share of the heap this device allows (old tablets get ~64-128 MB in total), never more than 40 MB
+    private val bitmaps = object : LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 8).coerceIn(8L * 1024 * 1024, 40L * 1024 * 1024).toInt()) {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
 
@@ -108,6 +109,18 @@ object Repo {
             runCatching { app.assets.open(path).use { BitmapFactory.decodeStream(it, null, opts) } }.getOrNull()?.also { bitmaps.put(key, it) }
         }
     }
+
+    /**
+     * A device with little memory for apps (old tablets and phones): maps then load half-size tiles, which look
+     * slightly softer but use a quarter of the memory. Forced on with the BMSC_SMALL_TILES debug setting.
+     */
+    val lowMemory: Boolean by lazy {
+        val am = app.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        am.isLowRamDevice || am.memoryClass <= 192 || getInt("small_tiles", 0) == 1
+    }
+
+    /** Drops cached images (e.g. when the system asks for memory back). */
+    fun trimBitmaps() = bitmaps.evictAll()
 
     /** Decodes downloaded image bytes (e.g. screenshots from the BMS PC); [sample] > 1 decodes a smaller copy. */
     suspend fun decodeBitmap(bytes: ByteArray, sample: Int = 1): Bitmap? = withContext(Dispatchers.Default) {

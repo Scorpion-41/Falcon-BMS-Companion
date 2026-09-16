@@ -100,7 +100,10 @@ object Repo {
     suspend fun geo(mapId: String): GeoLayers? = load<GeoLayers>("data/geo/$mapId.json").await()
 
     // ---------- images ----------
-    private const val BITMAP_BUDGET = 96L * 1024 * 1024
+    /** Browsers get full-size map tiles; the page would otherwise look soft on high-resolution screens. */
+    const val lowMemory = false
+
+    private const val BITMAP_BUDGET = 40L * 1024 * 1024
     private val bitmaps = LinkedHashMap<String, Bitmap>()
     private var bitmapBytes = 0L
 

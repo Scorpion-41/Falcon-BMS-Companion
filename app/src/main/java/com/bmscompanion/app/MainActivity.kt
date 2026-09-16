@@ -63,6 +63,12 @@ private fun imageActions(activity: android.app.Activity): List<ImageAction> = bu
 }
 
 class MainActivity : ComponentActivity() {
+    /** Old tablets run out of heap quickly: hand the cached images back when Android asks for memory. */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= TRIM_MEMORY_RUNNING_LOW) Repo.trimBitmaps()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),

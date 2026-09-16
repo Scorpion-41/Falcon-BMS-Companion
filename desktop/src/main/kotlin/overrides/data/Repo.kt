@@ -119,7 +119,11 @@ object Repo {
     suspend fun geo(mapId: String): GeoLayers? = load<GeoLayers>("data/geo/$mapId.json").await()
 
     // ---------- images ----------
-    private const val BITMAP_BUDGET = 256L * 1024 * 1024
+    // charts and map tiles; the map keeps its own visible tiles, so this only has to cover what is reused
+    /** The PC always has room for full-size map tiles (see the Android Repo). */
+    const val lowMemory = false
+
+    private val BITMAP_BUDGET = (Runtime.getRuntime().maxMemory() / 8).coerceIn(24L * 1024 * 1024, 64L * 1024 * 1024)
     private val bitmaps = object : LinkedHashMap<String, Bitmap>(64, 0.75f, true) {}
     private var bitmapBytes = 0L
 

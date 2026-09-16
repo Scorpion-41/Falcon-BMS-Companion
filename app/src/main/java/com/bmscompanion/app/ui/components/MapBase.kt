@@ -131,6 +131,10 @@ fun mapIdOf(imagePath: String?): String? = imagePath?.removePrefix("maps/")?.sub
 
 private const val TILE = 512
 /** Tile levels bundled with the app (tools/extractor/src/maps.mjs): z2 = 2048 px across the theater … z4 = 8192 px. */
+/** tiles held in memory: one screen needs about a dozen, the rest is head-room for panning */
+private const val MAX_TILES = 32
+/** half-size tiles on devices with little memory (a quarter of the pixels) */
+internal val tileSample get() = if (Repo.lowMemory) 2 else 1
 private const val MIN_Z = 2
 private const val MAX_Z = 4
 
@@ -154,13 +158,14 @@ fun rememberMapBase(imagePath: String?): MapBaseState {
             for (key in next) {
                 state.loading += key
                 launch {
-                    val bmp = Repo.bitmap(key)
+                    // the same bitmap object is shared with Repo's cache, so this costs nothing extra and avoids re-decoding
+                    val bmp = Repo.bitmap(key, sample = tileSample)
                     state.loading -= key
                     if (bmp == null) state.failed += key else state.images[key] = bmp.asImageBitmap()
                 }
             }
-            // keep memory bounded: drop tiles the last frame didn't need
-            if (state.images.size > 80) state.images.keys.filter { it !in state.wanted && it.count { ch -> ch == 0x2F.toChar() } > 2 }.take(state.images.size - 60).forEach { state.images.remove(it) }
+            // keep memory bounded: drop tiles the last frame didn't need (a full view needs about a dozen)
+            if (state.images.size > MAX_TILES) state.images.keys.filter { it !in state.wanted && it.count { ch -> ch == 0x2F.toChar() } > 2 }.take(state.images.size - MAX_TILES / 2).forEach { state.images.remove(it) }
             delay(if (next.isEmpty()) 80 else 16)
         }
     }

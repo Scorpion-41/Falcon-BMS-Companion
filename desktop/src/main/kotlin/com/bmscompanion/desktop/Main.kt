@@ -211,6 +211,7 @@ private fun ApplicationScope.MainWindow(startRoute: String?, nav: NavHostControl
                     }
                 }
             }
+            var pendingRoute by remember { mutableStateOf<String?>(null) }
             val actions = remember(fullscreen) {
                 PcActions(switchToServer = { PcConfig.switchTo(PcMode.SERVER) }, toggleFullscreen = ::toggleFullscreen, isFullscreen = { fullscreen })
             }
@@ -225,10 +226,11 @@ private fun ApplicationScope.MainWindow(startRoute: String?, nav: NavHostControl
                     when (PcConfig.mode) {
                         PcMode.SERVER -> ServerScreen(
                             onOpenApp = { PcConfig.switchTo(PcMode.APP) },
-                            onUseAsClient = { PcConfig.useBmsOnThisPc(false); PcConfig.switchTo(PcMode.APP); nav.navigate("mission") { launchSingleTop = true } },
+                            // the app's navigation graph only exists in APP mode, so the route is opened once it is composed
+                            onUseAsClient = { PcConfig.useBmsOnThisPc(false); pendingRoute = "mission"; PcConfig.switchTo(PcMode.APP) },
                             onHide = onClose,
                         )
-                        PcMode.APP -> AppMode(startRoute, nav)
+                        PcMode.APP -> AppMode(startRoute, nav, pendingRoute) { pendingRoute = null }
                     }
                 }
             }
@@ -238,8 +240,14 @@ private fun ApplicationScope.MainWindow(startRoute: String?, nav: NavHostControl
 
 /** The full app, with the window's own buttons at the bottom of the navigation rail. */
 @Composable
-private fun AppMode(startRoute: String?, nav: NavHostController) {
+private fun AppMode(startRoute: String?, nav: NavHostController, pendingRoute: String? = null, onRouteOpened: () -> Unit = {}) {
     val actions = LocalPcActions.current
+    // a route asked for while the server page was showing (e.g. "use this PC as a client"): open it now that AppRoot set the graph
+    LaunchedEffect(pendingRoute) {
+        val r = pendingRoute ?: return@LaunchedEffect
+        runCatching { nav.navigate(r) { launchSingleTop = true } }.onFailure { println("navigate $r failed: $it") }
+        onRouteOpened()
+    }
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route.orEmpty()
     val immersive = route.startsWith("bullseye") || route.startsWith("chart") || route.startsWith("media/view")

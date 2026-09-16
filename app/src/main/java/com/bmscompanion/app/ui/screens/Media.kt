@@ -93,7 +93,7 @@ fun mediaViewRoute(name: String) = "media/view?name=${android.net.Uri.encode(nam
 
 /** Thumbnails and the last list, kept while the app runs so going back to the grid is instant. */
 private object MediaCache {
-    // used from the UI thread only; the oldest thumbnails are dropped beyond 240
+    // used from the UI thread only; a decoded thumbnail is about half a megabyte, so only a few screenfuls are kept
     private val thumbs = LinkedHashMap<String, Bitmap>()
     var list by mutableStateOf<MediaList?>(null)
 
@@ -103,7 +103,7 @@ private object MediaCache {
         val bytes = MissionLink.fetchBytes(MissionLink.mediaPath("thumb", s.name)) ?: return null
         return Repo.decodeBitmap(bytes)?.also {
             thumbs[key] = it
-            if (thumbs.size > 240) thumbs.remove(thumbs.keys.first())
+            while (thumbs.size > 64) thumbs.remove(thumbs.keys.first())
         }
     }
 }

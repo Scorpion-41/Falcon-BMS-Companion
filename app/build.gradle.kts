@@ -13,8 +13,8 @@ android {
         applicationId = "com.bmscompanion.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.3 (BMS 4.38)"
+        versionCode = 5
+        versionName = "1.3.1 (BMS 4.38)"
     }
 
     buildTypes {

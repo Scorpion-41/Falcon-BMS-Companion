@@ -98,6 +98,26 @@ function landParts(pts, land, size) {
   return parts;
 }
 
+/**
+ * A city is often several campaign objectives with the same name (Seoul, Pyongyang…), which would put the same label on
+ * the map two or three times. Objectives of one name closer than 25 nm become one place: the most important type, at the
+ * middle of the group. Same names further apart are left alone; they are different towns (Greece has several Pyrgos).
+ */
+function mergeSameNames(places, nm = 25 * NM) {
+  const rank = { city: 0, town: 1 };
+  const level = (p) => rank[p.t] ?? 2;
+  const out = [];
+  for (const p of places) {
+    const near = out.find((q) => q.n === p.n && Math.hypot(q.x - p.x, q.y - p.y) < nm);
+    if (!near) { out.push({ ...p, _n: 1 }); continue; }
+    near.x = Math.round((near.x * near._n + p.x) / (near._n + 1));
+    near.y = Math.round((near.y * near._n + p.y) / (near._n + 1));
+    near._n++;
+    if (level(p) < level(near)) near.t = p.t;
+  }
+  return out.map(({ _n, ...p }) => p);
+}
+
 /** Label position for a polygon inside the theater: the point farthest from its edges (on a grid), and the area's size. */
 function labelPoint(rings, size, n = 256) {
   const cell = size / n;
@@ -182,7 +202,7 @@ function build(src) {
   // cities, towns and villages of the main theater on this map (campaign objectives)
   const idx = JSON.parse(fs.readFileSync(path.resolve(HERE, '../../../app/src/main/assets/data/index.json'), 'utf8'));
   const main = idx.theaters.find((th) => th.primary && th.mapId === src.id);
-  const places = main ? JSON.parse(fs.readFileSync(path.resolve(HERE, '../../../app/src/main/assets/data/airports', main.airportSet + '.json'), 'utf8')).places : [];
+  const places = mergeSameNames(main ? JSON.parse(fs.readFileSync(path.resolve(HERE, '../../../app/src/main/assets/data/airports', main.airportSet + '.json'), 'utf8')).places : []);
   return { v: 1, source: 'Natural Earth 1:10m (public domain)', borders, provinces, countries, regions, places };
 }
 

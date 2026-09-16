@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.1 (BMS 4.38) — September 2026
+
+Fixes and a much smaller memory footprint, on top of 1.3.
+
+### Fixes
+- **"Use this PC as a client" on the server page did nothing but show an error.** It now switches to the full app and opens Mission → Setup with **On another PC** selected, ready for **Find BMS PC**.
+- **"Allow through Windows Firewall" did nothing.** The rules are now added properly (one administrator prompt), the button reports progress and the result, and the checklist turns green. If Windows refuses, the button says so and names the ports to open by hand (TCP 47474, UDP 47475).
+- **Towns appearing twice on the map**: a city is often several campaign objectives with the same name, which put the same label on the map two or three times. Objectives of one name closer than 25 nm are now one town. Same names further apart are kept: they are different towns (Greece really does have several Pyrgos).
+
+### Less memory
+- **PC**: about **270 MB on the server page and 340–380 MB in the full app**, where 1.3 used 450 MB and more the longer you browsed. The Java heap is capped and hands memory back to Windows, the image cache is a quarter of its old size, the map keeps only the tiles it needs, and screenshot previews and the browser's gzip cache are bounded.
+- **Android**: the image cache is now sized from the memory the device gives the app (at most 40 MB instead of a fixed 96 MB), the map keeps fewer tiles, and cached images are released when Android asks for memory back.
+- **Old tablets and phones**: on devices with little memory the maps load **half-size tiles** automatically: slightly softer, about a third less memory in total (measured 289 MB → 215 MB on a test tablet).
+- **Browser**: the same smaller caches.
+
 ## 1.3 (BMS 4.38) — September 2026
 
 The biggest update so far. **BMS Companion for Windows** is now one program that reads Falcon BMS, serves all your devices and is the full app itself. **iPhone, iPad and any browser** get the whole app running in the browser. New in every version: a **customizable Dashboard**, an **AWACS/GCI page** for a human controller, **maps in four styles** with sharp zoom levels, **country borders, provinces and towns**, a **mission towns view** that highlights the target town, a **Tankers & support** board with TACAN, frequencies and channels, and **Media** for your BMS screenshots. The separate `BMSCompanionBridge.exe` is gone.

@@ -1,5 +1,6 @@
 package com.bmscompanion.desktop
 
+import com.bmscompanion.desktop.bridge.BridgeLog
 import java.io.File
 import java.net.Inet4Address
 import java.net.NetworkInterface
@@ -22,17 +23,29 @@ object SystemTools {
 
     fun firewallRuleExists(): Boolean = run("netsh", "advfirewall", "firewall", "show", "rule", "name=$FIREWALL_RULE").let { (code, out) -> code == 0 && out.contains(FIREWALL_RULE) }
 
-    /** Inbound rules limited to the local subnet: TCP [port] (app, browsers, client PCs) and UDP 47475 (discovery). One administrator prompt. */
+    /**
+     * Inbound rules limited to the local subnet: TCP [port] (app, browsers, client PCs) and UDP 47475 (discovery).
+     * One administrator prompt. The netsh lines go into a temporary .bat: passing them inline would need quotes inside
+     * the PowerShell argument, and Java's command line does not escape those (the rules were then never added).
+     */
     fun addFirewallRules(port: Int): Boolean {
-        val cmds = buildList {
-            (oldRules + FIREWALL_RULE).forEach { add("netsh advfirewall firewall delete rule name=\"$it\"") }
-            add("netsh advfirewall firewall add rule name=\"$FIREWALL_RULE\" dir=in action=allow protocol=TCP localport=$port remoteip=localsubnet profile=any")
-            add("netsh advfirewall firewall add rule name=\"$FIREWALL_RULE\" dir=in action=allow protocol=UDP localport=47475 remoteip=localsubnet profile=any")
+        val bat = File.createTempFile("bmsc-firewall", ".bat")
+        try {
+            bat.writeText(buildString {
+                appendLine("@echo off")
+                (oldRules + FIREWALL_RULE).forEach { appendLine("netsh advfirewall firewall delete rule name=\"$it\" >nul 2>&1") }
+                appendLine("netsh advfirewall firewall add rule name=\"$FIREWALL_RULE\" dir=in action=allow protocol=TCP localport=$port remoteip=localsubnet profile=any")
+                appendLine("if errorlevel 1 exit /b 1")
+                appendLine("netsh advfirewall firewall add rule name=\"$FIREWALL_RULE\" dir=in action=allow protocol=UDP localport=47475 remoteip=localsubnet profile=any")
+            }, Charsets.US_ASCII)
+            // -Verb RunAs shows the UAC prompt; single quotes only (a ' in the path is doubled), so nothing needs escaping
+            val ps = "\$p = Start-Process -FilePath '${bat.path.replace("'", "''")}' -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit \$p.ExitCode"
+            val (code, out) = run("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps, timeoutS = 180)
+            if (code != 0) BridgeLog.warn("Firewall rules failed (exit $code) ${out.trim().take(200)}")
+            return code == 0
+        } finally {
+            bat.delete()
         }
-        val inner = "/c " + cmds.joinToString(" & ")
-        // Start-Process -Verb RunAs shows the UAC prompt; the doubled single quotes escape the argument for PowerShell
-        val ps = "Start-Process cmd -Verb RunAs -WindowStyle Hidden -Wait -ArgumentList '${inner.replace("'", "''")}'"
-        return run("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps, timeoutS = 120).first == 0
     }
 
     private const val RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
