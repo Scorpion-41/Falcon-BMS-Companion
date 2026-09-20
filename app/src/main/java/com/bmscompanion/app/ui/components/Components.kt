@@ -10,6 +10,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -46,6 +47,15 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import kotlinx.coroutines.launch
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -64,6 +74,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.drawText
@@ -72,6 +85,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
@@ -141,13 +155,44 @@ fun SearchField(
     placeholder: String,
     modifier: Modifier = Modifier,
 ) {
+    // On a kneeboard there is no keyboard to reach: you are strapped in with a helmet on and a mouse. Tapping the
+    // field opens one on the page, and physical keys keep working for anyone who has them.
+    if (Hud.onPaper) {
+        var typing by rememberSaveable { mutableStateOf(false) }
+        val requester = remember { FocusRequester() }
+        Column(Modifier.fillMaxWidth()) {
+            SearchInput(value, onValueChange, placeholder, modifier.focusRequester(requester)) { typing = true }
+            if (typing) {
+                OnScreenKeyboard(
+                    onKey = { c -> onValueChange(value + c); runCatching { requester.requestFocus() } },
+                    onBackspace = { onValueChange(value.dropLast(1)); runCatching { requester.requestFocus() } },
+                    onClear = { onValueChange(""); runCatching { requester.requestFocus() } },
+                    onClose = { typing = false },
+                )
+            }
+        }
+        return
+    }
+    SearchInput(value, onValueChange, placeholder, modifier)
+}
+
+@Composable
+private fun SearchInput(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    onFocused: () -> Unit = {},
+) {
     val focus = LocalFocusManager.current
     TextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) onFocused() },
         singleLine = true,
-        placeholder = { Text(placeholder, color = Hud.TextFaint) },
+        // one line, always: a long hint ("Name, ICAO, TACAN (75X), ILS or frequency") used to wrap in a narrow
+        // column and leave that section with a search bar twice the height of the one on Home
+        placeholder = { Text(placeholder, color = Hud.TextFaint, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         leadingIcon = { Icon(Icons.Default.Search, null, tint = Hud.TextDim) },
         trailingIcon = {
             if (value.isNotEmpty()) IconButton(onClick = { onValueChange("") }) { Icon(Icons.Default.Clear, "Clear", tint = Hud.TextDim) }
@@ -175,6 +220,29 @@ fun SectionCard(
     trailing: @Composable (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
+    // On a kneeboard a card is not a card. A page of paper has no raised, rounded, tinted panels on it: it has a
+    // heading, a rule under it and the figures. That also gives back the 16dp of padding and the gap between panels,
+    // which is most of a small board.
+    if (Hud.onPaper) {
+        Column(modifier.fillMaxWidth().padding(bottom = 2.dp)) {
+            if (title != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // no accent colour: on a printed page every heading is the same ink, and the rule under it does
+                    // the separating that a tinted card used to do
+                    Text(
+                        title.uppercase(Locale.US),
+                        style = LocalExtra.current.overline,
+                        color = Hud.Text,
+                        modifier = Modifier.weight(1f),
+                    )
+                    trailing?.invoke()
+                }
+                Box(Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 5.dp).height(1.dp).background(Hud.Outline))
+            }
+            content()
+        }
+        return
+    }
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = Hud.Surface,
@@ -281,14 +349,17 @@ fun KeyValueRow(label: String, value: String?, mono: Boolean = false, valueColor
 
 @Composable
 fun Tag(text: String, color: Color = Hud.TextDim, filled: Boolean = false, modifier: Modifier = Modifier) {
+    // printed, a tag is a word in a hairline box: the page is one ink, and a coloured pill is the most digital
+    // thing on it
+    val ink = if (Hud.onPaper) (if (filled) Hud.Text else Hud.TextDim) else color
     Box(
         modifier
             .clip(RoundedCornerShape(6.dp))
-            .background(if (filled) color.copy(alpha = 0.18f) else Color.Transparent)
-            .border(1.dp, color.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
+            .background(if (filled && !Hud.onPaper) color.copy(alpha = 0.18f) else Color.Transparent)
+            .border(1.dp, if (Hud.onPaper) Hud.Outline else color.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
             .padding(horizontal = 7.dp, vertical = 2.dp),
     ) {
-        Text(text, color = color, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(text, color = ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 
@@ -296,6 +367,119 @@ fun Tag(text: String, color: Color = Hud.TextDim, filled: Boolean = false, modif
 @Composable
 fun TagFlow(content: @Composable () -> Unit) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { content() }
+}
+
+/**
+ * The A-Z strip down the side of a long list: the letter under your finger jumps the list there, and the letter you
+ * are looking at is the one drawn brightest. Dragging runs through them without lifting off, which is the point of it
+ * on a touchscreen — and with a mouse in a headset it beats flicking a scrollbar.
+ *
+ * [before] is how many rows the list draws before the data (a search field, a count line), so the jump lands right.
+ */
+@Composable
+fun <T> BoxScope.AlphabetScrubber(
+    items: List<T>,
+    state: LazyListState,
+    label: (T) -> String,
+    before: Int = 0,
+    modifier: Modifier = Modifier,
+) {
+    val firstRow = remember(items) {
+        val found = LinkedHashMap<Char, Int>()
+        // putIfAbsent is a JVM map method and does not exist in the browser build
+        items.forEachIndexed { i, item -> initialOf(label(item)).let { c -> if (c !in found) found[c] = i } }
+        found
+    }
+    if (firstRow.size < 4) return // a handful of rows finds itself
+    val letters = firstRow.keys.toList()
+    val scope = rememberCoroutineScope()
+    var height by remember { mutableIntStateOf(0) }
+    val current by remember(items, letters) {
+        derivedStateOf {
+            val row = (state.firstVisibleItemIndex - before).coerceIn(0, (items.size - 1).coerceAtLeast(0))
+            items.getOrNull(row)?.let { initialOf(label(it)) }
+        }
+    }
+    val jumpTo = { y: Float ->
+        if (height > 0) {
+            val letter = letters[((y / height) * letters.size).toInt().coerceIn(0, letters.lastIndex)]
+            firstRow[letter]?.let { row -> scope.launch { state.scrollToItem(row + before) } }
+        }
+        Unit
+    }
+    Column(
+        modifier.align(Alignment.CenterEnd).fillMaxHeight().width(26.dp).padding(vertical = 8.dp)
+            .onSizeChanged { height = it.height }
+            .pointerInput(letters, height) { detectTapGestures { jumpTo(it.y) } }
+            .pointerInput(letters, height) { detectVerticalDragGestures { change, _ -> jumpTo(change.position.y) } },
+        verticalArrangement = Arrangement.SpaceEvenly,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        letters.forEach { c ->
+            val here = c == current
+            Text(
+                c.toString(),
+                fontSize = if (here) 13.sp else 10.sp,
+                fontWeight = if (here) FontWeight.Bold else FontWeight.Normal,
+                color = if (here) Hud.Amber else Hud.TextFaint,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+/** The letter a row files under; anything not a letter files under #. */
+private fun initialOf(label: String): Char {
+    val c = label.trim().firstOrNull()?.uppercaseChar() ?: '#'
+    return if (c in 'A'..'Z') c else '#'
+}
+
+/**
+ * A keyboard drawn on the page, for a kneeboard in VR: the pilot has a mouse and no reachable keys. It types into the
+ * search field above it, and closes with the tick. Physical typing keeps working the whole time.
+ */
+@Composable
+private fun OnScreenKeyboard(
+    onKey: (Char) -> Unit,
+    onBackspace: () -> Unit,
+    onClear: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val rows = listOf("1234567890", "QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM-")
+    Column(
+        Modifier.fillMaxWidth().padding(top = 6.dp).clip(RoundedCornerShape(10.dp))
+            .background(Hud.Surface2).border(1.dp, Hud.Outline, RoundedCornerShape(10.dp)).padding(5.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        rows.forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                row.forEach { c -> Key(c.toString(), Modifier.weight(1f)) { onKey(c) } }
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Key("space", Modifier.weight(3f)) { onKey(' ') }
+            Key("del", Modifier.weight(1f), onClick = onBackspace)
+            Key("clear", Modifier.weight(1.4f), onClick = onClear)
+            Key("done", Modifier.weight(1.4f), accent = true, onClick = onClose)
+        }
+    }
+}
+
+@Composable
+private fun Key(label: String, modifier: Modifier = Modifier, accent: Boolean = false, onClick: () -> Unit) {
+    Text(
+        label,
+        modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (accent) Hud.Amber.copy(alpha = 0.25f) else Hud.Surface)
+            .border(1.dp, Hud.Outline.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        color = Hud.Text,
+        fontSize = if (label.length > 1) 11.sp else 15.sp,
+        textAlign = TextAlign.Center,
+        maxLines = 1,
+    )
 }
 
 @Composable
@@ -307,6 +491,9 @@ fun <T> ChipRow(
     allLabel: String? = "All",
     contentPadding: PaddingValues = PaddingValues(horizontal = 16.dp),
 ) {
+    // A kneeboard shows one list and the means to find something in it. Narrowing by category is planning-room work
+    // you did before you strapped in, and every row of chips is a row of the board not showing the list.
+    if (Hud.onPaper) return
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(contentPadding),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -323,9 +510,10 @@ fun HudChip(text: String, selected: Boolean, onClick: () -> Unit) {
         onClick = onClick,
         label = { Text(text, maxLines = 1) },
         colors = FilterChipDefaults.filterChipColors(
-            containerColor = Hud.Surface2,
-            labelColor = Hud.TextDim,
-            selectedContainerColor = Hud.Amber.copy(alpha = 0.18f),
+            // printed, a dim grey on a cream chip on a cream page is three shades of nothing: ink and a tinted chip
+            containerColor = if (Hud.onPaper) Hud.Surface3 else Hud.Surface2,
+            labelColor = if (Hud.onPaper) Hud.Text else Hud.TextDim,
+            selectedContainerColor = Hud.Amber.copy(alpha = if (Hud.onPaper) 0.22f else 0.18f),
             selectedLabelColor = Hud.Amber,
         ),
         border = FilterChipDefaults.filterChipBorder(

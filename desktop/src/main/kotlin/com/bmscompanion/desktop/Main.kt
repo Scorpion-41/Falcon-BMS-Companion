@@ -86,12 +86,26 @@ import kotlin.system.exitProcess
  */
 fun main(args: Array<String>) {
     Repo.init()
+    // the VR board page is the PC's own: it exists only where there is a mouse to set the boards up with
+    com.bmscompanion.app.ui.screens.mission.vrBoardsPane = { com.bmscompanion.app.ui.screens.mission.MissionVrBoardsPane() }
+    PcLog.install() // there is no console here: a failure that reaches nobody goes to the log in the settings folder
     if (SelfTest.run(args)) exitProcess(0)
     val trayStart = "--tray" in args
     // one copy per user: a second start shows the running one (a start with Windows just leaves it alone)
     if (!SingleInstance.acquire(quiet = trayStart) { ShowRequests.value++ }) exitProcess(0)
 
+    // Once per version, and only now that this is known to be the only copy running: what the version being
+    // replaced left behind is thrown out (its cached installer, its stale lock, its rendered pages), while
+    // everything the pilot set up — the Dashboard layouts, the VR boards, the folders — is left exactly as it is.
+    Housekeeping.sweep()
+
     com.bmscompanion.app.data.Platform.imageActions = pcImageActions(PcConfig.readsBms)
+    com.bmscompanion.app.data.Platform.openUrl = { SystemTools.openUrl(it) }
+    com.bmscompanion.app.data.Platform.fetchText = { url -> fetchTextFromWeb(url) }
+    com.bmscompanion.app.data.Platform.installer = PcInstaller
+    com.bmscompanion.app.data.Platform.nowMillis = { System.currentTimeMillis() }
+    // an installer left behind by an update that has already happened is a few hundred megabytes of nothing
+    com.bmscompanion.app.data.update.Updates.tidyCache()
     runCatching { javax.swing.UIManager.setLookAndFeel(javax.swing.UIManager.getSystemLookAndFeelClassName()) } // native folder dialogs
     val startRoute = args.indexOf("--route").takeIf { it >= 0 }?.let { args.getOrNull(it + 1) } ?: System.getenv("BMSC_ROUTE")
     PcServices.apply()
@@ -226,6 +240,8 @@ private fun ApplicationScope.MainWindow(startRoute: String?, nav: NavHostControl
                     when (PcConfig.mode) {
                         PcMode.SERVER -> ServerScreen(
                             onOpenApp = { PcConfig.switchTo(PcMode.APP) },
+                            // "What's new" on the update card: the full app, opened on About, where the release notes are
+                            onOpenAbout = { pendingRoute = "about"; PcConfig.switchTo(PcMode.APP) },
                             // the app's navigation graph only exists in APP mode, so the route is opened once it is composed
                             onUseAsClient = { PcConfig.useBmsOnThisPc(false); pendingRoute = "mission"; PcConfig.switchTo(PcMode.APP) },
                             onHide = onClose,

@@ -113,6 +113,8 @@ private object FD2 {
 
 /** StringData identifiers (enum StringIdentifier in FlightData.h), verified against a running BMS 4.38.1 with --dumpstrings. */
 object StringId {
+    /** Where the ACMI recordings go (`User\Acmi` unless the install says otherwise). */
+    const val BmsAcmiDirectory = 7
     const val BmsBriefingsDirectory = 8
     const val BmsPictureDirectory = 12
     const val ThrName = 13

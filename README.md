@@ -7,6 +7,8 @@ A companion for **Falcon BMS 4.38** on **Windows PCs, Android phones and tablets
 - **Offline reference:** aircraft and loadouts, the Threat Guide, HARM/RWR, airfields with charts, HOTAS, checklists, comms and a bullseye trainer. All of it is extracted from the game files.
 - **Media:** your BMS screenshots on any device: browse, view, share, download and delete.
 - **One PC program:** BMS Companion for Windows reads Falcon BMS, serves your phones, tablets, browsers and other PCs, and is the full app too, in one window: a light **server page**, or the **full app** (borderless full screen with F11). On a laptop it runs as a **client** of the BMS PC.
+- **About page:** version, what it is, who wrote it (LoneWolf-41) and a link to the releases page to check for a newer build.
+- **VR kneeboard:** the browser version runs as an **OpenKneeboard web dashboard** (`/kneeboard`) in a board layout built for a few hundred pixels — the content fills the board, a ☰ and a ⋯ float in the corner and fade away when the mouse stops.
 - **Real browser version:** iPhone, iPad, Mac, Chromebook… open the address and the whole app runs **in the browser itself** (WebAssembly), as smooth as the native apps. Nothing to install.
 
 > Unofficial fan project, not affiliated with Benchmark Sims. See [Credits & legal](#credits--legal).
@@ -65,6 +67,7 @@ Every release has three files. Falcon BMS runs on a Windows PC, so **the BMS PC 
 | **Flight** | An easy-to-read table: altitude, KIAS/Mach, heading, GS, fuel vs bingo, chaff/flares, bullseye position, VVI, G, TACAN (the channel you tuned, plus UFC and AUX COMM), UHF and Zulu time. There is also an ALR-56M-style **RWR scope** (launch and lock warnings), a **DED** replica and the hostile **picture** list (nearest threats first, ejected crews last). |
 | **Briefing** | Mission, package and TOT; departure, recovery and alternate airbases (TACAN, tower, ILS, runways, one tap to charts); the flight plan with TOS and bullseye; DTC targets; the package and roster; **loadout** per jet (tap a store to open the Arsenal page); threats linked to the Threat Guide; **tankers & support**; weather; ROE; emergency procedures. |
 | **Comms** | The comm ladder, grouped, with the tuned UHF frequency highlighted. **Tankers & support**. DTC UHF/VHF presets, IFF and Link 16. |
+| **Exported kneeboard** | The pages UOAF's **HTML Briefing** tool (`Tools\html_brief_win`) exported from this briefing, shown on the Briefing page and openable in the chart viewer — on the phone, the tablet, the PC and in the browser, and available as a VR board. **Run HTML Briefing** opens the tool on the BMS PC; the card says when the briefing has been printed since the export. |
 | **Boards** | **Generate kneeboards** with EZBoards from any device. The console runs hidden on the PC and you get success or error feedback plus the log. The kneeboard content (package, comm ladder, steerpoints with min fuel, targets, weather) is shown natively. |
 | **Setup** | Connection, and step-by-step guides for every kind of device, BMS configuration and troubleshooting. |
 
@@ -88,7 +91,7 @@ The screenshots you take in Falcon BMS (`User\Pictures`, or `g_sPicturesDirector
 ### Offline reference (no PC needed)
 - **Arsenal:** 323 flyable aircraft types (KTO + every add-on), per-theater variants, specs, station-by-station loadouts with rack capacity, and 518 stores.
 - **Threat Guide:** SAM, AAA, radars, MANPADS, aircraft, AAMs and ships, with RWR symbols, HARM/ALIC codes, engagement envelopes and a range chart. HARM & RWR tables are included.
-- **Airfields:** 519 unique airfields across the 5 theaters with their own map (KTO, Balkans, Hellas, Israel, Falklands). Runways, ILS, TACAN, frequencies, ATC patterns, nearest diverts, navaids and 1,386 charts. Also a searchable, zoomable theater map in every map style, with borders and towns.
+- **Airfields:** 519 unique airfields across the 5 theaters with their own map (KTO, Balkans, Hellas, Israel, Falklands). Runways, ILS, TACAN, frequencies, ATC patterns, nearest diverts, navaids and 1,386 charts, plus the **instrument charts** (approach, SID, STAR) of the theaters that ship them as PDFs: 245 charts, 1,133 pages, with a page bar. Also a searchable, zoomable theater map in every map style, with borders and towns.
 - **Cockpit:** real HOTAS illustrations for the F-16C/D and F-15C (tap a switch to see what it does), checklists with check-off, comms/brevity, calculators.
 - **Bullseye Trainer:** 5 game modes and 3 difficulty levels.
 - **Global search** and favorites. The UI is dark and adapts to phone and tablet (a navigation rail and split panes on tablets and PCs).
@@ -101,6 +104,7 @@ The screenshots you take in Falcon BMS (`User\Pictures`, or `g_sPicturesDirector
 - **Only one copy runs**: opening it again brings the running window forward, also from the tray.
 - **Tray icon**: open, switch between server page and full app, browser access on/off, exit. Closing the window keeps it serving devices in the tray (optional), and it can start with Windows.
 - **Falcon BMS settings in the app:** BMS, EZBoards and screenshot folders, EZBoards on PRINT, Tacview stream on/off with host, port and password, demo mode, network port, firewall rules (one prompt), edit `Falcon BMS User.cfg`.
+- **Updating from inside the app** (About): it checks GitHub, shows the release notes of every version between yours and the newest, then downloads and installs — the MSI on Windows, the APK on Android — after checking the download against the checksum the release publishes. An interrupted download is kept and resumed rather than fetched again.
 - PC extras: mouse-wheel zoom on maps and charts, UI zoom with **Ctrl +/−/0**, dark title bar, remembered window size and position.
 
 ## Download & install
@@ -218,7 +222,7 @@ Release APKs are signed with the debug key so anyone can build and side-load the
 
 The PC installer is built with jpackage (WiX is downloaded automatically by the Compose Gradle plugin).
 
-PC program switches: `--tray` (start in the tray, used by "Start with Windows"), `--route <route>` or env `BMSC_ROUTE=mission` (open a screen directly). Development: env `BMSC_DEMO=1` (demo mission for this run), `BMSC_PORT=<port>` (another network port for this run). Developer checks: `--selftest out.txt` (shared memory struct sizes and parser output), `--dumpstrings out.txt` (StringData from a running BMS), `--eztest <EZBoards copy> out.txt` (runs EZBoards like the app button), `--api /api/info,/api/mission out.txt` (API responses from BMS on this PC), `--maprender <theater> <folder> [xFt,yFt]` (every map style at three zoom levels as PNGs, to check landmarks and alignment). The browser version accepts `?route=mission` in its address.
+PC program switches: `--tray` (start in the tray, used by "Start with Windows"), `--route <route>` or env `BMSC_ROUTE=mission` (open a screen directly). Development: env `BMSC_DEMO=1` (demo mission for this run), `BMSC_PORT=<port>` (another network port for this run). Developer checks: `--selftest out.txt` (shared memory struct sizes and parser output), `--dumpstrings out.txt` (StringData from a running BMS), `--eztest <EZBoards copy> out.txt` (runs EZBoards like the app button), `--api /api/info,/api/mission out.txt` (API responses from BMS on this PC), `--maprender <theater> <folder> [xFt,yFt]` (every map style at three zoom levels as PNGs, to check landmarks and alignment), `--updatetest out.txt [download] [<version to pretend to be>]` (what About sees on GitHub; with `download`, fetches the release file and verifies its checksum without installing it). The browser version accepts `?route=mission` in its address.
 
 ## Updating for a new BMS version
 
@@ -227,6 +231,7 @@ See **[docs/UPDATING.md](docs/UPDATING.md)**. It is a checklist written so it ca
 ## Credits & legal
 
 - Unofficial fan project, **not affiliated with Benchmark Sims**. Falcon BMS, its data, documentation, TacRef pictures, HOTAS illustrations and airport charts belong to Benchmark Sims and the respective add-on theater teams. This repository contains data extracted from the game install for personal reference use.
+- **[OpenKneeboard](https://openkneeboard.com/)** is by Fred Emmott. The VR boards are Web Dashboard tabs in it.
 - **EZBoards** is by "Logic" and ships with BMS. This project only launches it (and the extractor uses its bundled Microsoft `texconv` to decode the BMS ground texture).
 - Borders, provinces and country/region names: **[Natural Earth](https://www.naturalearthdata.com)** 1:10m data, public domain.
 - Tacview real-time telemetry is a protocol by Raia Software, implemented natively by BMS.

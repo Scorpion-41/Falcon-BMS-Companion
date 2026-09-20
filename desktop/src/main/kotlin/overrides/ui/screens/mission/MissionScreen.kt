@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -59,8 +60,8 @@ fun MissionScreen(nav: NavHostController) {
                 badge = mode?.let { if (it == LinkMode.LOCAL) "THIS PC" else "LAN" },
                 idleText = "Choose where Falcon BMS runs in Setup to see live mission data",
                 onSetup = { onTab(MissionTab.SETUP) },
-                modifier = Modifier.weight(1f),
             )
+            Spacer(Modifier.weight(1f))
             IconButton(onClick = { WindowControls.toggleOnTop() }) {
                 val onTop = WindowControls.alwaysOnTop
                 Icon(if (onTop) Icons.Filled.PushPin else Icons.Outlined.PushPin, "Keep window on top", tint = if (onTop) Hud.Amber else Hud.TextDim)

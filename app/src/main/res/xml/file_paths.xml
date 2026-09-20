@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Screenshots downloaded from the BMS PC are shared from the app cache (Media → Share). -->
+<!-- Screenshots downloaded from the BMS PC are shared from the app cache (Media → Share);
+     a downloaded update is handed to the package installer from the app's own files folder (About → Update). -->
 <paths>
     <cache-path name="shared" path="shared/" />
+    <external-files-path name="updates" path="updates/" />
+    <cache-path name="cached-updates" path="updates/" />
 </paths>

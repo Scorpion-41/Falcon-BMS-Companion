@@ -42,6 +42,8 @@ object Bridge {
     val tacview = TacviewClient()
     val ez = EzBoardsRunner()
     val shots = ScreenshotStore()
+    val acmi = AcmiStore()
+    val kneeboard = ExportedKneeboard()
     private val discovery = Discovery()
 
     private val _settings = MutableStateFlow(BridgeSettings.load())
@@ -136,6 +138,10 @@ object Bridge {
         get() = install.briefingsDir(snapshot().strings[StringId.BmsBriefingsDirectory])?.let { File(it, "briefing.txt").path }
 
     /** BMS screenshot folder (setting, shared memory, g_sPicturesDirectory, or User\Pictures). */
+    /** Where BMS writes its ACMI recordings: what it reports while running, else User\Acmi in the install. */
+    val acmiDir: java.io.File?
+        get() = acmi.dir(if (demo == null) snapshot().strings[StringId.BmsAcmiDirectory] else null, install)
+
     val picturesDir: String?
         get() = _settings.value.PicturesDirOverride?.takeIf { it.isNotBlank() }
             ?: install.picturesDir(if (demo == null) snapshot().strings[StringId.BmsPictureDirectory] else null)
@@ -255,12 +261,28 @@ object Bridge {
             ),
             briefing = BriefingStatus(available = briefing != null, modified = briefingMtime, generated = briefing?.generated, dtcModified = dtcMtime),
             media = shots.info(picturesDir),
+            acmi = acmi.info(acmiDir),
+            kneeboard = kneeboard.status(s, install, briefingMtime),
             ezBoards = EzStatus(
                 configured = EzBoardsRunner.isValidDir(s.EzBoardsDir), path = s.EzBoardsDir, autoOnPrint = s.AutoEzBoardsOnPrint,
                 running = ez.running, lastRun = ez.lastRun,
             ),
         )
     }
+
+    /**
+     * The boards a pilot gets before changing anything: the map, the briefing, the HARM table, and the two sets of
+     * charts for wherever this mission takes off from. Five tabs is a sensible OpenKneeboard setup on its own.
+     */
+    fun defaultBoards() = com.bmscompanion.app.data.mission.BoardConfig(
+        slots = listOf(
+            com.bmscompanion.app.data.mission.BoardSlot(1, "map"),
+            com.bmscompanion.app.data.mission.BoardSlot(2, "briefing"),
+            com.bmscompanion.app.data.mission.BoardSlot(3, "harm"),
+            com.bmscompanion.app.data.mission.BoardSlot(4, "runways"),
+            com.bmscompanion.app.data.mission.BoardSlot(5, "plates"),
+        ),
+    )
 
     private fun <T> encode(serializer: KSerializer<T>, value: T) = ApiResponse.json(json.encodeToString(serializer, value))
 
@@ -297,7 +319,44 @@ object Bridge {
                     }
                 }
             }
+            // What each VR board shows. The boards themselves only read it; the VR board page on the PC writes it.
+            "GET" to "/api/boards" -> encode(
+                com.bmscompanion.app.data.mission.BoardConfig.serializer(),
+                _settings.value.Boards ?: defaultBoards(),
+            )
+            "POST" to "/api/boards" -> {
+                val cfg = runCatching {
+                    json.decodeFromString(com.bmscompanion.app.data.mission.BoardConfig.serializer(), req.body.decodeToString())
+                }.getOrNull()
+                if (cfg == null) ApiResponse.json("""{"error":"that is not a board configuration"}""", 400)
+                else {
+                    update { it.copy(Boards = cfg) }
+                    encode(com.bmscompanion.app.data.mission.BoardConfig.serializer(), cfg)
+                }
+            }
             "GET" to "/api/ezboards/status" -> encode(EzStatus.serializer(), info().ezBoards)
+            // The kneeboard html_brief exported, a page at a time: rendered here so a tablet, a browser and a VR
+            // board all get an image they can simply show.
+            // Opens the exporter's own window on the BMS PC. It has no headless export — its switches are only
+            // about ports and the tray — so this is a shortcut to the tool, not a way of driving it.
+            "POST" to "/api/kneeboard/open" -> {
+                val root = kneeboard.root(_settings.value, install)
+                val message = root?.let { kneeboard.open(it) } ?: "No kneeboard exporter folder is set on the BMS PC."
+                ApiResponse.json(json.encodeToString(String.serializer(), message).let { """{"message":$it}""" })
+            }
+            "GET" to "/api/kneeboard/page" -> {
+                val root = kneeboard.root(_settings.value, install)
+                val i = req.query["i"]?.toIntOrNull() ?: 0
+                val max = (req.query["max"]?.toIntOrNull() ?: 1400).coerceIn(320, 3000)
+                val bytes = root?.let { kneeboard.page(it, i, max) }
+                if (bytes == null) ApiResponse.notFound() else ApiResponse(200, "image/jpeg", bytes)
+            }
+            // Clearing the recordings is the one thing this program removes from the BMS folder, and only when a
+            // pilot asks: the files go to the Recycle Bin, where a flight somebody did want is still recoverable.
+            "POST" to "/api/acmi/clear" -> {
+                val (gone, bytes) = acmi.clear(acmiDir)
+                ApiResponse.json("""{"deleted":$gone,"bytes":$bytes}""")
+            }
             "GET" to "/api/media" -> encode(com.bmscompanion.app.data.mission.MediaList.serializer(), shots.list(picturesDir))
             "GET" to "/api/media/thumb", "GET" to "/api/media/view" -> {
                 val file = ScreenshotStore.resolve(picturesDir, req.query["name"]) ?: return ApiResponse.notFound()

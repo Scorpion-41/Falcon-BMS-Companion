@@ -17,6 +17,38 @@ data class BridgeInfo(
     val briefing: BriefingStatus = BriefingStatus(),
     val ezBoards: EzStatus = EzStatus(),
     val media: MediaInfo = MediaInfo(),
+    val acmi: AcmiInfo = AcmiInfo(),
+    val kneeboard: KneeboardInfo = KneeboardInfo(),
+)
+
+/**
+ * The kneeboard UOAF's html_brief last exported on the BMS PC: [pages] of it, ready to read through
+ * /api/kneeboard/page. [stale] means BMS has printed a newer briefing than the export, so the pages are the
+ * previous flight's until the pilot exports again.
+ */
+@Serializable
+data class KneeboardInfo(
+    val configured: Boolean = false,
+    val path: String? = null,
+    val detected: String? = null,
+    val available: Boolean = false,
+    val pages: Int = 0,
+    val exported: Long = 0,
+    val stale: Boolean = false,
+    val message: String? = null,
+)
+
+/**
+ * The ACMI recordings BMS leaves in User\Acmi. Flying with the AWACS picture on means recording, and the folder
+ * grows by a file per flight until somebody clears it — which is what [bytes] is there to make obvious.
+ */
+@Serializable
+data class AcmiInfo(
+    val available: Boolean = false,
+    val path: String? = null,
+    val count: Int = 0,
+    val bytes: Long = 0,
+    val latest: Long = 0,
 )
 
 /** Screenshots on the BMS PC (User\Pictures): summary in /api/info, list from /api/media. */
@@ -136,7 +168,18 @@ data class Contact(
 )
 
 @Serializable
-data class Contacts(val t: Long = 0, val connected: Boolean = false, val state: String = "off", val contacts: List<Contact> = emptyList())
+data class Contacts(
+    val t: Long = 0,
+    val connected: Boolean = false,
+    val state: String = "off",
+    val contacts: List<Contact> = emptyList(),
+    /** recent events from the feed (weapon hits and misses); newest last */
+    val events: List<TacEvent> = emptyList(),
+)
+
+/** An event the AWACS feed reported, e.g. "AIM-120C AMRAAM hit". [who] and [target] are resolved names when known. */
+@Serializable
+data class TacEvent(val id: Long = 0, val kind: String = "", val text: String = "", val who: String? = null, val target: String? = null, val mine: Boolean = false)
 
 @Serializable
 data class MissionData(
@@ -221,5 +264,32 @@ data class Dtc(
 @Serializable data class Board(val time: Long = 0, val format: String = "", val tables: List<BoardTable> = emptyList())
 @Serializable data class BoardTable(val title: String = "", val header: List<String> = emptyList(), val rows: List<BoardRow> = emptyList())
 @Serializable data class BoardRow(val kind: String? = null, val cells: List<String> = emptyList())
+
+/**
+ * The VR boards.
+ *
+ * A board is one OpenKneeboard tab pointed at `/kneeboard/<n>`, showing one kind of page and nothing else — there is
+ * no pointer in a headset, so there is nothing on a board to press. The configuration lives on the PC (in
+ * `bridge-settings.json`) rather than in each browser, because the headset's browser is not somewhere a pilot can
+ * conveniently set anything up, and because every board should agree about the print size and the light.
+ */
+@Serializable
+data class BoardConfig(
+    /** Ink on dark paper, for a night flight. Pages that are pictures — the map, the plates — ignore it. */
+    val night: Boolean = false,
+    /** How large the print is: an index into the sizes the board offers. */
+    val print: Int = 1,
+    /**
+     * Bumped by **Rebuild pages** on the PC. A board builds its pages from the mission and rebuilds them when the
+     * mission changes, but a briefing that was printed while a board sat on a chart is the kind of thing that leaves
+     * a pilot looking at last night's field. This is the button that says "do it again now".
+     */
+    val rev: Int = 0,
+    val slots: List<BoardSlot> = emptyList(),
+)
+
+/** One board: its number (the address it answers on), what it shows, and anything that kind of page can be told. */
+@Serializable
+data class BoardSlot(val n: Int = 1, val kind: String = "map", val options: Map<String, String> = emptyMap())
 
 @Serializable data class DiscoveryReply(val service: String = "", val name: String = "", val port: Int = 47474, val version: String = "", val api: Int = 1)

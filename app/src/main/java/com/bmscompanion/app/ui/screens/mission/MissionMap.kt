@@ -23,6 +23,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -55,6 +60,10 @@ import com.bmscompanion.app.data.Airport
 import com.bmscompanion.app.data.Repo
 import com.bmscompanion.app.data.mission.Contact
 import com.bmscompanion.app.data.mission.MissionLink
+import com.bmscompanion.app.ui.Kneeboard
+import com.bmscompanion.app.ui.KneeboardActionsSlot
+import com.bmscompanion.app.ui.KneeboardButton
+import com.bmscompanion.app.ui.components.MapLookMenuItems
 import com.bmscompanion.app.ui.components.HudChip
 import com.bmscompanion.app.ui.components.MapProjection
 import com.bmscompanion.app.ui.components.MapState
@@ -93,9 +102,11 @@ object MapLayers {
     }
 }
 
-val Friendly = Color(0xFF56C8F5)
-val Hostile = Color(0xFFFF5A5F)
-val Neutral = Color(0xFFFFD27A)
+// Symbol colours. On a board they come from the skin instead, so a printed page is drawn in printed inks
+// rather than in the HUD's cyan and red.
+val Friendly: Color get() = if (Hud.onPaper) Hud.Blue else Color(0xFF56C8F5)
+val Hostile: Color get() = if (Hud.onPaper) Hud.Red else Color(0xFFFF5A5F)
+val Neutral: Color get() = if (Hud.onPaper) Hud.Amber else Color(0xFFFFD27A)
 
 fun contactColor(c: Contact) = when {
     c.own -> Hud.Amber
@@ -163,6 +174,8 @@ fun MissionMapPane(env: MissionEnv, state: MapState, sel: MapSel?, onSel: (MapSe
         return
     }
     val d = rememberMapData(env)
+    // on a kneeboard the map is the whole board, so its options move into a ⋯ next to the sections button
+    if (Kneeboard.on) KneeboardActionsSlot(Unit) { MapOptionsButton() }
     if (isWide()) {
         Row(Modifier.fillMaxSize()) {
             LiveMap(env, d, state, sel, onSel, Modifier.weight(1f).fillMaxHeight(), flightStrip = false)
@@ -196,6 +209,8 @@ fun LiveMap(
     modifier: Modifier,
     flightStrip: Boolean,
     compactControls: Boolean = false,
+    /** A VR board has no pointer, so it gets the chart and none of the controls. */
+    bare: Boolean = false,
 ) {
     val th = env.theater ?: return
     val link by MissionLink.state.collectAsState()
@@ -235,7 +250,7 @@ fun LiveMap(
 
     Box(modifier) {
         TheaterMap(
-            th.map, th.sizeFt, Modifier.fillMaxSize(), state, maxScale = 24f, fillWidth = false,
+            th.map, th.sizeFt, Modifier.fillMaxSize(), state, maxScale = 24f, fillWidth = false, zoomButtons = !bare,
             onUserGesture = { if (MapLayers.follow) { MapLayers.follow = false; MapLayers.save() } },
             onTap = { x, y, pr ->
                 val tap = pr.toScreen(x, y)
@@ -342,10 +357,18 @@ fun LiveMap(
             }
         }
 
-        // top controls
-        Column(Modifier.align(Alignment.TopStart).padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(
-                Modifier.clip(RoundedCornerShape(12.dp)).background(Hud.Bg.copy(alpha = 0.82f)).horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 2.dp),
+        // Top controls. The full-screen map on a kneeboard has no chip row of its own: MissionMapPane puts the same
+        // options behind the ⋯ button, and the corner above is left to the floating sections button.
+        val knee = bare || (Kneeboard.on && !compactControls)
+        Column(
+            Modifier.align(Alignment.TopStart).padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (!knee) Row(
+                // on paper the page behind is cream too, so the strip needs an edge of its own to be a strip at all
+                Modifier.clip(RoundedCornerShape(12.dp)).background(if (Hud.onPaper) Hud.Surface else Hud.Bg.copy(alpha = 0.82f))
+                    .border(1.dp, if (Hud.onPaper) Hud.Outline else Color.Transparent, RoundedCornerShape(12.dp))
+                    .horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (compactControls) HudChip(if (layersOpen) "Layers ‹" else "Layers ›", layersOpen) { layersOpen = !layersOpen }
@@ -361,10 +384,10 @@ fun LiveMap(
                 }
             }
             if (flightStrip) FlightStrip(d.live, d.bull)
-            AcmiReminder()
+            if (!knee) AcmiReminder()
         }
         // recenter
-        Box(
+        if (!bare) Box(
             Modifier.align(Alignment.BottomEnd).padding(12.dp).size(46.dp).clip(RoundedCornerShape(23.dp)).background(Hud.Surface.copy(alpha = 0.95f))
                 .border(1.dp, Hud.Outline, RoundedCornerShape(23.dp)).clickable {
                     val t = d.ownPos ?: d.route.firstOrNull()?.let { it.x!! to it.y!! }
@@ -373,6 +396,39 @@ fun LiveMap(
                 },
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Default.MyLocation, "Center", tint = if (MapLayers.follow) Hud.Amber else Hud.TextDim) }
+    }
+}
+
+/** Everything the map's chip row holds, behind one ⋯ button, for the kneeboard. */
+@Composable
+private fun MapOptionsButton() {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        KneeboardButton(Icons.Default.MoreHoriz, "Map options") { open = !open }
+        // the panel is painted here rather than left to Material: a menu whose background comes from the theme and
+        // whose text comes from the skin can end up the same colour as the page it floats over
+        DropdownMenu(open, onDismissRequest = { open = false }, modifier = Modifier.background(Hud.Surface).widthIn(min = 210.dp)) {
+            LayerRow("Follow ownship", MapLayers.follow) { MapLayers.follow = it }
+            LayerRow("Route and steerpoints", MapLayers.route) { MapLayers.route = it }
+            LayerRow("Threat rings", MapLayers.threats) { MapLayers.threats = it }
+            LayerRow("Traffic", MapLayers.traffic) { MapLayers.traffic = it }
+            LayerRow("Hostiles", MapLayers.hostiles) { MapLayers.hostiles = it }
+            LayerRow("Labels", MapLayers.labels) { MapLayers.labels = it }
+            LayerRow("Airfields", MapLayers.fields) { MapLayers.fields = it }
+            HorizontalDivider(color = Hud.Outline.copy(alpha = 0.6f))
+            MapLookMenuItems()
+        }
+    }
+}
+
+@Composable
+private fun LayerRow(label: String, on: Boolean, set: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { set(!on); MapLayers.save() }.padding(end = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(on, { set(it); MapLayers.save() }, colors = CheckboxDefaults.colors(checkedColor = Hud.Amber))
+        Text(label, color = Hud.Text, fontSize = 14.sp)
     }
 }
 

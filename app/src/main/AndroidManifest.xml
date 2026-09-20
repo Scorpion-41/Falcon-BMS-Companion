@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- About → Update: hands a downloaded release APK to Android's package installer. Android still asks the
+         pilot to allow it once; the app only opens that switch, it cannot install anything by itself. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application
         android:name=".BmsApp"
         android:allowBackup="true"

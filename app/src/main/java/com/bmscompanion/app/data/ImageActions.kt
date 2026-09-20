@@ -13,9 +13,24 @@ class ImageAction(
     val run: suspend (name: String, load: suspend () -> ByteArray?) -> String?,
 )
 
-/** Set by each platform at start-up (Android MainActivity, PC Main). */
+/** Set by each platform at start-up (Android MainActivity, PC Main, browser Main). */
 object Platform {
     var imageActions: List<ImageAction> = emptyList()
+
+    /** Opens a link outside the app (the browser on Android and the PC, a new tab in the browser version). */
+    var openUrl: ((String) -> Unit)? = null
+
+    /**
+     * Fetches a URL as text, for the few things the app reads straight from the internet rather than from the PC:
+     * the release list and its checksums. Null where there is no way to (or no need to) reach out.
+     */
+    var fetchText: (suspend (String) -> String)? = null
+
+    /** Downloading and running an update, where the platform can do that. Null in the browser. */
+    var installer: com.bmscompanion.app.data.update.Installer? = null
+
+    /** The clock. A platform hook because the browser has no java.lang.System to read it from. */
+    var nowMillis: () -> Long = { 0L }
 }
 
 /** The actions for the current screen; browser sessions on the PC provide their own. */

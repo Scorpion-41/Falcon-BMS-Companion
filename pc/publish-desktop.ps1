@@ -2,6 +2,8 @@
 #   dist/BMS-Companion-PC.msi  installer (per-user, Start menu + desktop shortcut)
 #   dist/BMS-Companion-PC.zip  portable folder (unzip and run "BMS Companion.exe")
 # Both include their own Java runtime and the browser version, so users install nothing else.
+# packageMsi finishes by running finish-msi.ps1: the installer's artwork, and a product code of its own so it can be
+# installed over a copy that is already there.
 # Usage (from the repo root):  powershell -ExecutionPolicy Bypass -File pc\publish-desktop.ps1
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot

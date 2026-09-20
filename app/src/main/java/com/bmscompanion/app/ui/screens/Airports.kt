@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -81,6 +82,7 @@ import com.bmscompanion.app.ui.components.FavoriteButton
 import com.bmscompanion.app.ui.components.Fmt
 import com.bmscompanion.app.ui.components.KeyValueRow
 import com.bmscompanion.app.ui.components.ListDetail
+import com.bmscompanion.app.ui.components.AlphabetScrubber
 import com.bmscompanion.app.ui.components.ListRow
 import com.bmscompanion.app.ui.components.LoadingBox
 import com.bmscompanion.app.ui.components.SearchField
@@ -231,7 +233,9 @@ private fun AirportList(list: List<Airport>, selected: Int?, onOpen: (Int) -> Un
                     listOfNotNull(a.freqs?.towerUhf, a.freqs?.towerVhf, a.freqs?.approachUhf, a.freqs?.groundUhf).any { it.norm().startsWith(nq) })
         }
     }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
+    val rows = rememberLazyListState()
+    Box(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize(), state = rows, contentPadding = PaddingValues(bottom = 24.dp, end = 20.dp)) {
         item {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { SearchField(q, { q = it }, "Name, ICAO, TACAN (75X), ILS or frequency") }
             com.bmscompanion.app.ui.components.ChipRow(types, type, { it }, { type = it })
@@ -254,6 +258,9 @@ private fun AirportList(list: List<Airport>, selected: Int?, onOpen: (Int) -> Un
                 onClick = { onOpen(a.id) },
             )
         }
+    }
+    // one row above the airfields: the search field and the count
+    AlphabetScrubber(filtered, rows, { it.name }, before = 1)
     }
 }
 

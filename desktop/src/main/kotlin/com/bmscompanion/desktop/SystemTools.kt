@@ -61,6 +61,13 @@ object SystemTools {
     }
 
     /** IPv4 addresses other devices on the LAN can reach this PC at (virtual adapters last). */
+    /** Puts text on the clipboard, for the addresses a pilot has to paste into another program. */
+    fun copyToClipboard(text: String) {
+        runCatching {
+            java.awt.Toolkit.getDefaultToolkit().systemClipboard.setContents(java.awt.datatransfer.StringSelection(text), null)
+        }
+    }
+
     fun lanAddresses(): List<String> = System.getenv("BMSC_SHOW_ADDRESS")?.let { listOf(it) } ?: runCatching { // env: example address for screenshots
         NetworkInterface.getNetworkInterfaces().toList()
             .filter { it.isUp && !it.isLoopback && !it.isPointToPoint }
@@ -77,6 +84,33 @@ object SystemTools {
 
     fun openUrl(url: String) {
         runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI(url)) }
+    }
+
+    /**
+     * Opens a page in a window of its own, at a given size — how a VR board is previewed.
+     *
+     * A board is a shape, not a page: previewing one in a tab of an ordinary browser window says nothing about what
+     * it will look like strapped to a thigh. Chromium browsers take `--app=<url>`, which is a window with no tabs,
+     * no address bar and no bookmarks, and `--window-size`, so the preview is the board and the right shape. Edge
+     * ships with Windows and Chrome is the usual alternative; where neither is found the page opens normally
+     * rather than not at all.
+     */
+    fun openUrlInWindow(url: String, width: Int, height: Int) {
+        val browsers = listOfNotNull(
+            System.getenv("ProgramFiles(x86)")?.let { "$it\\Microsoft\\Edge\\Application\\msedge.exe" },
+            System.getenv("ProgramFiles")?.let { "$it\\Microsoft\\Edge\\Application\\msedge.exe" },
+            System.getenv("ProgramFiles")?.let { "$it\\Google\\Chrome\\Application\\chrome.exe" },
+            System.getenv("ProgramFiles(x86)")?.let { "$it\\Google\\Chrome\\Application\\chrome.exe" },
+            System.getenv("LOCALAPPDATA")?.let { "$it\\Google\\Chrome\\Application\\chrome.exe" },
+        )
+        val exe = browsers.firstOrNull { java.io.File(it).isFile }
+        if (exe == null) {
+            openUrl(url)
+            return
+        }
+        runCatching {
+            ProcessBuilder(exe, "--app=$url", "--window-size=$width,$height", "--window-position=80,40").start()
+        }.onFailure { openUrl(url) }
     }
 
     /** Opens a folder or file with its default program. */

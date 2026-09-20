@@ -6,6 +6,8 @@ import com.bmscompanion.app.data.mission.EzRun
 import com.bmscompanion.app.data.mission.Live
 import com.bmscompanion.app.data.mission.NavPoint
 import com.bmscompanion.app.data.mission.Voice
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -15,6 +17,9 @@ import java.io.File
  * - `--eztest <EZBoards folder> out.txt`: runs EZBoards exactly like the app button does (use a copy of the folder).
  * - `--api <path>[,<path>…] out.txt`: API responses (e.g. /api/info,/api/mission) from Falcon BMS on this PC, one per line.
  * - `--maprender <theater> <folder> [xFt,yFt]`: map styles and landmarks rendered to PNGs (see MapRender).
+ * - `--updatetest out.txt [download]`: what the About page sees on GitHub — the releases newer than this build, the
+ *   file this platform would fetch and the checksum it would check it against. With `download`, it fetches that
+ *   file and verifies it, without installing anything.
  */
 object SelfTest {
     fun run(args: Array<String>): Boolean {
@@ -48,6 +53,50 @@ object SelfTest {
                 // several paths separated by commas: one response per line
                 File(args[2]).writeText(args[1].split(',').joinToString("\n") { Bridge.handle(ApiRequest("GET", it)).body.toString(Charsets.UTF_8) })
                 Bridge.stop()
+            }
+            args.size >= 2 && args[0] == "--updatetest" -> {
+                com.bmscompanion.app.data.Platform.fetchText = { url -> com.bmscompanion.desktop.fetchTextFromWeb(url) }
+                com.bmscompanion.app.data.Platform.installer = com.bmscompanion.desktop.PcInstaller
+                com.bmscompanion.app.data.Platform.nowMillis = { System.currentTimeMillis() }
+                val out = StringBuilder()
+                kotlinx.coroutines.runBlocking {
+                    val updates = com.bmscompanion.app.data.update.Updates
+                    // --updatetest out.txt [download] [<version to pretend to be>]
+                    args.drop(2).firstOrNull { it.firstOrNull()?.isDigit() == true }?.let { updates.baseline = it }
+                    updates.check(force = true)
+                    val state = updates.state.value
+                    out.appendLine("running=${com.bmscompanion.app.AppVersion.NAME} comparing against ${updates.baseline} error=${state.error}")
+                    out.appendLine("newer=${state.newer.size}")
+                    state.newer.forEach { r ->
+                        val asset = updates.assetFor(r)
+                        out.appendLine("  ${r.version} (${r.date}) \"${r.title}\" notes=${r.body?.length ?: 0} chars")
+                        out.appendLine("    asset=${asset?.name} ${asset?.size} bytes digest=${asset?.digest}")
+                    }
+                    // the same path the About page takes, stopping short of running the installer
+                    if (args.getOrNull(2) == "download") {
+                        val r = state.latest
+                        if (r == null) out.appendLine("nothing newer to download") else {
+                            // what the About page would be showing while it runs, one line per change
+                            val watcher = launch {
+                                var last = ""
+                                while (true) {
+                                    updates.state.value.progress?.let { p ->
+                                        val line = "    ${p.stage} ${p.text}"
+                                        if (line != last) { out.appendLine(line); last = line }
+                                    }
+                                    delay(700)
+                                }
+                            }
+                            val name = updates.fetch(r)
+                            watcher.cancel()
+                            out.appendLine("fetched=$name verified=${name != null}")
+                            out.appendLine("in the cache: ${com.bmscompanion.desktop.PcInstaller.cachedFiles()}")
+                            com.bmscompanion.desktop.PcInstaller.clearCache()
+                            out.appendLine("cache cleared: ${com.bmscompanion.desktop.PcInstaller.cachedFiles()}")
+                        }
+                    }
+                }
+                File(args[1]).writeText(out.toString())
             }
             args.size >= 3 && args[0] == "--maprender" -> MapRender.run(args[1], File(args[2]),
                 args.getOrNull(3)?.split(',')?.let { it[0].toDouble() to it[1].toDouble() })

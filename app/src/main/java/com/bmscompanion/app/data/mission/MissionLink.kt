@@ -142,7 +142,7 @@ object MissionLink {
         Repo.json.decodeFromString<T>(text)
     }
 
-    private fun request(method: String, path: String, timeoutMs: Int): String {
+    private fun request(method: String, path: String, timeoutMs: Int, body: String? = null): String {
         val b = base() ?: throw IOException("no BMS PC set")
         val c = URL(b + path).openConnection() as HttpURLConnection
         try {
@@ -150,7 +150,13 @@ object MissionLink {
             c.connectTimeout = timeoutMs
             c.readTimeout = timeoutMs
             c.useCaches = false
-            if (method == "POST") { c.doOutput = true; c.setFixedLengthStreamingMode(0); c.outputStream.close() }
+            if (method == "POST") {
+                val bytes = body?.encodeToByteArray() ?: ByteArray(0)
+                c.doOutput = true
+                c.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                c.setFixedLengthStreamingMode(bytes.size)
+                c.outputStream.use { it.write(bytes) }
+            }
             val code = c.responseCode
             val stream = if (code in 200..299) c.inputStream else c.errorStream ?: throw IOException("HTTP $code")
             // Reading to the end and closing (without disconnect) lets HttpURLConnection reuse the keep-alive socket.
@@ -159,6 +165,34 @@ object MissionLink {
             c.disconnect()
             throw e
         }
+    }
+
+    /**
+     * What each VR board shows. Read by the boards themselves and by the VR board page on the PC; written only by
+     * that page. Null means the PC could not be reached — an empty configuration is a real answer, not a failure.
+     */
+    suspend fun boards(): BoardConfig? = runCatching { get<BoardConfig>("/api/boards") }.getOrNull()
+
+    /** Saves it, and answers with what the PC stored. */
+    suspend fun saveBoards(config: BoardConfig): BoardConfig? = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = Repo.json.encodeToString(BoardConfig.serializer(), config)
+            Repo.json.decodeFromString<BoardConfig>(request("POST", "/api/boards", timeoutMs = 8000, body = body))
+        }.getOrNull()
+    }
+
+    /**
+     * Opens UOAF's kneeboard exporter on the BMS PC and answers with what it said.
+     *
+     * A shortcut, not an export: that tool has no headless mode, so this puts its window up on the PC where the
+     * pilot can press export. From a tablet it is the same window, on the PC across the room.
+     */
+    suspend fun openKneeboardExporter(): String = withContext(Dispatchers.IO) {
+        runCatching {
+            val text = request("POST", "/api/kneeboard/open", timeoutMs = 10_000)
+            Regex("\"message\"\\s*:\\s*\"(.*?)\"").find(text)?.groupValues?.get(1)?.replace("\\\\", "\\")
+                ?: "The exporter was asked to open on the BMS PC."
+        }.getOrElse { "Could not reach the PC: ${reasonOf(it)}" }
     }
 
     /** Asks the bridge to run EZBoards; the result also refreshes the board data. */

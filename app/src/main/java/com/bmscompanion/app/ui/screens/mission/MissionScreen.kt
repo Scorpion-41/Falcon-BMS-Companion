@@ -88,7 +88,8 @@ private fun MissionHeader(
         Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        MissionStatus(state, info, live, badge = null, idleText = "Connect to BMS Companion on the PC to see live mission data", onSetup = onSetup, modifier = Modifier.weight(1f))
+        MissionStatus(state, info, live, badge = null, idleText = "Connect to BMS Companion on the PC to see live mission data", onSetup = onSetup)
+        Spacer(Modifier.weight(1f))
         IconButton(onClick = onKeepOn) {
             Icon(if (keepOn) Icons.Filled.LightMode else Icons.Outlined.LightMode, "Keep screen on", tint = if (keepOn) Hud.Amber else Hud.TextDim)
         }

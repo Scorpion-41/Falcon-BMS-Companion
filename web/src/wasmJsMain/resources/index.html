@@ -2,17 +2,23 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- The board lives at /kneeboard/3, a path deeper than the app's own files. Without this the browser looks for
+     bmsc.wasm in /kneeboard/ and the board never starts. -->
+<base href="/">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="BMS Companion">
 <meta name="theme-color" content="#0a0f14">
-<link rel="apple-touch-icon" href="icon.png">
-<link rel="icon" href="icon.png">
-<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="icon" href="/icon.png">
+<link rel="manifest" href="/manifest.json">
 <title>BMS Companion</title>
 <style>
+  /* A numbered board draws its own tablet, corners and all, and wants nothing behind the corners: whatever the
+     kneeboard program puts there shows through. Every other page keeps the app background. */
+  html.board, html.board body { background: transparent; }
   html, body { margin: 0; width: 100%; height: 100%; background: #0a0f14; overflow: hidden; overscroll-behavior: none;
     -webkit-tap-highlight-color: transparent; }
   #splash { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px;
@@ -26,6 +32,43 @@
 <body>
 <div id="splash"><b>BMS COMPANION</b><span id="splashText">Loading the app…</span><div class="bar"><i></i></div></div>
 <script>
+  // Shape of the board in VR. OpenKneeboard gives a Web Dashboard tab a landscape page and offers no way to change
+  // that from its settings — the tab can be moved and resized in the headset, but not reproportioned. It does let the
+  // page ask, once, through the API it injects into the tab, and a page that asks is reshaped to fit exactly.
+  //
+  // A kneeboard on a pilot's thigh is portrait, so this asks for 1000 x 1600: the 5:8 of OpenKneeboard's own boards
+  // and of the real strapped-on article. Another shape can be had with ?size=WIDTHxHEIGHT (e.g. /kneeboard?size=1200x1600
+  // for something squarer). Only the board asks; the ordinary website is a window like any other.
+  //
+  // The API is injected shortly after the page starts, so this keeps asking for a few seconds and then gives up.
+  // In any ordinary browser there is nothing to ask and nothing happens.
+  (function () {
+    // /kneeboard, and /kneeboard/3 — a numbered board is still a board, and still wants the shape
+    var onBoard = /\/kneeboard(\/[0-9]{1,2})?$/.test(location.pathname.replace(/\/+$/, '')) ||
+      location.hash === '#kneeboard' || /(^|[?&])kneeboard=(?!0)/.test(location.search);
+    if (!onBoard) return;
+    // a numbered board draws its own tablet: nothing behind its rounded corners
+    if (/\/kneeboard\/[0-9]{1,2}$/.test(location.pathname.replace(/\/+$/, ''))) document.documentElement.classList.add('board');
+    // the same list, in the same order, as the shape menu on the board itself (ui/Kneeboard.kt), and the same
+    // remembered choice: asking here means the tab is the right shape before the app has drawn anything
+    var shapes = [[1000, 1600], [1080, 1440], [1000, 1500], [1280, 1280], [1440, 1080]];
+    var stored = 0;
+    try { stored = parseInt(localStorage.getItem('bmsc.kneeboard_shape'), 10) || 0; } catch (e) {}
+    var pick = shapes[stored] || shapes[0];
+    var size = /[?&]size=(\d{3,5})x(\d{3,5})/.exec(location.search);
+    var w = size ? +size[1] : pick[0], h = size ? +size[2] : pick[1];
+    var tries = 0;
+    (function ask() {
+      var api = window.OpenKneeboard;
+      if (api && typeof api.SetPreferredPixelSize === 'function') {
+        try { Promise.resolve(api.SetPreferredPixelSize(w, h)).catch(function () {}); } catch (e) { /* older API */ }
+        return;
+      }
+      if (++tries < 40) setTimeout(ask, 250);
+    })();
+  })();
+</script>
+<script>
   // The app is WebAssembly with garbage collection: Safari 18.2+, Chrome/Edge 119+, Firefox 120+.
   (function () {
     var gc = new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 95, 1, 120, 0]);
@@ -36,7 +79,7 @@
       return;
     }
     var s = document.createElement('script');
-    s.src = 'bmsc.js';
+    s.src = '/bmsc.js';
     s.onerror = function () { document.getElementById('splashText').textContent = 'Could not load the app from the PC. Reload to try again.'; };
     document.body.appendChild(s);
   })();

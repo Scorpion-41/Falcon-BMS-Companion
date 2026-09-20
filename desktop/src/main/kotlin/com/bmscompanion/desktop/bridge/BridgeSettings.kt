@@ -16,6 +16,8 @@ data class BridgeSettings(
     val Port: Int = 47474,
     val BmsDirOverride: String? = null,
     val EzBoardsDir: String? = null,
+    /** UOAF's kneeboard exporter (BMS ships it in Tools\\html_brief_win). Null means "wherever BMS has it". */
+    val KneeboardExporterDir: String? = null,
     /** Screenshot folder when it isn't the one BMS reports (rarely needed). */
     val PicturesDirOverride: String? = null,
     val AutoEzBoardsOnPrint: Boolean = false,
@@ -25,6 +27,8 @@ data class BridgeSettings(
     val TacviewPassword: String = "",
     /** Off by default so a first-time user always sees real BMS status. */
     val DemoMode: Boolean = false,
+    /** What each VR board shows. Null until the pilot opens the VR board page, which starts from the defaults. */
+    val Boards: com.bmscompanion.app.data.mission.BoardConfig? = null,
 ) {
     companion object {
         private val file get() = File(Repo.settingsFolder, "bridge-settings.json")

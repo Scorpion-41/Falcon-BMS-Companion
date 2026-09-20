@@ -123,13 +123,27 @@ fun MissionSetupPane(onConnected: () -> Unit) {
                 Para("After PRINT, click **Generate kneeboards** on the Boards tab (or a Dashboard card). Tick **Generate kneeboards automatically** to run it on every PRINT.")
                 Para("To see the kneeboards in the cockpit, enable the 3D pilot model (Setup → Graphics → Pilot Model).")
             }
-            GuideStep(10, "Troubleshooting", Hud.Red) {
+            GuideStep(10, "VR: the app on your knee", Hud.Cyan) {
+                Para("BMS Companion does not draw inside the headset itself — that needs a native OpenXR layer. Use **OpenKneeboard** (openkneeboard.com), which already places the board on your knee, drags, resizes and rotates it, toggles it with your own key and lets the mouse move in and out of it.")
+                Bullet("1. Turn **Browser access** on (server page → Connect your devices).")
+                Bullet("2. In OpenKneeboard: **Settings → Tabs → Add a tab → Web Dashboard**.")
+                Bullet("3. Address: the one the **VR boards** tab gives you for that board — **/kneeboard/1**, **/kneeboard/2** and so on, a board to a tab.")
+                Bullet("4. Size and place the board in OpenKneeboard; its own binding shows and hides it in the headset.")
+                Para("**In the headset you flip the board, you do not press it.** OpenKneeboard supports graphics tablets and nothing else — its own FAQ says \"Mice are not supported in-game\" — so bind a button (HOTAS, keyboard, StreamDeck) to OpenKneeboard's **next page** and **previous page** and it walks through BMS Companion's sections: Mission, Arsenal, Threats, Airfields, Cockpit. Nothing to aim at. A graphics tablet, if you have one, points at the board as well.")
+                Para("**Print too small?** The board is drawn at a headset-friendly resolution, and **☰ → Print size** decides how large that resolution is used — Normal, Large or Very large. It is remembered per board.")
+                Para("OpenKneeboard gives a web tab a landscape page and will not let you reproportion it — the page has to ask. This one asks for an upright board, and **☰ → Board shape** on the board itself offers the others (5:8 like a real kneeboard, 3:4, square, landscape). The board remembers which one it is.")
+                Para("**/kneeboard** is what makes the board layout. It lays the page out for a board: the content gets all of it, a small **☰** in the corner opens the sections and the Mission tabs, each page’s own options sit behind **⋯** beside it, and both fade away when the mouse stops. The map fills the board. Left out are the things you would not use in the cockpit: the AWACS/GCI page, the Boards tab (the briefing has the same tables), the setup guides, Home and Media.")
+                Para("The board layout is the browser version only: this window and the Android app keep their normal one.")
+                Para("Try it without a headset: open **http://127.0.0.1:47474/kneeboard** in a browser on this PC and make the window small (about 800 x 800). The buttons fade a couple of seconds after the mouse stops — move it to bring them back.")
+            }
+            GuideStep(11, "Troubleshooting", Hud.Red) {
                 Bullet("**Phones, browsers or client PCs can't connect**: same network (guest Wi-Fi isolates devices), and **Allow through Windows Firewall** on the BMS PC.")
                 Bullet("**Port in use**: another program (or an old BMS Companion Bridge) uses 47474. Close it, or change the port in the settings.")
                 Bullet("**Briefing empty**: PRINT not pressed, HTML briefings still on, or g_sBriefingsDirectory points somewhere else (it is followed while BMS runs).")
                 Bullet("**No AWACS feed**: check g_bTacviewRealTime and that ACMI recording is running in 3D.")
                 Bullet("**EZBoards fails**: open the log on the Boards tab. Common causes are a missing .NET 8 runtime or no briefing printed.")
                 Bullet("**Map shows the wrong theater**: the app follows the theater BMS reports; add-on theaters use their base map.")
+                Para("**Reporting a bug?** Anything that goes wrong is written to a log next to the settings: **%APPDATA%\\BMS Companion\\error.log** — paste that path into Explorer, or press **Open the error log** at the bottom of the server page's **Falcon BMS settings** card. Sending the last entry with your report saves a lot of guessing.")
             }
         }
     }

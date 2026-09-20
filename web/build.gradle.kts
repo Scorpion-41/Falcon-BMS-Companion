@@ -27,6 +27,7 @@ kotlin {
             kotlin.srcDir("../desktop/src/main/kotlin/overrides/ui")
             kotlin.exclude(
                 "com/bmscompanion/app/MainActivity.kt",
+                "com/bmscompanion/app/AndroidInstaller.kt",
                 "com/bmscompanion/app/data/Repo.kt",
                 "com/bmscompanion/app/data/mission/MissionLink.kt",
                 "com/bmscompanion/app/ui/components/TheaterMap.kt",

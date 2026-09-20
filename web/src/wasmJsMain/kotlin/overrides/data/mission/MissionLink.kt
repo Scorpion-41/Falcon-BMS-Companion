@@ -122,6 +122,30 @@ object MissionLink {
     private suspend inline fun <reified T> get(path: String): T =
         Repo.json.decodeFromString<T>(httpText(BASE + path, timeoutMs = 3000))
 
+    /**
+     * What each VR board shows. Read by the boards themselves and by the VR board page on the PC; written only by
+     * that page. Null means the PC could not be reached — an empty configuration is a real answer, not a failure.
+     */
+    /**
+     * Opens the kneeboard exporter on the BMS PC and answers with what it said.
+     *
+     * A shortcut, not an export: html_brief has no headless mode, so this puts its window up where the pilot can
+     * press export. From a tablet it is the same window, on the PC across the room.
+     */
+    suspend fun openKneeboardExporter(): String = runCatching {
+        val text = httpText("$BASE/api/kneeboard/open", "POST", timeoutMs = 10_000)
+        Regex("\"message\"\\s*:\\s*\"(.*?)\"").find(text)?.groupValues?.get(1)?.replace("\\\\", "\\")
+            ?: "The exporter was asked to open on the BMS PC."
+    }.getOrElse { "Could not reach the PC." }
+
+    suspend fun boards(): BoardConfig? = runCatching { get<BoardConfig>("/api/boards") }.getOrNull()
+
+    /** Saves it, and answers with what the PC stored. */
+    suspend fun saveBoards(config: BoardConfig): BoardConfig? = runCatching {
+        val body = Repo.json.encodeToString(BoardConfig.serializer(), config)
+        Repo.json.decodeFromString<BoardConfig>(httpText("$BASE/api/boards", "POST", body, 8000))
+    }.getOrNull()
+
     /** Asks the bridge to run EZBoards; the result also refreshes the board data. */
     fun generateBoards() {
         if (_ez.value.running) return

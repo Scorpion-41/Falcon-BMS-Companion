@@ -434,4 +434,4 @@ data class IffMode(val mode: String = "", val description: String = "")
 data class Term(val term: String = "", val meaning: String = "")
 
 @Serializable
-data class ChartRef(val title: String = "", val file: String = "")
+data class ChartRef(val title: String = "", val file: String = "", val pages: List<String> = emptyList())

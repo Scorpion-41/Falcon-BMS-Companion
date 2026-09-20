@@ -69,6 +69,8 @@ fun MissionBriefingPane(env: MissionEnv, showOnMap: (MapSel, Double, Double) -> 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
         Masonry(minColumn = 420.dp, maxColumns = 3) {
             OverviewCard(b, live?.voice?.flight)
+            // the kneeboard html_brief exported on the BMS PC, and the button that runs it
+            KneeboardCard(env.nav)
             AirbasesCard(env, bases)
             SteerpointTable(stpts, own, bull) { s -> if (s.hasPos) showOnMap(MapSel.Stp(s.n), s.x!!, s.y!!) }
             TargetsCard(mission?.dtc, bull, showOnMap)

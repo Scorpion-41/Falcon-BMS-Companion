@@ -96,6 +96,7 @@ With **Browser access** on, the same server also serves the browser version of t
 
 With browser access off, `/` shows a short status page instead.
 
+
 ## Security
 
 Everything is meant for a trusted home LAN. The server provides read-only data; the actions it exposes to devices are running the configured `EZBOARDS.BAT` (no arguments from the client) and moving chosen screenshots to the Recycle Bin. Settings can only be changed in the PC program itself. The firewall rules it offers are limited to the local subnet. There is no login: anyone on the same network can open the app or the API.

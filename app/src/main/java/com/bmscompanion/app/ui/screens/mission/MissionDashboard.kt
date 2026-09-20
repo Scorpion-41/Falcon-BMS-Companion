@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,6 +36,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.FlightLand
 import androidx.compose.material.icons.filled.Headset
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.LocalGasStation
@@ -72,6 +75,7 @@ import com.bmscompanion.app.data.mission.Live
 import com.bmscompanion.app.data.mission.MissionLink
 import com.bmscompanion.app.ui.components.MapState
 import com.bmscompanion.app.ui.components.SectionCard
+import com.bmscompanion.app.ui.Kneeboard
 import com.bmscompanion.app.ui.theme.Hud
 import com.bmscompanion.app.ui.theme.LocalExtra
 import java.util.Locale
@@ -150,11 +154,14 @@ object DashLayouts {
 @Composable
 fun MissionDashboardPane(env: MissionEnv, mapState: MapState, mapSel: MapSel?, onSel: (MapSel?) -> Unit, onOpenTab: (MissionTab) -> Unit) {
     BoxWithConstraints(Modifier.fillMaxSize()) {
+        // a VR board is a tall, narrow page: wider cards running down it read better than a third column with
+        // nothing under it
+        val tallBoard = Kneeboard.on && maxHeight > maxWidth * 1.3f
         val cols = when {
             maxWidth < 600.dp -> 1
-            maxWidth < 1000.dp -> 2
-            maxWidth < 1700.dp -> 3
-            else -> 4
+            maxWidth < 1000.dp -> if (tallBoard) 1 else 2
+            maxWidth < 1700.dp -> if (tallBoard) 2 else 3
+            else -> if (tallBoard) 3 else 4
         }
         val key = if (cols == 1) "narrow" else "wide"
         val layout = DashLayouts.state(key)
@@ -163,8 +170,15 @@ fun MissionDashboardPane(env: MissionEnv, mapState: MapState, mapSel: MapSel?, o
         val d = rememberMapData(env)
         fun update(list: List<DashItem>) = DashLayouts.set(key, list)
 
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp)) {
-            Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (Kneeboard.on) {
+            BoardDashboard(items, env, d, mapState, mapSel, onSel, onOpenTab, tall = maxHeight > maxWidth * 1.15f, columns = cols, boardW = maxWidth, boardH = maxHeight)
+            return@BoxWithConstraints
+        }
+
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = if (Kneeboard.on) 6.dp else 12.dp, vertical = if (Kneeboard.on) 4.dp else 8.dp)) {
+            // a kneeboard shows the cards and nothing else: the line above them is a row of board height spent on a
+            // button nobody presses in the cockpit, and the newest log entry sits in that corner instead
+            if (!Kneeboard.on) Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     if (editing) "Move, resize or remove cards, then add more below" else "Your cards · ${items.size}",
                     style = MaterialTheme.typography.bodySmall, color = Hud.TextDim, modifier = Modifier.weight(1f),
@@ -231,6 +245,69 @@ private fun spanOf(w: DashWidth, cols: Int) = when (w) {
     DashWidth.S -> 1
     DashWidth.M -> ceil(cols * 2 / 3.0).toInt().coerceIn(1, cols)
     DashWidth.L -> cols
+}
+
+/**
+ * The Dashboard on a VR board.
+ *
+ * A window is as tall as the reading needs; a board is whatever shape the pilot strapped to their thigh, and on a 5:8
+ * one the cards ran out halfway down and left the rest of the board blank. So the board is divided rather than
+ * filled: the map takes the larger share and the cards scroll in the smaller one, which means every shape — 5:8,
+ * 3:4, square, landscape — is used from edge to edge, whatever the data happens to be. A tall board splits top and
+ * bottom (the map wants width, the cards are lines of text); a square or landscape one splits left and right.
+ *
+ * The map is drawn bare rather than in a card: a heading and a rule across the top of it is a line of board spent on
+ * something the ☰ already says.
+ */
+@Composable
+private fun BoardDashboard(
+    items: List<DashItem>,
+    env: MissionEnv,
+    d: MapData,
+    mapState: MapState,
+    mapSel: MapSel?,
+    onSel: (MapSel?) -> Unit,
+    onOpenTab: (MissionTab) -> Unit,
+    tall: Boolean,
+    columns: Int,
+    boardW: Dp,
+    boardH: Dp,
+) {
+    val hasMap = items.any { it.card == DashCard.MAP } && env.theater != null
+    val rest = items.filter { it.card != DashCard.MAP }
+
+    @Composable
+    fun Map(modifier: Modifier) = Box(modifier.clip(RoundedCornerShape(8.dp))) {
+        LiveMap(env, d, mapState, mapSel, onSel, Modifier.fillMaxSize(), flightStrip = false, compactControls = true)
+        if (mapSel != null) SelectionCard(env, mapSel, d, Modifier.align(Alignment.BottomStart).padding(start = 6.dp, end = 56.dp, bottom = 6.dp).widthIn(max = 380.dp).fillMaxWidth()) { onSel(null) }
+    }
+
+    @Composable
+    fun Cards(modifier: Modifier) = Column(
+        modifier.verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (columns > 1) SpanMasonry(spans = rest.map { spanOf(it.width, columns) }, columns = columns, spacing = 8.dp) {
+            rest.forEach { item -> DashCardContent(item, env, d, mapState, mapSel, onSel, onOpenTab) }
+        } else rest.forEach { item -> DashCardContent(item, env, d, mapState, mapSel, onSel, onOpenTab) }
+    }
+
+    val pad = Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 4.dp)
+    when {
+        !hasMap -> Cards(pad)
+        rest.isEmpty() -> Map(pad)
+        // the map gets the larger share, because it is the only thing that reads better the more board it is given
+        // the cards take what they need up to about half the board and the map takes the rest, so the page is
+        // full whether the jet is on the ramp with nothing to report or airborne with everything
+        tall -> Column(pad, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Map(Modifier.fillMaxWidth().weight(1f))
+            Cards(Modifier.fillMaxWidth().heightIn(max = boardH * 0.46f))
+        }
+        else -> Row(pad, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Map(Modifier.fillMaxHeight().weight(1f))
+            Cards(Modifier.fillMaxHeight().widthIn(max = boardW * 0.42f))
+        }
+    }
 }
 
 /**

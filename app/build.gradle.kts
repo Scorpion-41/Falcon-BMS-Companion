@@ -1,3 +1,9 @@
+// The version lives in one place: app/src/main/java/com/bmscompanion/app/AppVersion.kt, which the app, the PC
+// program and the browser version all compile. Gradle reads it from there so a release is bumped once.
+val versionSource = file("src/main/java/com/bmscompanion/app/AppVersion.kt").readText()
+fun appVersionConst(name: String) = Regex("""$name = "([^"]+)"""").find(versionSource)?.groupValues?.get(1)
+    ?: error("$name is missing from AppVersion.kt")
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -13,8 +19,8 @@ android {
         applicationId = "com.bmscompanion.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "1.3.1 (BMS 4.38)"
+        versionCode = 7
+        versionName = "${appVersionConst("NAME")} (BMS ${appVersionConst("BMS")})"
     }
 
     buildTypes {

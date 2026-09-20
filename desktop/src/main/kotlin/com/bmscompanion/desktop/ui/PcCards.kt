@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Computer
+import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.Icon
@@ -50,9 +51,14 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bmscompanion.desktop.PcLog
+import com.bmscompanion.app.AppVersion
 import com.bmscompanion.app.data.mission.BridgeInfo
 import com.bmscompanion.app.data.mission.LinkState
 import com.bmscompanion.app.data.mission.MissionLink
+import com.bmscompanion.app.data.update.Progress
+import com.bmscompanion.app.data.update.formatBytes
+import com.bmscompanion.app.data.update.Updates
 import com.bmscompanion.app.ui.components.SectionCard
 import com.bmscompanion.app.ui.screens.mission.SmallButton
 import com.bmscompanion.app.ui.theme.Hud
@@ -179,12 +185,87 @@ fun FirewallButton() {
     }
 }
 
-fun pickFolder(title: String): String? {
-    val chooser = javax.swing.JFileChooser().apply {
-        dialogTitle = title
-        fileSelectionMode = javax.swing.JFileChooser.DIRECTORIES_ONLY
+/**
+ * What the ACMI recordings weigh, and the one button that clears them.
+ *
+ * The AWACS picture needs BMS recording ACMI, so anyone using this program is writing a file per flight into
+ * `User\Acmi` and, going by the folders people send in, never looking at it again. The size is shown next to the
+ * button because that is the part nobody knows: "2 files" invites a shrug, "14.7 GB" does not.
+ *
+ * The BMS folder is read only to this program with exactly this exception, and the files go to the **Recycle Bin**,
+ * so a recording somebody did want can still be fetched back.
+ */
+@Composable
+private fun AcmiRow() {
+    val ticks by Bridge.ticks.collectAsState()
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var done by remember { mutableStateOf<String?>(null) }
+    val info = remember(ticks, busy) { if (Bridge.running) Bridge.acmi.info(Bridge.acmiDir) else null }
+
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                when {
+                    info == null || !info.available -> "No ACMI folder found yet."
+                    info.count == 0 -> "Nothing recorded: the folder is empty."
+                    else -> "${info.count} recording${if (info.count == 1) "" else "s"} · ${formatBytes(info.bytes)}"
+                },
+                fontSize = 14.sp, color = if ((info?.bytes ?: 0) > 4L * 1024 * 1024 * 1024) Hud.Amber else Hud.Text,
+            )
+            Text(
+                done ?: info?.path?.let { "$it · every flight with ACMI recording on adds one" } ?: "BMS writes them while you fly, in User\\Acmi.",
+                fontSize = 12.sp, color = if (done != null) Hud.Green else Hud.TextDim, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (info != null && info.count > 0) {
+            SmallButton(if (busy) "Clearing…" else "Clear (to Recycle Bin)", null, primary = false) {
+                if (!busy) {
+                    busy = true
+                    done = null
+                    scope.launch {
+                        val (gone, bytes) = withContext(Dispatchers.IO) { Bridge.acmi.clear(Bridge.acmiDir) }
+                        done = if (gone == 0) "Nothing was removed." else "$gone moved to the Recycle Bin, ${formatBytes(bytes)} freed."
+                        busy = false
+                    }
+                }
+            }
+        }
     }
-    return if (chooser.showOpenDialog(null) == javax.swing.JFileChooser.APPROVE_OPTION) chooser.selectedFile.path else null
+}
+
+/**
+ * A folder picker that cannot take the program down with it.
+ *
+ * Under the Windows look and feel Swing's chooser walks the Windows shell (`sun.awt.shell.Win32ShellFolder2`) for the
+ * places list and the folder icons, and that throws on plenty of ordinary machines — a OneDrive folder, a mapped or
+ * removable drive, an entry under "This PC". The throw lands on the UI thread, which is Compose's thread here, and the
+ * window goes with it. Two pilots hit exactly that: EZBoards anywhere but `BMS\Tools` means browsing for it, and
+ * browsing crashed the app, while EZBoards inside `Tools` is found on its own and never opens a chooser at all.
+ *
+ * So the chooser is kept off the shell, it opens where the answer probably is instead of at "This PC", and anything
+ * that still goes wrong is written to the log and answered with a null — every folder here can also be typed into the
+ * box in Settings.
+ */
+fun pickFolder(title: String, start: String? = null): String? = runCatching {
+    var picked: String? = null
+    val show = Runnable {
+        val chooser = javax.swing.JFileChooser(startFolder(start)).apply {
+            dialogTitle = title
+            fileSelectionMode = javax.swing.JFileChooser.DIRECTORIES_ONLY
+            // keep it on plain java.io.File: no shell icons, no shell places list, nothing that can throw
+            putClientProperty("FileChooser.useShellFolder", false)
+        }
+        if (chooser.showOpenDialog(null) == javax.swing.JFileChooser.APPROVE_OPTION) picked = chooser.selectedFile?.path
+    }
+    if (javax.swing.SwingUtilities.isEventDispatchThread()) show.run() else javax.swing.SwingUtilities.invokeAndWait(show)
+    picked
+}.onFailure { PcLog.write("folder picker (\"$title\")", it) }.getOrNull()
+
+/** Where the chooser opens: what is set now, then its parent, then the BMS folder — never the shell's own idea. */
+private fun startFolder(start: String?): File? {
+    val tries = listOfNotNull(start, start?.let { File(it).parent }, Bridge.install.baseDir)
+    return tries.map(::File).firstOrNull { runCatching { it.isDirectory }.getOrDefault(false) }
 }
 
 /** Keeps MissionLink polling while a PC settings view is shown (status rows need live info). */
@@ -266,6 +347,13 @@ fun ConnectDevicesCard(status: PcStatus) {
             Text("Install BMS-Companion.apk, then Mission → Setup → Find BMS PC.", fontSize = 13.sp, color = Hud.TextDim)
             if (ips.isNotEmpty()) Text("Or type ${ips.joinToString(" or ")}  ·  port $port", style = LocalExtra.current.monoSmall, color = Hud.Text)
         }
+        DeviceBlock(Icons.Default.ViewInAr, "VR kneeboard (OpenKneeboard)", Hud.Amber) {
+            Text(
+                "Each board is one OpenKneeboard tab with one thing on it — the map, the briefing, your charts. " +
+                    "Set them up in the app: Mission → VR boards, which hands you an address per board.",
+                fontSize = 13.sp, color = Hud.TextDim,
+            )
+        }
         DeviceBlock(Icons.Default.Computer, "Laptop or second PC", Hud.Amber) {
             Text("Install BMS Companion there, open the full app, choose “On another PC” in Mission → Setup and press Find BMS PC.", fontSize = 13.sp, color = Hud.TextDim)
         }
@@ -311,7 +399,7 @@ fun SetupChecklistCard(status: PcStatus) {
         add(
             if (install.baseDir != null) Step("Falcon BMS is found", Check.OK, "Found: ${install.baseDir}" + (install.registryVersion?.let { " ($it)" } ?: ""))
             else Step("Falcon BMS is found", Check.PROBLEM, "Falcon BMS was not found. Choose the BMS folder.",
-                listOf("Choose BMS folder…" to { pickFolder("Select your Falcon BMS folder")?.let { p -> Bridge.update { it.copy(BmsDirOverride = p) } } }))
+                listOf("Choose BMS folder…" to { pickFolder("Select your Falcon BMS folder", s.BmsDirOverride)?.let { p -> Bridge.update { it.copy(BmsDirOverride = p) } } }))
         )
         val seen = status.devices.isNotEmpty()
         add(
@@ -364,9 +452,26 @@ fun SetupChecklistCard(status: PcStatus) {
                 else -> Step("AWACS picture", Check.OK, "Config is right. The feed connects in 3D while ACMI recording is on.")
             }
         )
+        val kb = info?.kneeboard
+        val kbPick = "Choose HTML Briefing folder…" to {
+            pickFolder("Select the HTML Briefing folder (contains html_brief.exe)", s.KneeboardExporterDir ?: Bridge.kneeboard.defaultDir(install))
+                ?.let { p -> Bridge.update { it.copy(KneeboardExporterDir = p) } }
+            Unit
+        }
+        add(
+            when {
+                kb == null || !kb.configured -> Step("HTML Briefing kneeboard (optional)", Check.TODO,
+                    "html_brief turns the printed briefing into kneeboard pages (BMS ships it in Tools\\html_brief_win). Choose that folder and its pages show in Briefing, on your devices and as a VR board.", listOf(kbPick))
+                !kb.available -> Step("HTML Briefing kneeboard (optional)", Check.TODO,
+                    "Folder found: ${kb.path}. Nothing exported yet — export in the HTML Briefing window after printing the briefing.", listOf(kbPick))
+                kb.stale -> Step("HTML Briefing kneeboard (optional)", Check.INFO,
+                    "${kb.pages} pages from ${kb.path}, but the briefing has been printed since.", listOf(kbPick))
+                else -> Step("HTML Briefing kneeboard (optional)", Check.OK, "${kb.pages} pages, ready: ${kb.path}", listOf(kbPick))
+            }
+        )
         val last = info?.ezBoards?.lastRun
         val ezPick = "Choose EZBoards folder…" to {
-            pickFolder("Select the EZBoards folder (contains EZBOARDS.BAT)")?.let { p -> if (EzBoardsRunner.isValidDir(p)) Bridge.update { it.copy(EzBoardsDir = p) } }
+            pickFolder("Select the EZBoards folder (contains EZBOARDS.BAT)", s.EzBoardsDir ?: install.defaultEzBoardsDir())?.let { p -> if (EzBoardsRunner.isValidDir(p)) Bridge.update { it.copy(EzBoardsDir = p) } }
             Unit
         }
         add(
@@ -420,6 +525,7 @@ fun SetupChecklistCard(status: PcStatus) {
 fun BmsSettingsCard() {
     val s by Bridge.settings.collectAsState()
     var ez by remember(s.EzBoardsDir) { mutableStateOf(s.EzBoardsDir.orEmpty()) }
+    var exporter by remember(s.KneeboardExporterDir) { mutableStateOf(s.KneeboardExporterDir.orEmpty()) }
     var bmsDir by remember(s.BmsDirOverride) { mutableStateOf(s.BmsDirOverride.orEmpty()) }
     var picsDir by remember(s.PicturesDirOverride) { mutableStateOf(s.PicturesDirOverride.orEmpty()) }
     var tvHost by remember(s.TacviewHost) { mutableStateOf(s.TacviewHost) }
@@ -431,7 +537,7 @@ fun BmsSettingsCard() {
         Overline("EZBOARDS")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Field("EZBoards folder", ez, { ez = it }, Modifier.weight(1f))
-            SmallButton("Browse…", null, primary = false) { pickFolder("Select the EZBoards folder (contains EZBOARDS.BAT)")?.let { p -> Bridge.update { it.copy(EzBoardsDir = p) } } }
+            SmallButton("Browse…", null, primary = false) { pickFolder("Select the EZBoards folder (contains EZBOARDS.BAT)", ez.ifBlank { null })?.let { p -> Bridge.update { it.copy(EzBoardsDir = p) } } }
         }
         if (ez != s.EzBoardsDir.orEmpty()) SmallButton("Save folder", null, primary = true) { Bridge.update { it.copy(EzBoardsDir = ez.trim().ifEmpty { null }) } }
         Toggle("Generate kneeboards automatically when the briefing is printed", null, s.AutoEzBoardsOnPrint) { on -> Bridge.update { it.copy(AutoEzBoardsOnPrint = on) } }
@@ -449,16 +555,49 @@ fun BmsSettingsCard() {
             }
         }
 
+        Overline("HTML BRIEFING TOOL (UOAF HTML_BRIEF)")
+        Text(
+            "Where the tool itself lives. You run it and export as you always have; BMS Companion only reads the " +
+                "pages it last wrote. Run it from Mission → Briefing → HTML Briefing generated kneeboard.",
+            color = Hud.TextDim, fontSize = 12.sp,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Field("HTML Briefing folder (contains html_brief.exe)", exporter, { exporter = it }, Modifier.weight(1f))
+            SmallButton("Browse…", null, primary = false) {
+                pickFolder("Select the HTML Briefing folder (contains html_brief.exe)", exporter.ifBlank { null } ?: Bridge.kneeboard.defaultDir(Bridge.install))
+                    ?.let { p -> Bridge.update { it.copy(KneeboardExporterDir = p) } }
+            }
+        }
+        if (exporter != s.KneeboardExporterDir.orEmpty()) {
+            SmallButton("Save HTML Briefing folder", null, primary = true) { Bridge.update { it.copy(KneeboardExporterDir = exporter.trim().ifEmpty { null }) } }
+        }
+        val kb = if (Bridge.running) Bridge.info().kneeboard else null
+        // An empty box does not mean nothing was found: BMS ships the tool, and it is used from where BMS put it
+        // until somebody says otherwise. Say which folder that is, or the box looks broken.
+        if (exporter.isBlank()) kb?.path?.let { Text("Found in your BMS install: $it", color = Hud.TextFaint, fontSize = 12.sp) }
+        Text(
+            when {
+                kb == null || !kb.configured -> "Not set. BMS ships html_brief in Tools\\html_brief_win — choose that folder and its exported pages show in Briefing, on your devices and as a VR board."
+                !kb.available -> "Folder found: ${kb.path}. Nothing exported yet — print the briefing in BMS, then export in the HTML Briefing window."
+                kb.stale -> "${kb.pages} pages exported, but the briefing has been printed since. Export again to bring them up to date."
+                else -> "${kb.pages} pages, ready: Briefing → HTML Briefing generated kneeboard, and a row option in Mission → VR boards."
+            },
+            color = if (kb?.stale == true) Hud.Amber else Hud.TextDim, fontSize = 12.sp,
+        )
+
+        Overline("ACMI RECORDINGS")
+        AcmiRow()
+
         Overline("FOLDERS AND ADVANCED")
         Toggle("Demo mode", "A synthetic mission with moving traffic, to try everything without BMS", s.DemoMode) { on -> Bridge.update { it.copy(DemoMode = on) } }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Field("BMS folder (only if not found)", bmsDir, { bmsDir = it }, Modifier.weight(1f))
-            SmallButton("Browse…", null, primary = false) { pickFolder("Select the Falcon BMS folder")?.let { p -> Bridge.update { it.copy(BmsDirOverride = p) } } }
+            SmallButton("Browse…", null, primary = false) { pickFolder("Select the Falcon BMS folder", s.BmsDirOverride)?.let { p -> Bridge.update { it.copy(BmsDirOverride = p) } } }
         }
         if (bmsDir != s.BmsDirOverride.orEmpty()) SmallButton("Save BMS folder", null, primary = true) { Bridge.update { it.copy(BmsDirOverride = bmsDir.trim().ifEmpty { null }) } }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Field("Screenshots folder (only if not the BMS one)", picsDir, { picsDir = it }, Modifier.weight(1f))
-            SmallButton("Browse…", null, primary = false) { pickFolder("Select the folder with your BMS screenshots")?.let { p -> Bridge.update { it.copy(PicturesDirOverride = p) } } }
+            SmallButton("Browse…", null, primary = false) { pickFolder("Select the folder with your BMS screenshots", s.PicturesDirOverride)?.let { p -> Bridge.update { it.copy(PicturesDirOverride = p) } } }
         }
         if (picsDir != s.PicturesDirOverride.orEmpty()) SmallButton("Save screenshots folder", null, primary = true) { Bridge.update { it.copy(PicturesDirOverride = picsDir.trim().ifEmpty { null }) } }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -473,6 +612,8 @@ fun BmsSettingsCard() {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Bridge.install.configDir?.let { dir -> SmallButton("Edit Falcon BMS User.cfg", null, primary = false) { File(dir, "Falcon BMS User.cfg").let { if (it.isFile) SystemTools.openInNotepad(it.path) else SystemTools.open(dir) } } }
             Bridge.picturesDir?.let { d -> SmallButton("Open screenshots folder", null, primary = false) { SystemTools.open(d) } }
+            // somewhere to look when something went wrong and the window was gone before it could say so
+            if (PcLog.file.isFile) SmallButton("Open the error log", null, primary = false) { SystemTools.openInNotepad(PcLog.file.path) }
         }
     }
 }
@@ -529,5 +670,48 @@ fun PcStatusCard(status: PcStatus) {
             StatusRow("AWACS feed", if (i.tacview.connected) "connected · ${i.tacview.objects} objects" else i.tacview.state, i.tacview.connected)
         }
         StatusRow("Devices", if (status.devices.isEmpty()) "none connected" else status.devices.joinToString { "${it.kind} ${it.address}" }, status.devices.isNotEmpty())
+    }
+}
+
+/**
+ * Whether a newer BMS Companion is out, on the server page.
+ *
+ * The server page is where a PC that only serves devices spends its life, and it is the one page that pilot will
+ * see for months. The full About page has the release notes and does the installing; this says there is something
+ * to read, and gets out of the way when there is not.
+ */
+@Composable
+fun UpdateCard(onOpenAbout: (() -> Unit)? = null) {
+    val state by Updates.state.collectAsState()
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { Updates.check() }
+    val latest = state.latest ?: return
+    val progress = state.progress
+    val busy = progress != null && progress.stage in setOf(Progress.Stage.DOWNLOADING, Progress.Stage.VERIFYING, Progress.Stage.INSTALLING)
+
+    SectionCard("BMS Companion ${latest.version} is available", accent = Hud.Green) {
+        Text(
+            "You are running ${AppVersion.NAME}" +
+                (if (state.newer.size > 1) ", ${state.newer.size} releases behind" else "") +
+                (latest.date.takeIf { it.isNotBlank() }?.let { " · released $it" } ?: "") + ".",
+            fontSize = 13.sp, color = Hud.Text,
+        )
+        progress?.let {
+            Spacer(Modifier.height(6.dp))
+            // how much, how fast, how long: the bar without the numbers tells a pilot nothing useful
+            it.fraction?.let { f ->
+                Box(Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(3.dp)).background(Hud.Surface3)) {
+                    Box(Modifier.fillMaxWidth(f.coerceIn(0f, 1f)).height(5.dp).background(Hud.Cyan))
+                }
+                Spacer(Modifier.height(4.dp))
+            }
+            Text(it.text, fontSize = 12.sp, color = if (it.stage == Progress.Stage.FAILED) Hud.Red else Hud.Cyan)
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!busy) SmallButton("Download and install", null, primary = true) { scope.launch { Updates.update(latest) } }
+            if (onOpenAbout != null) SmallButton("What's new", null, primary = false, onClick = onOpenAbout)
+            SmallButton("Release page", null, primary = false) { SystemTools.openUrl(AppVersion.RELEASES) }
+        }
     }
 }

@@ -45,7 +45,7 @@ object Repo {
         }
     }
 
-    private suspend fun open(path: String): String = httpText("assets/$path", timeoutMs = 120_000)
+    private suspend fun open(path: String): String = httpText("/assets/$path", timeoutMs = 120_000)
 
     private inline fun <reified T> load(path: String): Deferred<T?> {
         @Suppress("UNCHECKED_CAST")
@@ -78,7 +78,7 @@ object Repo {
     suspend fun threats(): List<Threat> = threatFiles().flatMap { it.threats }
 
     suspend fun checklists(): List<Checklist> {
-        val files = runCatching { json.decodeFromString(ListSerializer(String.serializer()), httpText("api/assets?dir=data/curated")) }
+        val files = runCatching { json.decodeFromString(ListSerializer(String.serializer()), httpText("/api/assets?dir=data/curated")) }
             .getOrDefault(listOf("checklist_f16cm.json", "checklist_f16cj.json", "checklist_f15c.json"))
         return files.filter { it.startsWith("checklist_") }.sortedBy { listOf("checklist_f16cm.json", "checklist_f16cj.json", "checklist_f15c.json").indexOf(it).let { i -> if (i < 0) 99 else i } }.mapNotNull { load<Checklist>("data/curated/$it").await() }
     }
@@ -110,7 +110,7 @@ object Repo {
     suspend fun bitmap(path: String, sample: Int = 1): Bitmap? {
         val key = "$path@$sample"
         bitmaps[key]?.let { b -> bitmaps.remove(key); bitmaps[key] = b; return b }
-        val bytes = httpBytes("assets/$path") ?: return null
+        val bytes = httpBytes("/assets/$path") ?: return null
         return decodeBitmap(bytes, sample)?.also { b ->
             bitmaps.put(key, b)?.let { bitmapBytes -= it.byteCount }
             bitmapBytes += b.byteCount

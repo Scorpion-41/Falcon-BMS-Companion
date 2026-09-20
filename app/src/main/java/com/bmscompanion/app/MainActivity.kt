@@ -1,6 +1,7 @@
 package com.bmscompanion.app
 
 import android.app.Application
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -76,6 +77,14 @@ class MainActivity : ComponentActivity() {
         )
         super.onCreate(savedInstanceState)
         Platform.imageActions = imageActions(this)
+        Platform.openUrl = { url ->
+            runCatching { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+        }
+        Platform.fetchText = { url -> fetchTextFromWeb(url) }
+        Platform.installer = AndroidInstaller(this)
+        Platform.nowMillis = { System.currentTimeMillis() }
+        // an installer left behind by an update that has already happened is a few hundred megabytes of nothing
+        com.bmscompanion.app.data.update.Updates.tidyCache()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
             window.attributes = window.attributes.apply {
                 layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,11 +68,14 @@ import androidx.navigation.NavHostController
 import com.bmscompanion.app.data.DataIndex
 import com.bmscompanion.app.data.EncyEntry
 import com.bmscompanion.app.data.Labels
+import androidx.compose.material.icons.filled.Info
+import com.bmscompanion.app.AppVersion
 import com.bmscompanion.app.data.Repo
 import com.bmscompanion.app.ui.Routes
 import com.bmscompanion.app.ui.components.AssetImage
 import com.bmscompanion.app.ui.components.AdaptiveSplit
 import com.bmscompanion.app.ui.components.BmsTopBar
+import com.bmscompanion.app.ui.components.AlphabetScrubber
 import com.bmscompanion.app.ui.components.ChipRow
 import com.bmscompanion.app.ui.components.ContentColumn
 import com.bmscompanion.app.ui.components.EmptyState
@@ -178,9 +182,22 @@ fun HomeScreen(nav: NavHostController) {
                 )
                 Text("COCKPIT", style = LocalExtra.current.overline, color = Hud.Amber, modifier = Modifier.padding(top = 6.dp))
                 TileGrid(cockpitTiles(best), nav)
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(14.dp)).background(Hud.Surface2)
+                        .clickable { nav.go(Routes.ABOUT) }.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Default.Info, null, tint = Hud.TextDim)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("About BMS Companion", style = MaterialTheme.typography.titleSmall, color = Hud.Text)
+                        Text("Version ${AppVersion.NAME} · by ${AppVersion.AUTHOR} · check for updates", style = MaterialTheme.typography.bodySmall, color = Hud.TextDim)
+                    }
+                    Text("OPEN ›", color = Hud.TextDim, style = MaterialTheme.typography.labelLarge)
+                }
                 Text(
-                    "Data extracted from your Falcon BMS 4.38 install (Objects DB, TacRefDB, Stations+ILS, ATC, BmsRack, theater terrain) and the BMS manuals. Not affiliated with BMS.",
-                    style = MaterialTheme.typography.bodySmall, color = Hud.TextFaint, modifier = Modifier.padding(vertical = 20.dp),
+                    "Data extracted from your Falcon BMS ${AppVersion.BMS} install (Objects DB, TacRefDB, Stations+ILS, ATC, BmsRack, theater terrain) and the BMS manuals. Not affiliated with BMS.",
+                    style = MaterialTheme.typography.bodySmall, color = Hud.TextFaint, modifier = Modifier.padding(top = 12.dp, bottom = 20.dp),
                 )
             }
         }
@@ -239,7 +256,9 @@ fun EncyclopediaScreen(nav: NavHostController) {
                             (nq.isEmpty() || e.name.norm().contains(nq))
                     }
                 }
-                LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+                val rows = rememberLazyListState()
+                Box(Modifier.fillMaxSize()) {
+                LazyColumn(Modifier.fillMaxSize(), state = rows, contentPadding = PaddingValues(bottom = 24.dp, end = 20.dp)) {
                     item {
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             SearchField(q, { q = it }, "Search vehicles, ships, aircraft, munitions")
@@ -257,6 +276,8 @@ fun EncyclopediaScreen(nav: NavHostController) {
                             if (wide) selected = e.key else nav.go(Routes.ency(e.key))
                         }
                     }
+                }
+                AlphabetScrubber(filtered, rows, { it.name }, before = 1)
                 }
             }
         },

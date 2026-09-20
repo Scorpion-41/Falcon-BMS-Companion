@@ -40,6 +40,9 @@ object PcServer {
     var port = 0
         private set
 
+    /** Which attempt at holding a port is the current one, so an older one gives up when the port is changed. */
+    private var attempt = 0
+
     private val devices = ConcurrentHashMap<String, Device>()
     // gzipped copies of the app files and bundled data; bounded because /assets can serve thousands of files
     private val gzipCache = object : LinkedHashMap<String, ByteArray>(32, 0.75f, true) {
@@ -58,24 +61,53 @@ object PcServer {
         return devices.values.sortedBy { it.address }
     }
 
+    /**
+     * Starts serving on [port] — and keeps trying until it can.
+     *
+     * The port is part of every address a pilot has written down: the OpenKneeboard tabs, the browser on the tablet,
+     * the shortcut on the laptop. So it is never quietly moved to a free one. Right after an update the old copy can
+     * still be holding the port for a few seconds (Windows also keeps a closed socket for a moment), and giving up
+     * there would leave the pilot with a dead address and a settings page inviting them to change the port — which
+     * would break every address they have. It waits instead, and says so while it waits.
+     */
     @Synchronized
     fun start(port: Int) {
         if (server != null && this.port == port) return
         stop()
-        runCatching {
-            val s = HttpServer.create(InetSocketAddress(port), 64)
-            s.executor = Executors.newFixedThreadPool(16) { r -> Thread(r, "http").apply { isDaemon = true } }
-            s.createContext("/") { ex -> handle(ex) }
-            s.start()
-            server = s
-            this.port = port
-            PcServerPort.current = port
-            _running.value = true
-            _error.value = null
-        }.onFailure {
-            _running.value = false
-            _error.value = "Port $port is in use or blocked (${it.message}). Another program (or an old BMS Companion Bridge) may be using it."
-        }
+        attempt++
+        val mine = attempt
+        if (bind(port)) return
+        // the old copy is probably still letting go; keep the port and keep trying
+        Thread({
+            val until = System.currentTimeMillis() + 60_000
+            while (System.currentTimeMillis() < until) {
+                Thread.sleep(1_000)
+                synchronized(this) {
+                    if (mine != attempt) return@Thread
+                    if (bind(port)) return@Thread
+                }
+            }
+        }, "port-$port").apply { isDaemon = true }.start()
+    }
+
+    /** One attempt at the port. */
+    @Synchronized
+    private fun bind(port: Int): Boolean = runCatching {
+        val s = HttpServer.create(InetSocketAddress(port), 64)
+        s.executor = Executors.newFixedThreadPool(16) { r -> Thread(r, "http").apply { isDaemon = true } }
+        s.createContext("/") { ex -> handle(ex) }
+        s.start()
+        server = s
+        this.port = port
+        PcServerPort.current = port
+        _running.value = true
+        _error.value = null
+        true
+    }.getOrElse {
+        _running.value = false
+        _error.value = "Port $port is in use (${it.message}). Waiting for it — if this is an older copy of BMS Companion " +
+            "or the old bridge, closing it is enough; the addresses your devices use stay the same."
+        false
     }
 
     @Synchronized
@@ -124,7 +156,12 @@ object PcServer {
                     send(ex, resp, cache = false)
                 }
                 !PcConfig.webEnabled -> send(ex, ApiResponse(200, "text/html; charset=utf-8", statusPage().toByteArray()), cache = false)
-                path == "/" || path == "/index.html" -> sendResource(ex, "/webapp/index.html", "text/html; charset=utf-8", revalidate = true)
+                // /kneeboard is the same page, asked for in board layout: an address a kneeboard program cannot
+                // mislay the way it can mislay "?kneeboard=1"
+                // /kneeboard is the board, /kneeboard/3 is board number three: one address per OpenKneeboard tab
+                path == "/" || path == "/index.html" || path == "/kneeboard" -> sendPage(ex, null)
+                path.matches(Regex("/kneeboard/[0-9]{1,2}/?")) ->
+                    sendPage(ex, boardTitle(path.removePrefix("/kneeboard/").trimEnd('/').toIntOrNull()))
                 path == "/icon.png" -> send(ex, ApiResponse(200, "image/png", icon), cache = true)
                 path == "/manifest.json" -> send(ex, ApiResponse(200, "application/manifest+json", manifest.toByteArray()), cache = false)
                 path.startsWith("/assets/") -> {
@@ -144,6 +181,7 @@ object PcServer {
 
     private val assetRoots = setOf("data", "img", "maps", "charts")
 
+
     private fun contentType(path: String) = when (path.substringAfterLast('.').lowercase()) {
         "html" -> "text/html; charset=utf-8"
         "js", "mjs" -> "text/javascript; charset=utf-8"
@@ -159,19 +197,67 @@ object PcServer {
         else -> "application/octet-stream"
     }
 
+    /**
+     * The tag has to follow the bytes, not the version number. Two builds of one version serve different app files,
+     * and tagging them the same told every browser that had already loaded the page that its copy was still current:
+     * a rebuilt 1.3.2 went on serving the previous browser version out of cache, however often it was reloaded.
+     */
+    private val etags = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /**
+     * The app's page, titled for the board it is serving.
+     *
+     * OpenKneeboard names a new Web Dashboard tab after the title of the page it loads, and every board is served
+     * from the same app — so a stack of five tabs was five lines of "BMS Companion". The title is written into the
+     * HTML here rather than by the app once it has started, because by then the tab has already been named.
+     */
+    private fun sendPage(ex: HttpExchange, title: String?) {
+        val bytes = PcServer::class.java.getResourceAsStream("/webapp/index.html")?.use { it.readBytes() }
+            ?: return send(ex, ApiResponse.notFound(), cache = false)
+        val body = if (title == null) bytes else {
+            val safe = title.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            String(bytes, Charsets.UTF_8).replace(Regex("<title>.*?</title>"), "<title>$safe</title>").toByteArray()
+        }
+        ex.responseHeaders.add("Cache-Control", "no-cache")
+        send(ex, ApiResponse(200, "text/html; charset=utf-8", body), cache = false)
+    }
+
+    /** "BMS KB 2 (Live map)" — the board number a pilot sees in the address, and what that board is showing. */
+    private fun boardTitle(n: Int?): String? {
+        if (n == null) return null
+        val slot = Bridge.settings.value.Boards?.slots?.firstOrNull { it.n == n } ?: return "BMS KB $n"
+        return "BMS KB $n (${com.bmscompanion.app.ui.board.BoardKind.of(slot.kind).label})"
+    }
+
     private fun sendResource(ex: HttpExchange, resource: String, type: String, revalidate: Boolean) {
-        val etag = "\"${AppInfo.version}-${resource.hashCode()}\""
+        fun read() = PcServer::class.java.getResourceAsStream(resource)?.use { it.readBytes() }
+        var bytes: ByteArray? = null
+        var etag = etags[resource]
+        if (etag == null) {
+            bytes = read() ?: return send(ex, ApiResponse.notFound(), cache = false)
+            etag = "\"${fingerprint(bytes)}\""
+            etags[resource] = etag
+        }
         if (ex.requestHeaders.getFirst("If-None-Match") == etag) {
             ex.responseHeaders.add("ETag", etag)
             ex.sendResponseHeaders(304, -1)
             return
         }
-        val bytes = PcServer::class.java.getResourceAsStream(resource)?.use { it.readBytes() }
-            ?: return send(ex, ApiResponse.notFound(), cache = false)
+        val body = bytes ?: read() ?: return send(ex, ApiResponse.notFound(), cache = false)
         ex.responseHeaders.add("ETag", etag)
-        // the app files change with each version (revalidated with the ETag); the BMS data can be kept for a day
+        // the app files are revalidated with the ETag on every load; the BMS data can be kept for a day
         ex.responseHeaders.add("Cache-Control", if (revalidate) "no-cache" else "max-age=86400")
-        send(ex, ApiResponse(200, type, bytes), cache = true, gzipKey = resource)
+        send(ex, ApiResponse(200, type, body), cache = true, gzipKey = resource)
+    }
+
+    /** Length plus an FNV-1a hash of the bytes: enough to change whenever a file does, and read once per file. */
+    private fun fingerprint(bytes: ByteArray): String {
+        var hash = -0x340d631b7bdddcdbL
+        for (b in bytes) {
+            hash = hash xor (b.toLong() and 0xff)
+            hash *= 0x100000001b3L
+        }
+        return "${bytes.size.toString(16)}-${java.lang.Long.toHexString(hash)}"
     }
 
     private fun send(ex: HttpExchange, r: ApiResponse, cache: Boolean, gzipKey: String? = null) {

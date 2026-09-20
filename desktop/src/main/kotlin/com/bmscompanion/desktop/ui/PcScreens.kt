@@ -53,7 +53,7 @@ import com.bmscompanion.desktop.PcServer
  * The full app is not loaded here; "Open the full app" turns the same window into it.
  */
 @Composable
-fun ServerScreen(onOpenApp: () -> Unit, onUseAsClient: () -> Unit, onHide: () -> Unit) {
+fun ServerScreen(onOpenApp: () -> Unit, onOpenAbout: () -> Unit, onUseAsClient: () -> Unit, onHide: () -> Unit) {
     val status = rememberPcStatus()
     val running = PcServer.running.collectAsState().value
     BoxWithConstraints(Modifier.fillMaxSize().background(Hud.Bg)) {
@@ -102,6 +102,8 @@ fun ServerScreen(onOpenApp: () -> Unit, onUseAsClient: () -> Unit, onHide: () ->
             Spacer(Modifier.height(14.dp))
 
             Masonry(minColumn = 420.dp, maxColumns = 3) {
+                // draws nothing at all when this is the newest version
+                UpdateCard(onOpenAbout = onOpenAbout)
                 ConnectDevicesCard(status)
                 SetupChecklistCard(status)
                 BmsSettingsCard()

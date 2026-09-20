@@ -1,5 +1,137 @@
 # Changelog
 
+## 1.3.3 (BMS 4.38) — September 2026
+
+Everything since 1.3.1. The headline is **VR kneeboards**: BMS Companion now serves numbered boards that OpenKneeboard shows on your knee in the cockpit, with your own controller buttons turning the pages. Alongside that: **instrument charts** for Korea and the Falklands, the **kneeboard exported by BMS's HTML Briefing tool** shown inside the app and in VR, **updating from inside the app**, **ACMI clean-up**, and a long list of fixes — the Android 9/10 crash, the folder picker that closed the PC app, and every installer problem reported since 1.3.
+
+**Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. iPhone, iPad and any other browser need nothing installed — they open the PC's address. The APK and the PC package are larger this time: the instrument charts are bundled so they work with no connection and no BMS installed.
+
+---
+
+### New: VR kneeboards through OpenKneeboard
+
+A **board** is one page of BMS Companion served at its own address — `http://<your-pc>:47474/kneeboard/1`, `/kneeboard/2` and so on — showing exactly one thing: the live map, the briefing, the flight plan, the comm ladder, your airfield plates, the hostile picture. You add each address to [OpenKneeboard](https://openkneeboard.com) as a *Web Dashboard* tab, and OpenKneeboard puts it on your knee in the headset.
+
+**OpenKneeboard is required for the in-cockpit part, and it is free.** It also works **outside VR** — it can draw the same kneeboard into the flat 2D window — so this is worth setting up even if you do not fly in a headset.
+
+**How to set it up**
+
+1. On the BMS PC, open BMS Companion → **Mission → VR boards**.
+2. **Add a board** for each thing you want on your knee, and choose what it shows from the drop-down. Each row hands you its address; **Copy address** puts it on the clipboard, **Preview** opens it in a window shaped like the board so you can see it before the headset goes on.
+3. In OpenKneeboard: **Settings → Tabs → Add a tab → Web Dashboard**, paste the address, and give the tab a name. The name is filled in for you — the page arrives titled `BMS KB 1 (Live map)`, `BMS KB 4 (Briefing)` and so on, so a stack of tabs is readable at a glance.
+4. One tab per board. Repeat for each row.
+5. In OpenKneeboard: **Settings → Input → your controller → Bindings**, and bind **Next page**, **Previous page**, **Next tab** and **Previous tab**. **Toggle visibility** and **Recentre** are worth having too.
+
+**Why there are no buttons on a board.** OpenKneeboard supports graphics tablets and nothing else in game — its own documentation says "Mice are not supported in-game" — so a board covered in controls would be a board you cannot use. Everything a finger would have done is decided beforehand on the PC, and the only interaction in the cockpit is your own **next page / previous page** binding. BMS Companion publishes each board's sheets to OpenKneeboard as pages, so that binding walks through them with nothing to aim at.
+
+- **The pages come round again.** OpenKneeboard stops at the last page it was handed; turn past the last sheet on a BMS Companion board and the first one comes back, in either direction, for as long as you keep pressing.
+- **On a map board, next page is the zoom.** A map is one sheet, so the page binding steps through five zooms instead — the whole theater down to close enough to read a taxiway, and round again.
+- **A small panel names what you turned to** for a couple of seconds after every press — the chart, the section, or the zoom step ("Zoom · Wide") — then fades. In a headset it is the only confirmation that the button did what you meant.
+- **What a board can show:** live map (with its own style, zoom, layers and towns), briefing, flight plan, comms ladder, tankers & AWACS, mission threats, HARM/ALIC codes, airfield plates, instrument charts, hostile picture, and the HTML Briefing kneeboard.
+- **They follow the mission.** The chart boards show the field *this* mission takes off from, the threat board has a page for each system the briefing names, the briefing board is this briefing. Print a new briefing and the boards fill themselves in; **Rebuild pages** forces it.
+- **Set once, for every board:** day or night ink, and the print size (Small / Normal / Large / Very large). A board is drawn at its full resolution whichever you pick.
+
+**How the boards read.** The page is set like a kneeboard, not like a web page: the sheet's name is large in the board's accent ink, section headings carry a bar of that ink, and the figures you reach for — TACAN channel, UHF, VHF, bullseye — sit in raised boxes, found by shape rather than by reading. Tables are ruled, with every other row shaded. Every page keeps a margin from the tablet's frame, and the page counter is a faint number in the corner instead of a strip taken off the board.
+
+### New: the kneeboard from BMS's HTML Briefing tool, in the app and in VR
+
+Falcon BMS ships UOAF's **HTML Briefing** tool in `Tools\html_brief_win`. It is a separate program: you run it yourself and press its own export button, and it writes a kneeboard as PDF (or PNG) pages. BMS Companion does not replace it and does not automate it — **it reads what that tool last exported and shows those pages**:
+
+- **Mission → Briefing → HTML Briefing generated kneeboard**: the exported pages as cards; tap one to open it in the chart viewer, with zoom, arrows, swipe and Esc.
+- **As a VR board**: choose *HTML Briefing kneeboards* for any board and its pages are one OpenKneeboard tab away, turned with your page binding.
+- **Run HTML Briefing** on that same card starts the tool on the BMS PC — a shortcut, nothing more, because the tool has no headless export. You still press export in its window.
+- The card says when BMS has printed a newer briefing than the export, so you are never reading last flight's pages by accident.
+- **If you do not use that tool, ignore the card.** Nothing else depends on it.
+
+**Setup:** BMS Companion finds the tool in your BMS install automatically. If you keep it somewhere else, set **Settings → Falcon BMS settings → HTML Briefing folder**. Nothing in that folder is ever written or changed.
+
+### New: instrument charts (Korea and the Falklands)
+
+The approach, departure and arrival plates those theaters ship as PDFs are now in the app, beside the BMS ground plates: **Instrument charts** on any airfield page, and an **Instrument charts** VR board that follows your departure field.
+
+- **244 charts, 988 pages**, rendered at 150 dpi so they stay sharp when you zoom.
+- **Every chart is named for what it is** — `09L · ILS or LOC/DME`, `09L · RNAV (GPS)`, `DRAGGIN departure` — with the runway first, so one runway's charts sit together.
+- **145 blank pages are dropped, and 176 sideways pages are turned upright** for you, decided from the printed table itself rather than guessed.
+- **The arrows carry on into the next chart, and round**: an airfield's eight approach plates read straight through without closing anything.
+- **Only Korea and the Falklands ship instrument charts.** Other theaters have none — that is BMS, not the app — and their airfield pages show the BMS ground and parking plates as before.
+- **This is why the downloads are bigger.** The charts are bundled rather than fetched, so they work on a tablet with no network and on a PC with no BMS installed.
+
+### New: updating from inside the app
+
+**About** (at the bottom of the Home screen) checks for a newer version on Android, on the PC and in the browser.
+
+- **What's new** shows the release notes of *every* version between yours and the newest.
+- **Download and install** shows how much has arrived of how much, the transfer rate and the time left (`131 MB of 277 MB · 6.4 MB/s · 2 min 8 s left`). The Windows app hands the installer to Windows; the Android app hands the APK to Android, which asks once for permission to install apps.
+- **Nothing is installed without being checked** against the checksum the release publishes; a download that does not match is thrown away.
+- **An interrupted download is not a wasted one** — the part already fetched is kept and verified on the next attempt.
+
+### New: clearing ACMI recordings
+
+Flying with the AWACS picture on means BMS is recording, and `User\Acmi` grows by a file a flight. **Settings → Falcon BMS settings** now shows how many recordings there are and how much room they take, with **Clear (to Recycle Bin)** beside it — to the Recycle Bin, so a tape you wanted back is a right-click away. BMS's own `.vhs` training tapes are never touched.
+
+### New: the kneeboard layout, and the board as an object
+
+Open the browser version at `/kneeboard` and the page is laid out for a kneeboard: the content gets the whole board, a small **☰** opens the sections, the page's own options sit behind **⋯**, and both fade when the mouse stops.
+
+- **Printed, not displayed**: warm paper, black ink, hairline rules, serif headings, and one muted family of inks so nothing on the board is brighter than anything else in a lit cockpit.
+- **A day/night button**, remembered between flights.
+- **☰ → Print size** and **☰ → Board shape** (5:8 kneeboard, 3:4, tall, square, landscape). OpenKneeboard reshapes the tab to the shape the page asks for.
+- **A keyboard on the page** when you tap a search field, so you can search with the mouse while wearing a helmet.
+- The **Dashboard** on a board is laid out for the board: the cards take the lines they need and the map takes all the rest.
+
+### New: smaller things
+
+- **A-Z strip** down the side of the Airfields and Encyclopedia lists: tap or drag it to jump.
+- **About**: what BMS Companion is, the version you are running, the repository, the releases page — and **Credits** naming Benchmark Sims and the Falcon BMS team, EZBoards, OpenKneeboard and Tacview.
+- **Chart viewer**: big page buttons, arrow keys and page up/down on a PC, swipe on a tablet (only while the page is fitted, so panning a zoomed plate never turns it), a turn button for a sideways page, **+ / − / fit** buttons, and **Esc** to close. The wheel now zooms in small glided steps.
+- **The Windows installer** has its own banner and welcome artwork.
+
+---
+
+### Fixed
+
+**Crashes**
+
+- **Android 9 and 10 crashed** opening Mission or an airfield (`NoSuchMethodError … LinkedHashSet.reversed()`). The app is built against Android 15, where Java 21's sequenced collections exist; Kotlin bound a method older Android does not have. The call is gone, and every release APK is now scanned for this class of mistake before it ships. Thanks to the pilot who sent the crash log.
+- **The PC app closed when you pressed Browse** for the EZBoards folder — and for the BMS and screenshots folders. Windows' folder chooser was walking the shell for icons and the "This PC" list, which fails on plenty of ordinary machines (OneDrive, mapped or removable drives). It no longer goes near the shell, it opens in a folder you already have set, and if it fails anyway it fails quietly — every one of those folders can also be typed into Settings. Thanks to the two pilots who reported it.
+- **"You cannot access the NavBackStackEntry's ViewModels…"** while clicking through Home and the sections. Home is now reached with a single navigation and sections switch without a cross-fade, which is where that error came through.
+
+**Installing and updating**
+
+- **"You do not have sufficient privileges to complete this installation for all users of the machine."** The installer was built to install into your own profile and then told Windows to register it for the whole machine — a contradiction Windows answers by refusing, and elevating does not help. It is built for the machine throughout now: **double-clicking raises the ordinary Windows consent prompt by itself**, and it installs into Program Files like any other program.
+- **"Another version of this product is already installed."** Every build of one version carried the same product code; each installer now carries its own.
+- **The same version installed twice**, leaving two entries in Installed apps. The installer now replaces whatever is there, same version or not, and the old copy is closed and removed before the new one lands.
+- **An update wiped what you had set up.** An earlier build cleared `%APPDATA%\BMS Companion` while installing. It now clears only what belongs to the copy it is replacing — and this version also sweeps up after older ones on its first run (cached installers, stale lock files, the pre-1.3 bridge's own folders). **Your Dashboard layouts, VR boards, and BMS, EZBoards, HTML Briefing and screenshot folders survive this and every future update.**
+- **One desktop shortcut, not one per install.**
+- **The browser version would not update.** Every build of one version tagged its files the same way, so a browser went on running the old app however often you reloaded. The tag now follows the files themselves, and the first run of a new version throws away what an older one cached (your settings stay).
+- **The address your devices use stays put.** Right after an update the copy being replaced can still be holding the network port for a few seconds; BMS Companion now waits for its own port and says so, instead of failing and inviting you to change it — which would have broken every address you had written down, every OpenKneeboard tab and every bookmark.
+
+**VR boards**
+
+- **Next page did nothing.** Three separate faults: the page API was asked for before the experimental feature that provides it was enabled; page identifiers were generated with a call that does not exist on a plain-HTTP LAN address; and a board published a placeholder count before the PC had said what it was. All fixed and tested against OpenKneeboard 1.12.10 — paging, wrap-around and the map zoom all work with a bound controller button.
+- **A board lost its pages when it published twice** (a count that grew as the mission arrived, or a kind changed on the PC): OpenKneeboard answers a second "enable this feature" with an error. It is asked for once per page now, and a publish that fails is retried rather than given up on for the flight.
+- **Page counts were wrong** — a briefing with three sections still offered twelve pages, and the counter walked off the end ("9 / 5") into blank sheets. Boards publish the number of sheets they actually have.
+- **Boards were mostly empty.** The briefing put each section on a page of its own, and tables broke after a fixed number of rows whatever the size of the page. Every board of print now measures what it is holding and breaks where the sheet runs out: the briefing is one or two pages instead of six, the ALIC table is one sheet, and the flight plan and comm ladder fill the page they are on.
+- **The map is all map.** Panning towards the edge of the theater used to slide the map off the page and leave a band of bare board; and the strip along the foot that carried the page title is gone.
+- **Every board asked you to press PRINT** over a briefing you had already printed: nothing was polled unless a screen asked for it, and the boards never asked.
+- **The corners of a board were filled, not empty**, so the rounded tablet sat in a square of page colour.
+
+**Everywhere else**
+
+- **A search box you could not click into** after closing a chart or the bullseye page.
+- **Search bars were different heights** from one section to the next.
+- **The section rail is centred**, instead of starting in the very corner of the screen.
+- **Towns appeared twice on the map** where a city is several campaign objectives of the same name.
+- **Something to send when it goes wrong**: failures now go to `error.log` next to the settings, with **Open the error log** under Falcon BMS settings.
+
+---
+
+### Upgrading
+
+Install over what you have — the installer closes the running copy, removes the old version and keeps your settings. On Android, install the new APK over the old one. Browsers pick the new version up on the next load.
+
+If you added OpenKneeboard tabs before this version, they keep the names you gave them; rename them in OpenKneeboard, or remove and add them again to get the new `BMS KB n (…)` names.
+
 ## 1.3.1 (BMS 4.38) — September 2026
 
 Fixes and a much smaller memory footprint, on top of 1.3.

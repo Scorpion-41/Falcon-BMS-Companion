@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -73,8 +74,27 @@ enum class MissionTab(val label: String, val icon: ImageVector) {
     BRIEF("Briefing", Icons.Default.Description),
     COMMS("Comms", Icons.Default.Headset),
     BOARDS("Boards", Icons.Default.Assignment),
+    /**
+     * Setting up the VR boards. Only the PC window shows this: the boards are OpenKneeboard tabs on the PC that runs
+     * the headset, and a pilot sets them up with a mouse before the flight. [vrBoardsPane] is what fills it in, and
+     * the tab appears only where something has.
+     */
+    VRBOARDS("VR boards", Icons.Default.ViewInAr),
     SETUP("Setup", Icons.Default.Settings),
 }
+
+/** The VR board page, set by the PC entry point. Null everywhere else, and then the tab is not offered. */
+var vrBoardsPane: (@Composable () -> Unit)? = null
+
+/** The tabs this build actually has. */
+val missionTabs: List<MissionTab> get() = MissionTab.entries.filter { it != MissionTab.VRBOARDS || vrBoardsPane != null }
+
+
+/**
+ * The tabs a VR kneeboard offers. Nobody runs a GCI picture from the cockpit, the EZBoards tab holds the same tables
+ * as the briefing, and the setup guides are for before the flight.
+ */
+val kneeboardMissionTabs = listOf(MissionTab.DASH, MissionTab.MAP, MissionTab.FLIGHT, MissionTab.BRIEF, MissionTab.COMMS)
 
 /** Things every Mission pane needs: bundled theater data resolved from the BMS theater name. */
 data class MissionEnv(val nav: NavHostController, val theater: Theater?, val set: AirportSet?)
@@ -129,7 +149,9 @@ private fun PublishMapMission(env: MissionEnv) {
 @Composable
 fun rememberMissionTab(): MutableState<MissionTab> = rememberSaveable {
     val saved = Repo.getString("mission_tab")?.let { s -> MissionTab.entries.firstOrNull { it.name == s } }
-    mutableStateOf(if (MissionLink.host == null) MissionTab.SETUP else saved ?: MissionTab.DASH)
+    val start = if (MissionLink.host == null) MissionTab.SETUP else saved ?: MissionTab.DASH
+    // a kneeboard is served by the PC it talks to, and only offers the tabs worth having in the cockpit
+    mutableStateOf(if (com.bmscompanion.app.ui.Kneeboard.on && start !in kneeboardMissionTabs) MissionTab.DASH else start)
 }
 
 fun saveMissionTab(t: MissionTab) = Repo.putString("mission_tab", t.name)
@@ -141,7 +163,7 @@ fun MissionTabStrip(tab: MissionTab, onTab: (MissionTab) -> Unit) {
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        MissionTab.entries.forEach { t ->
+        missionTabs.forEach { t ->
             val sel = t == tab
             Row(
                 Modifier.clip(RoundedCornerShape(10.dp))
@@ -183,6 +205,7 @@ fun MissionTabContent(tab: MissionTab, env: MissionEnv, onTab: (MissionTab) -> U
         MissionTab.BRIEF -> MissionBriefingPane(env, showOnMap)
         MissionTab.COMMS -> MissionCommsPane(env)
         MissionTab.BOARDS -> MissionBoardsPane(env, onSetup = { onTab(MissionTab.SETUP) })
+        MissionTab.VRBOARDS -> vrBoardsPane?.invoke()
         MissionTab.SETUP -> MissionSetupPane(onConnected = { onTab(MissionTab.DASH) })
     }
 }

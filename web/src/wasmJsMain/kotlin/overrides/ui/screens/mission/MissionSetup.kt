@@ -84,7 +84,17 @@ fun MissionSetupPane(onConnected: () -> Unit) {
                 Para("Add to **User\\Config\\Falcon BMS User.cfg** on the BMS PC, then turn on ACMI recording in 3D (default key **F**):")
                 Code("set g_bTacviewRealTime 1\nset g_bTacviewAcmi 1")
             }
-            GuideStep(4, "Troubleshooting", Hud.Red) {
+            GuideStep(4, "VR: this page as a kneeboard", Hud.Cyan) {
+                Para("In VR, let **OpenKneeboard** (openkneeboard.com) show this page: it places the board on your knee, drags, resizes and rotates it, toggles it with your own key and passes the mouse through.")
+                Bullet("In OpenKneeboard: **Settings → Tabs → Add a tab → Web Dashboard**.")
+                Bullet("Addresses: **BMS Companion on the PC → Mission → VR boards** lists one address per board, with a copy button. Add one OpenKneeboard tab per board.")
+                Para("You can try the layout without a headset: open that address in any browser and make the window small (about 800 x 800). The buttons fade a couple of seconds after the mouse stops — move it to bring them back.")
+                Para("**In the headset you flip the board, you do not press it.** OpenKneeboard supports graphics tablets and nothing else — its own FAQ says \"Mice are not supported in-game\" — so bind a button (HOTAS, keyboard, StreamDeck) to OpenKneeboard's **next page** and **previous page** and it walks through BMS Companion's sections: Mission, Arsenal, Threats, Airfields, Cockpit. Nothing to aim at. A graphics tablet, if you have one, points at the board as well.")
+                Para("**Print too small?** The board is drawn at a headset-friendly resolution, and **☰ → Print size** decides how large that resolution is used — Normal, Large or Very large. It is remembered per board.")
+                Para("OpenKneeboard gives a web tab a landscape page and will not let you reproportion it — the page has to ask. This one asks for an upright board, and **☰ → Board shape** on the board itself offers the others (5:8 like a real kneeboard, 3:4, square, landscape). The board remembers which one it is.")
+                Para("**/kneeboard** is what makes the board layout. It lays the page out for a board: the content gets all of it, a small **☰** in the corner opens the sections and the Mission tabs, each page’s own options sit behind **⋯** beside it, and both fade away when the mouse stops. The map fills the board. Left out are the things you would not use in the cockpit: the AWACS/GCI page, the Boards tab (the briefing has the same tables), the setup guides, Home and Media.")
+            }
+            GuideStep(5, "Troubleshooting", Hud.Red) {
                 Bullet("**Page doesn't load**: same Wi-Fi as the PC (guest networks isolate devices), BMS Companion running with **Browser access** on, and its firewall button pressed.")
                 Bullet("**Blank page or an update message**: the browser version needs Safari 18.2 (iOS 18.2) or newer, or a current Chrome, Edge or Firefox.")
                 Bullet("**No live data**: check the status above; the PC decides where the data comes from.")

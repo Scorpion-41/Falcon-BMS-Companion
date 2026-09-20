@@ -71,7 +71,9 @@ object MissionLink {
         LinkMode.REMOTE -> Repo.getString("bridge_host")
         null -> null
     }
-    val port: Int get() = if (_mode.value == LinkMode.LOCAL) Bridge.settings.value.Port else Repo.getInt("bridge_port", 47474)
+    // the port this PC is actually serving on, not the one in the settings: they differ while BMSC_PORT is set,
+    // and an address built from the setting then points at nothing (the HTML briefing came up blank that way)
+    val port: Int get() = if (_mode.value == LinkMode.LOCAL) com.bmscompanion.desktop.serverPort() else Repo.getInt("bridge_port", 47474)
     private fun base() = host?.let { "http://$it:$port" }
 
     /** "This PC": read Falcon BMS on this computer (the built-in bridge). */
@@ -190,7 +192,12 @@ object MissionLink {
             c.connectTimeout = timeoutMs
             c.readTimeout = timeoutMs
             c.useCaches = false
-            if (method == "POST") { c.doOutput = true; c.setFixedLengthStreamingMode(0); c.outputStream.close() }
+            if (method == "POST") {
+                c.doOutput = true
+                c.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                c.setFixedLengthStreamingMode(body.size)
+                c.outputStream.use { it.write(body) }
+            }
             val code = c.responseCode
             val stream = if (code in 200..299) c.inputStream else c.errorStream ?: throw IOException("HTTP $code")
             // Reading to the end and closing (without disconnect) lets HttpURLConnection reuse the keep-alive socket.
@@ -199,6 +206,34 @@ object MissionLink {
             c.disconnect()
             throw e
         }
+    }
+
+    /**
+     * What each VR board shows. Read by the boards themselves and by the VR board page on the PC; written only by
+     * that page. Null means the PC could not be reached — an empty configuration is a real answer, not a failure.
+     */
+    /**
+     * Opens the kneeboard exporter on the BMS PC and answers with what it said.
+     *
+     * A shortcut, not an export: html_brief has no headless mode, so this puts its window up where the pilot can
+     * press export. From a tablet it is the same window, on the PC across the room.
+     */
+    suspend fun openKneeboardExporter(): String = withContext(Dispatchers.IO) {
+        runCatching {
+            val text = request("POST", "/api/kneeboard/open", timeoutMs = 10_000)
+            Regex("\"message\"\\s*:\\s*\"(.*?)\"").find(text)?.groupValues?.get(1)?.replace("\\\\", "\\")
+                ?: "The exporter was asked to open."
+        }.getOrElse { "Could not reach the PC: ${reasonOf(it)}" }
+    }
+
+    suspend fun boards(): BoardConfig? = runCatching { get<BoardConfig>("/api/boards") }.getOrNull()
+
+    /** Saves it, and answers with what was stored. */
+    suspend fun saveBoards(config: BoardConfig): BoardConfig? = withContext(Dispatchers.IO) {
+        runCatching {
+            val body = Repo.json.encodeToString(BoardConfig.serializer(), config)
+            Repo.json.decodeFromString<BoardConfig>(request("POST", "/api/boards", timeoutMs = 8000, body = body.encodeToByteArray()))
+        }.getOrNull()
     }
 
     /** Asks the bridge to run EZBoards; the result also refreshes the board data. */

@@ -26,6 +26,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import com.bmscompanion.app.data.Repo
 import com.bmscompanion.app.ui.theme.Hud
+import com.bmscompanion.app.ui.Kneeboard
+import kotlin.math.max
 import kotlin.math.min
 
 /** Maps theater coordinates (x = north ft, y = east ft) to screen space for the current pan/zoom. */
@@ -82,25 +84,40 @@ fun TheaterMap(
         val density = LocalDensity.current
         val w = with(density) { maxWidth.toPx() }
         val h = with(density) { maxHeight.toPx() }
+        // A board is tall and a theater is square: fitted inside the box, a third of the board would be blank paper.
+        // On a board the map covers its box instead, and the smallest zoom becomes the fit rather than the cover, so
+        // zooming out still shows the whole theater.
+        val cover = if (Kneeboard.on) max(w, h) else min(w, h)
+        val minScale = if (Kneeboard.on && cover > 0f) (min(w, h) / cover).coerceIn(0.2f, 1f) else 1f
+        // Nothing but map on a board. The theater is drawn as a square, so panning towards its edge — which is where
+        // a mission near the top of the map puts it — slid the square off the page and left a band of bare board
+        // above it. The pan is held inside the square whenever the square is big enough to cover the page.
+        if (Kneeboard.on && w > 0f && h > 0f) {
+            val side = cover * state.scale
+            val mx = ((side - w) / 2f).coerceAtLeast(0f)
+            val my = ((side - h) / 2f).coerceAtLeast(0f)
+            if (state.panX !in -mx..mx) state.panX = state.panX.coerceIn(-mx, mx)
+            if (state.panY !in -my..my) state.panY = state.panY.coerceIn(-my, my)
+        }
         fun proj(): MapProjection {
-            val side = min(w, h) * state.scale
+            val side = cover * state.scale
             return MapProjection((w - side) / 2 + state.panX, (h - side) / 2 + state.panY, side, sizeFt, state.scale)
         }
         if (!state.initialized && focus != null && w > 0) {
             state.scale = focusScale
-            val side = min(w, h) * focusScale
+            val side = cover * focusScale
             state.panX = -((focus.second / sizeFt) * side - side / 2).toFloat()
             state.panY = -(((1 - focus.first / sizeFt)) * side - side / 2).toFloat()
             state.initialized = true
         }
         if (!state.initialized && focus == null && fillWidth && w > h * 1.15f && h > 0) {
-            state.scale = (w / h).coerceIn(1f, maxScale)
+            state.scale = (w / h).coerceIn(minScale, maxScale)
             state.initialized = true
         }
         state.pendingFocus?.let { (fx, fy, fs) ->
             if (w > 0) {
-                val sc = fs.coerceIn(1f, maxScale)
-                val side = min(w, h) * sc
+                val sc = fs.coerceIn(minScale, maxScale)
+                val side = cover * sc
                 state.scale = sc
                 state.panX = -((fy / sizeFt) * side - side / 2).toFloat()
                 state.panY = -(((1 - fx / sizeFt)) * side - side / 2).toFloat()
@@ -113,7 +130,7 @@ fun TheaterMap(
                 .pointerInput(sizeFt, w, h) {
                     detectTransformGestures { centroid, pan, zoom, _ ->
                         gestureCb.value?.invoke()
-                        val newScale = (state.scale * zoom).coerceIn(1f, maxScale)
+                        val newScale = (state.scale * zoom).coerceIn(minScale, maxScale)
                         val c = Offset(centroid.x - w / 2, centroid.y - h / 2)
                         val f = newScale / state.scale
                         state.panX = c.x - (c.x - (state.panX + pan.x)) * f
@@ -144,7 +161,7 @@ fun TheaterMap(
         if (zoomButtons) MapZoomButtons(
             onZoom = { factor ->
                 gestureCb.value?.invoke()
-                val newScale = (state.scale * factor).coerceIn(1f, maxScale)
+                val newScale = (state.scale * factor).coerceIn(minScale, maxScale)
                 val f = newScale / state.scale
                 state.panX *= f
                 state.panY *= f

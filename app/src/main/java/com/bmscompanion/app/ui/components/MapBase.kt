@@ -154,7 +154,9 @@ fun rememberMapBase(imagePath: String?): MapBaseState {
     LaunchedEffect(state) {
         // load what the frames asked for, a few at a time, newest request first
         while (true) {
-            val next = state.wanted.reversed().filter { it !in state.images && it !in state.loading && it !in state.failed }.take(4 - state.loading.size)
+            // toList().asReversed(), never LinkedHashSet.reversed(): that is Java 21 (SequencedCollection), which
+            // compiles against API 35 but does not exist before Android 15 (NoSuchMethodError on Android 9).
+            val next = state.wanted.toList().asReversed().filter { it !in state.images && it !in state.loading && it !in state.failed }.take(4 - state.loading.size)
             for (key in next) {
                 state.loading += key
                 launch {
@@ -454,36 +456,40 @@ fun MapLookButton() {
     var open by remember { mutableStateOf(false) }
     Box {
         HudChip("Map: ${MapLook.styles.first { it.first == MapLook.style }.second} ▾", open) { open = !open }
-        DropdownMenu(open, onDismissRequest = { open = false }, modifier = Modifier.widthIn(min = 230.dp)) {
-            MenuHeader("MAP STYLE")
-            MapLook.styles.forEach { (key, name) ->
-                MenuRow(onClick = { MapLook.chooseStyle(key) }) {
-                    RadioButton(MapLook.style == key, onClick = { MapLook.chooseStyle(key) }, colors = RadioButtonDefaults.colors(selectedColor = Hud.Amber))
-                    Text(name, color = Hud.Text, fontSize = 14.sp)
-                }
-            }
-            HorizontalDivider(color = Hud.Outline.copy(alpha = 0.6f))
-            MenuHeader("LANDMARKS")
-            MenuRow(onClick = { MapLook.showBorders(!MapLook.borders) }) {
-                Checkbox(MapLook.borders, { MapLook.showBorders(it) }, colors = CheckboxDefaults.colors(checkedColor = Hud.Amber))
-                Text("Country borders and names", color = Hud.Text, fontSize = 14.sp)
-            }
-            MenuRow(onClick = { MapLook.showProvinces(!MapLook.provinces) }) {
-                Checkbox(MapLook.provinces, { MapLook.showProvinces(it) }, colors = CheckboxDefaults.colors(checkedColor = Hud.Amber))
-                Text("Provinces and governorates", color = Hud.Text, fontSize = 14.sp)
-            }
-            MenuHeader("TOWNS")
-            MapLook.placeOptions.forEach { (i, name) ->
-                MenuRow(onClick = { MapLook.showPlaces(i) }) {
-                    RadioButton(MapLook.places == i, onClick = { MapLook.showPlaces(i) }, colors = RadioButtonDefaults.colors(selectedColor = Hud.Amber))
-                    Column(Modifier.padding(vertical = if (i == MapLook.MISSION) 4.dp else 0.dp)) {
-                        Text(name, color = Hud.Text, fontSize = 14.sp)
-                        if (i == MapLook.MISSION) Text(
-                            if (MapFocus.mission != null) "Towns in the briefing and along the route" else "Towns of the briefing (cities until a mission is loaded)",
-                            color = Hud.TextDim, fontSize = 11.sp,
-                        )
-                    }
-                }
+        DropdownMenu(open, onDismissRequest = { open = false }, modifier = Modifier.background(Hud.Surface).widthIn(min = 230.dp)) { MapLookMenuItems() }
+    }
+}
+
+/** The map style and landmark options on their own, for any menu that wants them (the kneeboard's ⋯, for one). */
+@Composable
+fun MapLookMenuItems() {
+    MenuHeader("MAP STYLE")
+    MapLook.styles.forEach { (key, name) ->
+        MenuRow(onClick = { MapLook.chooseStyle(key) }) {
+            RadioButton(MapLook.style == key, onClick = { MapLook.chooseStyle(key) }, colors = RadioButtonDefaults.colors(selectedColor = Hud.Amber))
+            Text(name, color = Hud.Text, fontSize = 14.sp)
+        }
+    }
+    HorizontalDivider(color = Hud.Outline.copy(alpha = 0.6f))
+    MenuHeader("LANDMARKS")
+    MenuRow(onClick = { MapLook.showBorders(!MapLook.borders) }) {
+        Checkbox(MapLook.borders, { MapLook.showBorders(it) }, colors = CheckboxDefaults.colors(checkedColor = Hud.Amber))
+        Text("Country borders and names", color = Hud.Text, fontSize = 14.sp)
+    }
+    MenuRow(onClick = { MapLook.showProvinces(!MapLook.provinces) }) {
+        Checkbox(MapLook.provinces, { MapLook.showProvinces(it) }, colors = CheckboxDefaults.colors(checkedColor = Hud.Amber))
+        Text("Provinces and governorates", color = Hud.Text, fontSize = 14.sp)
+    }
+    MenuHeader("TOWNS")
+    MapLook.placeOptions.forEach { (i, name) ->
+        MenuRow(onClick = { MapLook.showPlaces(i) }) {
+            RadioButton(MapLook.places == i, onClick = { MapLook.showPlaces(i) }, colors = RadioButtonDefaults.colors(selectedColor = Hud.Amber))
+            Column(Modifier.padding(vertical = if (i == MapLook.MISSION) 4.dp else 0.dp)) {
+                Text(name, color = Hud.Text, fontSize = 14.sp)
+                if (i == MapLook.MISSION) Text(
+                    if (MapFocus.mission != null) "Towns in the briefing and along the route" else "Towns of the briefing (cities until a mission is loaded)",
+                    color = Hud.TextDim, fontSize = 11.sp,
+                )
             }
         }
     }

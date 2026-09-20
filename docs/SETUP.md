@@ -32,12 +32,14 @@ The offline reference (aircraft, threats, airfields and charts, cockpit, trainer
 
 ## 1. Install BMS Companion on the BMS PC
 
-1. Download `BMS-Companion-PC.msi` from the GitHub Releases page and install it, or unzip `BMS-Companion-PC.zip` anywhere and run `BMS Companion.exe`. It includes its own Java runtime and the browser version; nothing else to install. The installer isn't code-signed, so Windows SmartScreen may ask: **More info → Run anyway**.
+1. Download `BMS-Companion-PC.msi` from the GitHub Releases page and install it, or unzip `BMS-Companion-PC.zip` anywhere and run `BMS Companion.exe`. It includes its own Java runtime and the browser version; nothing else to install. The installer isn't code-signed, so Windows SmartScreen may ask: **More info → Run anyway**. Installing asks for consent once, the way installers do — double-click it, there is nothing to right-click. Prefer no prompt at all? Use the zip: it needs no installing.
 2. The first start opens the **server page** (below). It already reads Falcon BMS and serves your devices.
    - Flying with the app on this PC too? Press **Open the full app**. The window becomes the full app; its **Server** button (bottom of the navigation rail, or the Mission header) turns it back.
    - BMS Companion remembers which one you used last and starts that way.
 3. Windows may ask whether BMS Companion may use networks. Allow **private networks**, or press **Allow through Windows Firewall** (one administrator prompt; adds rules for TCP 47474 and UDP 47475, limited to your local subnet). If only this PC uses BMS Companion, you can skip this.
 4. Configure Falcon BMS as in [section 5](#5-configure-falcon-bms). The setup checklist on the server page shows what is still missing.
+
+**Already have a copy installed?** Just run the new installer. It closes BMS Companion for you, removes the old version and installs the new one. Settings start fresh: the Dashboard layouts and the BMS paths in `%APPDATA%\BMS Companion` are cleared as part of the update, so set them up once afterwards.
 
 Upgrading from version 1.2? The separate **BMSCompanionBridge.exe** is not needed any more: close it (tray icon → Exit) and delete it. BMS Companion uses the same port and settings.
 
@@ -134,6 +136,15 @@ set g_bTacviewAcmi 1         // Tacview ACMI recording (default 1)
 - To see kneeboards in the cockpit, the 3D pilot model must be on (Setup → Graphics → Pilot Model).
 - EZBoards' own settings (which pages, which kneeboard slots) are in its `CONFIG_USER.BAT`.
 
+### HTML Briefing (the exported kneeboard)
+- UOAF's **HTML Briefing** tool ships with BMS 4.38 in `Tools\html_brief_win`. It turns a printed briefing into kneeboard pages of its own.
+- BMS Companion finds it in the BMS folder automatically; if you keep it elsewhere, set the **HTML Briefing folder** in Falcon BMS settings.
+- Workflow: PRINT the briefing in BMS → export in the HTML Briefing window (**Run HTML Briefing** on the Briefing page opens it) → the pages appear under **Briefing → Exported kneeboard**, on every device, and can be given a **VR board** of their own (kind: *Exported kneeboard*).
+- The card says when BMS has printed a newer briefing than the export. Nothing in that tool's folder is written or changed.
+
+### ACMI recordings
+- Flying with the AWACS picture on means BMS is recording to `User\Acmi`, which grows by a file a flight. **Falcon BMS settings** shows the count and the size, and **Clear (to Recycle Bin)** empties it. BMS's own `.vhs` training tapes are left alone.
+
 ## 6. Using the Mission section
 
 | Tab | What for |
@@ -144,7 +155,32 @@ set g_bTacviewAcmi 1         // Tacview ACMI recording (default 1)
 | **Flight, Briefing, Comms, Boards** | Flight data with RWR and DED; the printed briefing; comm ladder and presets; EZBoards. Briefing and Comms include **Tankers & support**: TACAN (with the tie-on channel), UHF, every comm channel from the ladder with its preset, and bullseye position of tankers, AWACS and JSTARS. A TACAN marked * is BMS's default channel (first tanker 92Y, then 126Y, 125Y…); AWACS "Vector to tanker" confirms it in flight. |
 | **Setup** | Connection and guides. On the PC: where Falcon BMS runs, the setup checklist, devices and settings. |
 
-## 7. Media (screenshots)
+## 7. VR: the app as a kneeboard
+
+BMS Companion does not draw inside the headset itself — that needs a native OpenXR layer. Use it with **[OpenKneeboard](https://openkneeboard.com)**, which already does the VR part: it puts the board on your knee, drags, resizes and rotates it, toggles it with your own key, and lets the mouse move in and out of the board.
+
+1. Turn **Browser access** on in BMS Companion (server page).
+2. In OpenKneeboard: **Settings → Tabs → Add a tab → Web Dashboard**.
+3. Address: `http://<bms-pc-address>:47474/kneeboard` — the address from the server page with `/kneeboard` on the end. On the BMS PC itself, `http://127.0.0.1:47474/kneeboard`.
+4. Size and place the board in OpenKneeboard; its own binding shows and hides it.
+
+**Using it in the headset.** There is no pointer on a kneeboard in VR: OpenKneeboard supports graphics tablets (Wacom, Huion) and nothing else — "Mice are not supported in-game", as its FAQ puts it. So BMS Companion publishes its sections to OpenKneeboard as **pages**: bind a button to *next page* and *previous page* (HOTAS, keyboard, StreamDeck) and that button walks through Mission, Arsenal, Threats, Airfields and Cockpit without anything to aim at. With a graphics tablet you can point at the board as well.
+
+**Print size.** The board is drawn at a headset-friendly resolution, and **☰ → Print size** decides how large that resolution is used: Small print, Normal, Large, Very large. Remembered per board.
+
+OpenKneeboard gives a web tab a landscape page and offers no way to reproportion it in its settings — the page has to ask, and this one does. It asks for an upright board (5:8, the shape of a real kneeboard and of OpenKneeboard's own), and **☰ → Board shape** on the board offers 3:4, tall, square and landscape instead; the choice is remembered. A one-off shape can be had with `?size=WIDTHxHEIGHT`, e.g. `/kneeboard?size=1200x1600`.
+
+`/kneeboard` is what makes the board layout. It lays the page out for a board: the content gets all of it, a small **☰** in the corner opens the sections and the Mission tabs, each page’s own options sit behind **⋯** beside it, and both fade away when the mouse stops. The map fills the board. Left out are the things you would not use in the cockpit: the AWACS/GCI page, the Boards tab (the briefing has the same tables), the setup guides, Home and Media.
+
+Everything else is there: Dashboard, map, flight data, briefing, comms, the charts and the reference sections.
+
+The board layout is the browser version only — the PC window and the Android app keep their normal one.
+
+The board is drawn as paper rather than as a screen — warm off-white, black ink, no saturated colour — and the button next to the ☰ switches between daylight and a dimmed night page. That choice is remembered.
+
+**Trying it without a headset:** open `http://127.0.0.1:47474/kneeboard` in any browser and make the window small (about 800 x 800), or press F12 and use the browser's device toolbar at 1024 x 1024. The ☰ and ⋯ fade a couple of seconds after the mouse stops; move it to bring them back.
+
+## 8. Media (screenshots)
 
 The **Media** section (last in the navigation) shows the screenshots you take in Falcon BMS (PrtScr, or your screenshot key). BMS Companion reads them from `User\Pictures`, or the folder set with `g_sPicturesDirectory`; if you keep them elsewhere, set **Screenshots folder** in the settings. New screenshots appear within a few seconds.
 
