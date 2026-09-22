@@ -49,9 +49,14 @@ data class UpdateState(
     /** Every release newer than the running version, newest first — the whole story since this build, not just the top. */
     val newer: List<Release> = emptyList(),
     val progress: Progress? = null,
+    /** The version whose installer is downloaded and waiting to be run, if there is one. */
+    val downloaded: String? = null,
 ) {
     val latest: Release? get() = newer.firstOrNull()
     val available: Boolean get() = latest != null
+
+    /** True when the newest release is the one already sitting on this disk. */
+    val latestDownloaded: Boolean get() = downloaded != null && downloaded == latest?.version
 }
 
 /** Where a download or an install has got to. */
@@ -65,7 +70,7 @@ data class Progress(
     /** Smoothed, so the figure on screen is one a pilot can read rather than one that flickers. */
     val bytesPerSecond: Double = 0.0,
 ) {
-    enum class Stage { CHECKING, DOWNLOADING, VERIFYING, READY, INSTALLING, FAILED }
+    enum class Stage { CHECKING, DOWNLOADING, VERIFYING, DOWNLOADED, READY, INSTALLING, FAILED }
 }
 
 /** "278 MB", "6.4 MB/s" — kotlin only, because the browser build has no String.format worth the name. */
@@ -162,6 +167,7 @@ object Updates {
             val json = fetch("${apiBase()}/releases?per_page=20")
             com.bmscompanion.app.data.Repo.json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(Release.serializer()), json)
         }
+        noteDownloaded()
         _state.value = result.fold(
             onSuccess = { list ->
                 val newer = list
@@ -181,21 +187,58 @@ object Updates {
     }
 
     /**
-     * Downloads (or reuses) the release file and installs it.
+     * Fetches the release file and stops there.
+     *
+     * Downloading and installing are two decisions and this app asks them separately: three hundred megabytes over a
+     * home connection is not something to start by accident, and the installer closes the program, which is not
+     * something to have happen while a pilot is in the middle of a mission. So this ends with the file on the disk
+     * and [UpdateState.downloaded] set; [install] is a second press, whenever suits.
      *
      * A download interrupted halfway — a lost connection, a headset taken off, Android asking for the permission to
      * install and not getting it — leaves a file in the cache. That file is hashed first: if it matches the release
-     * there is nothing to download and the install can go straight ahead, which is the difference between waiting
-     * four minutes again and waiting none.
+     * there is nothing to fetch, which is the difference between waiting four minutes again and waiting none.
      */
-    suspend fun update(release: Release) {
+    suspend fun download(release: Release) {
+        fetch(release) ?: return
+        _state.value = _state.value.copy(downloaded = release.version)
+        progress(
+            Progress(
+                Progress.Stage.DOWNLOADED,
+                fraction = 1f,
+                text = "Version ${release.version} is downloaded and waiting — press Install when you are ready.",
+            ),
+        )
+    }
+
+    /** Hands the downloaded file to the system installer. The program closes while it runs. */
+    suspend fun install(release: Release) {
         val install = installer ?: return
-        val file = fetch(release) ?: return
+        val asset = assetFor(release) ?: return
+        val file = cacheName(release, asset)
         runCatching {
             progress(Progress(Progress.Stage.INSTALLING, text = "Starting the installer…"))
             val message = install.install(file)
             progress(Progress(Progress.Stage.READY, text = message ?: "The installer is running."))
         }.onFailure { progress(Progress(Progress.Stage.FAILED, text = reason(it))) }
+    }
+
+    /** Downloads and installs in one go — the developer check's path, not a button. */
+    suspend fun update(release: Release) {
+        download(release)
+        if (_state.value.progress?.stage == Progress.Stage.DOWNLOADED) install(release)
+    }
+
+    /**
+     * Notes which release, if any, is already on this disk, so the button can say Install rather than Download the
+     * moment the page opens. The file name carries its version, which is what makes this a lookup and not a hash.
+     */
+    fun noteDownloaded() {
+        val install = installer ?: return
+        val have = runCatching { install.cachedFiles() }.getOrDefault(emptyList())
+            .map { versionOf(it) }
+            .filter { it.isNotBlank() && compareVersions(it, AppVersion.NAME) > 0 }
+            .maxWithOrNull { a, b -> compareVersions(a, b) }
+        if (_state.value.downloaded != have) _state.value = _state.value.copy(downloaded = have)
     }
 
     /**

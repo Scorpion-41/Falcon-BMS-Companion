@@ -147,6 +147,10 @@ Invoke-Com $view 'Close' 'InvokeMethod' $null | Out-Null
 
 # Anything still running holds the files it is being asked to replace. Type 98 = run an exe (2) from a directory in
 # the package (32), and carry on whatever it returns (64) — taskkill reports failure when nothing was running.
+#
+# Without /T, deliberately. The app starts the installer when a pilot updates from inside it, so msiexec is a child
+# of the very process this closes: /T killed the whole tree, the installer took itself down half way through, and the
+# pilot was left with no app and no update. Closing the app alone is all this needs to do.
 # Both run between InstallValidate and InstallInitialize, as the installing user, so %APPDATA% is the right one.
 function Add-Action($id, $target, $sequence) {
     # the same MSI can reach this script twice (packageMsi up to date, finishMsi re-run): start from a clean row
@@ -170,13 +174,15 @@ function Add-Action($id, $target, $sequence) {
     Invoke-Com $view 'Close' 'InvokeMethod' $null | Out-Null
 }
 
-Add-Action 'JpCloseRunningApp' 'cmd.exe /c taskkill /F /IM "BMS Companion.exe" /T' 1450
+Add-Action 'JpCloseRunningApp' 'cmd.exe /c taskkill /F /IM "BMS Companion.exe"' 1450
 # What a pilot set up is theirs, and an upgrade keeps it: the folders (BMS, EZBoards, HTML Briefing, screenshots),
 # the VR boards, the Dashboard layouts, the network port. Only what belongs to the copy being replaced is cleared —
-# the lock and port files of the instance just closed, and any installer sitting in the update cache, this one
-# included. Settings are read defensively (unknown keys are ignored, a layout that no longer parses falls back to the
-# default), so a file written by an older version cannot stop a newer one from starting.
-Add-Action 'JpTidyRuntimeFiles' 'cmd.exe /c del /q /f "%APPDATA%\BMS Companion\app.lock" "%APPDATA%\BMS Companion\app.port" & rd /s /q "%APPDATA%\BMS Companion\updates"' 1460
+# the lock and port files of the instance just closed. The update cache is NOT touched here: this installer is very
+# often the file sitting in it, and deleting it mid-install left a pilot whose install was interrupted downloading
+# three hundred megabytes again. The app clears that cache itself, once the new version is running and the download
+# has therefore done its job. Settings are read defensively (unknown keys are ignored, a layout that no longer parses
+# falls back to the default), so a file written by an older version cannot stop a newer one from starting.
+Add-Action 'JpTidyRuntimeFiles' 'cmd.exe /c del /q /f "%APPDATA%\BMS Companion\app.lock" "%APPDATA%\BMS Companion\app.port"' 1460
 # One desktop shortcut, however many times this is installed. The installer writes its shortcut to the shared desktop;
 # a copy left on this user's own desktop by an earlier version (or by a version that installed per user) is a second
 # icon pointing at a program that is no longer there. Every place a desktop can be — the shared one, the profile, and

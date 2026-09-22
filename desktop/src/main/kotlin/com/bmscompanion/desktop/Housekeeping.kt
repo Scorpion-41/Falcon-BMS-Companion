@@ -22,8 +22,14 @@ import java.io.File
 object Housekeeping {
     private const val KEY = "swept_version"
 
-    /** Files and folders of this program that no longer mean anything once the version has changed. */
-    private val ownLeftovers = listOf("updates", "app.lock", "app.port", "cache", "pages", "render-cache")
+    /**
+     * Files and folders of this program that no longer mean anything once the version has changed.
+     *
+     * `updates` is not among them, and must not be: that is where a downloaded installer waits, and a version change
+     * is exactly the moment it is about to be used or has just been used. `Updates.tidyCache` decides that one, by
+     * version — it keeps an installer still ahead of this build and throws away the one this build came from.
+     */
+    private val ownLeftovers = listOf("app.lock", "app.port", "cache", "pages", "render-cache")
 
     /** Where earlier versions — and the separate bridge that came before them — kept their own settings. */
     private fun legacyFolders(): List<File> = listOfNotNull(

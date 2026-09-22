@@ -79,7 +79,11 @@ object PcInstaller : Installer {
         val f = file(name)
         check(f.isFile) { "The downloaded installer is missing." }
         // /passive: a progress bar and no questions. The MSI closes this copy itself, so nothing here has to.
-        ProcessBuilder("msiexec.exe", "/i", f.path, "/passive", "/norestart")
+        //
+        // Started through `cmd /c start`, which hands msiexec over and exits, so the installer is nobody's child.
+        // Started directly it was a child of this process, and anything that closes this app by its process tree
+        // takes the installer with it — which is what happened, from the MSI's own first step.
+        ProcessBuilder("cmd.exe", "/c", "start", "\"BMS Companion update\"", "/b", "msiexec.exe", "/i", f.path, "/passive", "/norestart")
             .directory(dir)
             .start()
         PcLog.write("update: started the installer for ${f.name}", null)

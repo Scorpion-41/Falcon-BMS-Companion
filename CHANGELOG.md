@@ -15,7 +15,14 @@
 - **Six pages instead of nine, and nothing lost.** The **Flight** page is gone — ownship, RWR, DED and the picture were each already a Dashboard card, so it was a second copy of a screen you had arranged yourself. The cards stay, and the new **In flight** layout lays them out the way that page did, in one tap.
 - **One Kneeboards page** for everything you print or pin in the headset: the BMS kneeboards, the VR boards and the HTML Briefing pages, which used to be a page, a page and a card on Briefing. It opens by saying what to do in BMS — print the briefing, save the DTC — states whether this mission's kneeboards exist and whether they were made automatically, and keeps **Generate now** underneath as the fallback it is. HTML Briefing starts folded away and stays however you leave it.
 - **The AWACS page is off until you ask for it**, in Setup → Mission pages.
-- **Your Dashboard is untouched**: every card, every layout, exactly as you left it.
+- **Your Dashboard is untouched**: every card, every layout, exactly as you left it — with a **Customize Dashboard** button across the top of it now, because the small "Edit" in the corner was read by nobody and that page is the one thing in the app you build yourself.
+
+### Updating from inside the app
+
+- **You decide when it installs.** **Download** fetches the new version and stops there, saying so; the button then reads **Install**, and only that closes BMS Companion and hands the file to Windows. Nothing installs itself while you are in the middle of a mission.
+- **A download that is already on the disk is used.** It says which version is waiting, and the installer is deleted once the new version runs.
+- **Fixed: the installer used to close itself.** The MSI closes any running copy first — by process tree, which included the installer itself when it had been started from inside the app. It closes the app alone now.
+- **Fixed: an interrupted update downloaded everything again.** The MSI was clearing the update folder mid-install, which is where the file it was installing from sat.
 
 ### What this PC needs, checked for you
 

@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Adjust
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Flight
@@ -181,17 +182,44 @@ fun MissionDashboardPane(env: MissionEnv, mapState: MapState, mapSel: MapSel?, o
         }
 
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = if (Kneeboard.on) 6.dp else 12.dp, vertical = if (Kneeboard.on) 4.dp else 8.dp)) {
-            // a kneeboard shows the cards and nothing else: the line above them is a row of board height spent on a
-            // button nobody presses in the cockpit, and the newest log entry sits in that corner instead
-            if (!Kneeboard.on) Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // A kneeboard shows the cards and nothing else: the line above them is a row of board height spent on a
+            // button nobody presses in the cockpit, and the newest log entry sits in that corner instead.
+            //
+            // Everywhere else it is a wide button across the middle of the page, saying what it does in full. A small
+            // "Edit" in the corner is the standard place for it and was read by nobody: this page is the one thing in
+            // the app a pilot builds himself, and it has to say so before he can discover it.
+            if (!Kneeboard.on) Column(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                // Its width and its position do the inviting; the colour stays out of the way. A page a pilot reads
+                // live has one thing on it that should catch the eye, and it is the flying, not a settings button.
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                        .background(if (editing) Hud.Amber.copy(alpha = 0.12f) else Hud.Surface2)
+                        .border(1.dp, if (editing) Hud.Amber.copy(alpha = 0.6f) else Hud.Outline.copy(alpha = 0.8f), RoundedCornerShape(12.dp))
+                        .clickable { editing = !editing }
+                        .padding(vertical = 11.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        if (editing) Icons.Default.Check else Icons.Default.Edit, null,
+                        tint = if (editing) Hud.Amber else Hud.TextDim, modifier = Modifier.size(17.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (editing) "Done customizing" else "Customize Dashboard",
+                        color = if (editing) Hud.Amber else Hud.Text,
+                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 Text(
-                    if (editing) "Move, resize or remove cards, then add more below" else "Your cards · ${items.size}",
-                    style = MaterialTheme.typography.bodySmall, color = Hud.TextDim, modifier = Modifier.weight(1f),
+                    if (editing) "Move, resize or remove cards, then add more below" else "Your cards · ${items.size} · choose which ones, how wide and in what order",
+                    style = MaterialTheme.typography.bodySmall, color = Hud.TextDim,
+                    modifier = Modifier.padding(top = 6.dp),
                 )
-                SmallButton(if (editing) "Done" else "Edit", if (editing) null else Icons.Default.Edit, primary = editing) { editing = !editing }
             }
             if (items.isEmpty() && !editing) {
-                PaneEmpty("No cards", "Tap Edit to add the cards you want on this page.", "Edit") { editing = true }
+                PaneEmpty("No cards", "Press Customize Dashboard to add the cards you want on this page.", "Customize Dashboard") { editing = true }
             }
             SpanMasonry(
                 spans = items.map { spanOf(it.width, cols) },

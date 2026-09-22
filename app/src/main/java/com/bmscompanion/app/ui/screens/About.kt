@@ -115,7 +115,7 @@ private fun UpdateCard(open: ((String) -> Unit)?) {
     val state by Updates.state.collectAsState()
     val scope = rememberCoroutineScope()
     var notes by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) { Updates.check() }
+    LaunchedEffect(Unit) { Updates.check(); Updates.noteDownloaded() }
 
     val install = Updates.installer
     val progress = state.progress
@@ -157,15 +157,24 @@ private fun UpdateCard(open: ((String) -> Unit)?) {
         TagFlow {
             val busy = progress != null && progress.stage in setOf(Progress.Stage.DOWNLOADING, Progress.Stage.VERIFYING, Progress.Stage.INSTALLING)
             if (latest != null && install?.canInstall == true && !busy) {
-                val again = progress?.stage == Progress.Stage.FAILED
+                // Two presses, never one. The first fetches a few hundred megabytes; the second closes the program
+                // and hands the file to Windows, which is not something to set off while a pilot is mid-mission.
+                val ready = state.latestDownloaded || progress?.stage == Progress.Stage.DOWNLOADED
+                val failed = progress?.stage == Progress.Stage.FAILED
                 val mb = Updates.assetFor(latest)?.size ?: 0
-                val label = when {
-                    again -> "Try again"
-                    mb > 0 -> "Download and install (${formatBytes(mb)})"
-                    else -> "Download and install"
-                }
-                SmallButton(label, Icons.Default.SystemUpdate, primary = true) {
-                    scope.launch { Updates.update(latest) }
+                if (ready) {
+                    SmallButton("Install ${latest.version} now", Icons.Default.SystemUpdate, primary = true) {
+                        scope.launch { Updates.install(latest) }
+                    }
+                } else {
+                    val label = when {
+                        failed -> "Try the download again"
+                        mb > 0 -> "Download ${latest.version} (${formatBytes(mb)})"
+                        else -> "Download ${latest.version}"
+                    }
+                    SmallButton(label, Icons.Default.SystemUpdate, primary = true) {
+                        scope.launch { Updates.download(latest) }
+                    }
                 }
             }
             if (latest != null) {
@@ -182,6 +191,16 @@ private fun UpdateCard(open: ((String) -> Unit)?) {
             if (progress != null && !busy) {
                 SmallButton("Dismiss", null, primary = false) { Updates.dismissProgress() }
             }
+        }
+
+        if (latest != null && install?.canInstall == true && (state.latestDownloaded || progress?.stage == Progress.Stage.DOWNLOADED)) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Version ${latest.version} is downloaded and waiting on this device. Installing closes BMS Companion " +
+                    "and reopens it as the new version, so finish what you are doing first. The file is deleted once " +
+                    "the new version runs.",
+                style = MaterialTheme.typography.bodySmall, color = Hud.Green,
+            )
         }
 
         if (install?.canInstall != true && latest != null) {
@@ -210,13 +229,17 @@ private fun UpdateCard(open: ((String) -> Unit)?) {
 /** A bar and a line of words: what is happening, and how far through it is. */
 @Composable
 private fun UpdateProgress(p: Progress) {
-    val colour = if (p.stage == Progress.Stage.FAILED) Hud.Red else if (p.stage == Progress.Stage.READY) Hud.Green else Hud.Cyan
+    val colour = when (p.stage) {
+        Progress.Stage.FAILED -> Hud.Red
+        Progress.Stage.READY, Progress.Stage.DOWNLOADED -> Hud.Green
+        else -> Hud.Cyan
+    }
     Column {
         val f = p.fraction
         Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(Hud.Surface2)) {
             if (f != null) {
                 Box(Modifier.fillMaxWidth(f.coerceIn(0f, 1f)).height(6.dp).background(colour))
-            } else if (p.stage != Progress.Stage.FAILED && p.stage != Progress.Stage.READY) {
+            } else if (p.stage != Progress.Stage.FAILED && p.stage != Progress.Stage.READY && p.stage != Progress.Stage.DOWNLOADED) {
                 // nothing to measure yet: a faint full bar reads as "working" without pretending to know how far
                 Box(Modifier.fillMaxWidth().height(6.dp).background(colour.copy(alpha = 0.25f)))
             }
