@@ -81,18 +81,39 @@ private val PaperNight = Skin(
     light = false,
 )
 
+/**
+ * Inks for a map drawn on a light ground — the chart style. The screen palette is made for a dark background and
+ * disappears on white: pale cyan contacts, a white label with a black blur behind it that reads as a smudge. These
+ * are the same hues taken down to where they hold against paper-white terrain.
+ */
+private val HudOnLight = Skin(
+    bg = Color(0xFFF3F1EA), surface = Color(0xFFFFFFFF), surface2 = Color(0xFFE8E5DC), surface3 = Color(0xFFD9D5CA),
+    outline = Color(0xFF8A8678),
+    green = Color(0xFF1B7A33), amber = Color(0xFFA85600), cyan = Color(0xFF0B5FA8),
+    red = Color(0xFFBE1B1B), blue = Color(0xFF123FA8), magenta = Color(0xFF7D25A8),
+    text = Color(0xFF12151A), textDim = Color(0xFF3E444E), textFaint = Color(0xFF69707A),
+    light = true,
+)
+
 /** Which skin is in use. Only kneeboard mode changes it; the app and the website are always the HUD. */
 object HudSkin {
     var board by mutableStateOf(false)
     var night by mutableStateOf(false)
 
     /**
-     * True for the length of one map drawing pass on a board ([inMapInks]). Deliberately not Compose state: it is set
-     * and cleared inside a single draw, so nothing observes it and nothing recomposes because of it.
+     * True for the length of one map drawing pass ([inMapInks]), and true with it when that map is a light one.
+     * Deliberately not Compose state: both are set and cleared inside a single draw, so nothing observes them and
+     * nothing recomposes because of them.
      */
     var mapPass = false
+    var mapLight = false
 
-    val current: Skin get() = if (!board || mapPass) HudDark else if (night) PaperNight else Paper
+    val current: Skin get() = when {
+        mapPass -> if (mapLight) HudOnLight else HudDark
+        !board -> HudDark
+        night -> PaperNight
+        else -> Paper
+    }
 }
 
 /**
@@ -103,13 +124,16 @@ object HudSkin {
  * could hardly be read in the headset, while the tanker and AWACS tracks, which have fixed bright colours, read fine.
  * So the map's symbols and labels are drawn as the app draws them; the page around the map keeps its paper.
  */
-inline fun <T> inMapInks(block: () -> T): T {
-    val was = HudSkin.mapPass
+inline fun <T> inMapInks(onLightMap: Boolean, block: () -> T): T {
+    val wasPass = HudSkin.mapPass
+    val wasLight = HudSkin.mapLight
     HudSkin.mapPass = true
+    HudSkin.mapLight = onLightMap
     try {
         return block()
     } finally {
-        HudSkin.mapPass = was
+        HudSkin.mapPass = wasPass
+        HudSkin.mapLight = wasLight
     }
 }
 
@@ -136,8 +160,11 @@ object Hud {
     /** True while the app is drawing on paper rather than on a screen. */
     val onPaper: Boolean get() = HudSkin.board
 
-    /** On paper and drawing in paper inks — false inside a board's map, which is drawn in screen inks. */
+    /** On paper and drawing in paper inks — false inside a map, which is drawn in inks that suit the ground. */
     val paperInks: Boolean get() = HudSkin.board && !HudSkin.mapPass
+
+    /** Drawing on a map whose ground is light (the chart style): symbols and labels go dark, haloed in white. */
+    val onLightMap: Boolean get() = HudSkin.mapPass && HudSkin.mapLight
 }
 
 private fun schemeFor(s: Skin) = if (s.light) {

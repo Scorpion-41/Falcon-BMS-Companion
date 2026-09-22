@@ -10,8 +10,8 @@
 - **Your wingmen stand out** in lime green: you in amber, your flight in lime, the rest of your side in blue.
 
 ### The map
-- **Airfields look like airfields** — a ring with the field's runways drawn across it at their real headings. Your home base is solid, your alternate an open ring, every other field small and faint.
-- **The live map on a VR board is brighter.** Symbols and labels were drawn in the board's muted paper colours and sank into the terrain; they now use the same bright colours as the app, while the rest of the board keeps its paper look.
+- **Airfields look like airfields** — a ring with the field's runways drawn across it at their real headings. Your home base is solid, your alternate an open ring, every other field small and faint. They are drawn above everything else on the map, so a steerpoint or an aircraft on the field no longer hides them.
+- **Readable on every map style.** The live map on a VR board was drawn in the board's muted paper colours and sank into the terrain. Symbols and labels now take their colours from the ground they are on: light on the relief, satellite and dark styles, and dark with a white outline on the chart, where white labels with a dark blur behind them were unreadable. The rest of the board keeps its paper look.
 
 ### Fixed
 - **Tanker and AWACS showed as a circle instead of their planned track** in campaign packs such as Hellas WCP, which borrow their aircraft from another theater. The app now finds them there.

@@ -77,8 +77,9 @@ data class SupportAsset(
 /** One radio of a support asset: "Check-In" 342.275 on preset 5. */
 data class SupportRadio(val label: String, val uhf: String?, val ch: Int?, val vhf: String?)
 
-val TankerColor = Color(0xFF6FE3A0)
-val AwacsColor = Color(0xFFC39BFF)
+/** The tanker's mint and the AWACS's lilac are for a dark map; on the chart they wash out, so they go deeper. */
+val TankerColor: Color get() = if (Hud.onLightMap) Color(0xFF0B7A48) else Color(0xFF6FE3A0)
+val AwacsColor: Color get() = if (Hud.onLightMap) Color(0xFF6A25A8) else Color(0xFFC39BFF)
 
 /** Map colour of a friendly tanker / AWACS / JSTARS, or null for other aircraft. */
 fun supportColor(c: Contact): Color? = if (c.friendly && c.kind == "air") when (supportRole(c.name)) {
