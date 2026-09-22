@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.3.4 (BMS 4.38) — September 2026
+
+**Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. iPhone, iPad and any other browser need nothing installed — they open the PC's address. Installing over 1.3.3 keeps everything you have set up.
+
+### The map knows where the threats and the tankers are
+
+- **Air defences, with the reach of each system drawn round them.** The systems your briefing names are matched against the app's own threat reference, so an SA-6 draws its 13 nm and a Shilka its mile and a half. Hostile red, your own side blue, one marker per site rather than one per launcher. Tap one for its range, BRAA and bullseye. What the campaign has not briefed you on stays off the map.
+- **The tanker and AWACS tracks the campaign actually planned.** BMS publishes no flight plan for anyone else's aircraft, so BMS Companion reads the mission it is flying and draws the leg the tanker holds on as a twelve-mile corridor, with the transit thin behind it. Only the ones airborne while you are; several if there are several; the one assigned to your flight drawn boldly and labelled with its TACAN ("Texaco1 · TCN 92Y"). The file is only read, and only believed when it also contains your own flight plan.
+- **One switch for all of it.** **SAMs** covers the briefed sites and your own DTC threat rings together.
+
+### The Mission section, tidied
+
+- **Six pages instead of nine, and nothing lost.** The **Flight** page is gone — ownship, RWR, DED and the picture were each already a Dashboard card, so it was a second copy of a screen you had arranged yourself. The cards stay, and the new **In flight** layout lays them out the way that page did, in one tap.
+- **One Kneeboards page** for everything you print or pin in the headset: the BMS kneeboards, the VR boards and the HTML Briefing pages, which used to be a page, a page and a card on Briefing. It opens by saying what to do in BMS — print the briefing, save the DTC — states whether this mission's kneeboards exist and whether they were made automatically, and keeps **Generate now** underneath as the fallback it is. HTML Briefing starts folded away and stays however you leave it.
+- **The AWACS page is off until you ask for it**, in Setup → Mission pages.
+- **Your Dashboard is untouched**: every card, every layout, exactly as you left it.
+
+### What this PC needs, checked for you
+
+The first run of a new version says whether the optional runtimes are there — **.NET 8** for EZBoards, **WebView2** and **OpenKneeboard** for the VR boards — and each missing one has a button to its maker's own page. Nothing is installed on your behalf.
+
+### Fixed
+
+- **"Generate kneeboards" said it had failed when it had worked** — a run was judged by a line the stock `EZBOARDS.BAT` prints, so anyone who had rewritten that file got an error every time while their boards were written perfectly well. The exit code decides now.
+- **Browsing for the EZBoards folder threw an exception.** The dialog no longer goes anywhere near the Windows shell.
+- **Planned tracks sat a quarter of a mile out.** A campaign waypoint is a grid *cell* and the aircraft flies to the middle of it; the corner was being used. Measured against 381 known airfields, the error is now zero.
+
+### Every build from here on
+
+Installable straight from **About → check for updates**, and **keeps what you have set up**: Dashboard cards and layouts, favourites, VR boards, folded sections and the BMS, EZBoards, HTML Briefing and screenshot folders all carry across.
+
 ## 1.3.3 (BMS 4.38) — September 2026
 
 Everything since 1.3.1. The headline is **VR kneeboards**: BMS Companion now serves numbered boards that OpenKneeboard shows on your knee in the cockpit, with your own controller buttons turning the pages. Alongside that: **instrument charts** for Korea and the Falklands, the **kneeboard exported by BMS's HTML Briefing tool** shown inside the app and in VR, **updating from inside the app**, **ACMI clean-up**, and a long list of fixes — the Android 9/10 crash, the folder picker that closed the PC app, and every installer problem reported since 1.3.

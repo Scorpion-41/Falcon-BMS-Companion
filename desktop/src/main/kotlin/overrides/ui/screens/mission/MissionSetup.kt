@@ -75,6 +75,7 @@ fun MissionSetupPane(onConnected: () -> Unit) {
             if (!PcConfig.bmsOnThisPc) RemoteConnectionCard(onConnected)
             if (PcConfig.bmsOnThisPc) SetupChecklistCard(status)
             ConnectDevicesCard(status)
+            TabsCard()
             if (PcConfig.bmsOnThisPc) BmsSettingsCard()
             StartupCard()
             GuideStep(1, "Which devices, which files", Hud.Amber) {

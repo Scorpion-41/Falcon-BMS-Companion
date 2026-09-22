@@ -83,7 +83,7 @@ import kotlinx.coroutines.delay
  * In a headset there is no pointer — OpenKneeboard supports graphics tablets and nothing else — so a board built like
  * a web page is a board a pilot can look at and not use. These pages are built the other way round: each one is a
  * printed sheet, the pilot's own next/previous page binding turns them, and everything that would need a finger is
- * decided beforehand on the PC (Mission -> VR boards) rather than in the cockpit.
+ * decided beforehand on the PC (Mission -> Kneeboards) rather than in the cockpit.
  *
  * Each board answers on its own address, `/kneeboard/<n>`, so one OpenKneeboard tab is one board. What board 3 shows
  * is [BoardSlot] number 3 in the configuration the PC serves; change it there and the board follows on its next
@@ -211,7 +211,7 @@ fun VrBoardScreen(nav: NavHostController, slot: Int) {
     val pages = key(cfg?.rev ?: 0) {
       when {
         cfg == null -> listOf(BoardPage("") { BoardNotice("Looking for the PC…", "This board reads what to show from BMS Companion on the BMS PC.") })
-        board == null -> listOf(BoardPage("") { BoardNotice("Board $slot is not set up", "Open Mission -> VR boards on the PC and give board $slot something to show.") })
+        board == null -> listOf(BoardPage("") { BoardNotice("Board $slot is not set up", "Open Mission -> Kneeboards on the PC and give board $slot something to show.") })
         else -> boardPages(BoardKind.of(board.kind), board, env, if (zoomSteps > 0) page.coerceIn(0, zoomSteps - 1) else -1)
       }
     }
@@ -333,11 +333,14 @@ private fun BoardMap(env: MissionEnv, slot: BoardSlot, step: Int = -1) {
         slot.options["borders"]?.let { com.bmscompanion.app.ui.components.MapLook.showBorders(it == "1") }
         fun layer(key: String, set: (Boolean) -> Unit) = slot.options[key]?.let { set(it == "1") }
         layer("route") { MapLayers.route = it }
-        layer("threats") { MapLayers.threats = it }
+        // "threats" is what the older boards called it, and boards saved then still say it
+        layer("threats") { MapLayers.sams = it }
         layer("traffic") { MapLayers.traffic = it }
         layer("hostiles") { MapLayers.hostiles = it }
         layer("labels") { MapLayers.labels = it }
         layer("fields") { MapLayers.fields = it }
+        layer("sams") { MapLayers.sams = it }
+        layer("support") { MapLayers.support = it }
         MapLayers.follow = slot.options["follow"] != "0"
         MapLayers.save()
     }

@@ -30,6 +30,7 @@ More in [docs/screenshots](docs/screenshots). What changed in each version: [CHA
 - [Which files do I need?](#which-files-do-i-need)
 - [Features](#features)
 - [Download & install](#download--install)
+- [What you need](#what-you-need)
 - [Quick setup](#quick-setup) (full guide in [docs/SETUP.md](docs/SETUP.md))
 - [How it works](#how-it-works)
 - [Repository layout](#repository-layout)
@@ -120,6 +121,23 @@ Get the files from the **[latest release](https://github.com/Scorpion-41/Falcon-
 Install the APK on the phone or tablet (allow "install unknown apps"), or use `adb install -r BMS-Companion.apk`. iPhone and iPad need nothing: see [Quick setup](#quick-setup).
 
 The installer isn't code-signed, so Windows SmartScreen may ask you to confirm (**More info → Run anyway**). Coming from version 1.2? The separate `BMSCompanionBridge.exe` is no longer needed: close and delete it (BMS Companion uses the same port).
+
+## What you need
+
+**BMS Companion itself needs nothing installed.** The Windows package brings its own Java runtime, and the browser version runs in a browser you already have. The list below is only for the parts that lean on something else — the app checks for them on its first run and links you to each one's official page.
+
+| | What for | Where |
+|---|---|---|
+| **Falcon BMS 4.38** | everything: the app reads your install | [falcon-bms.com](https://www.falcon-bms.com) |
+| Windows 10 or 11 (64-bit) | the PC program | — |
+| A browser with WebAssembly GC — Edge/Chrome 119+, Firefox 120+, Safari 18.2+ | the browser version on a tablet, phone or second PC | already on the device |
+| Android 8 or newer | the Android app | — |
+| **.NET 8 runtime** *(optional)* | generating kneeboards with EZBoards, which BMS ships | [dotnet.microsoft.com](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) |
+| **OpenKneeboard** *(optional)* | the VR kneeboards — it draws the boards in the headset, and in the flat window too | [openkneeboard.com](https://openkneeboard.com) |
+| **Microsoft Edge WebView2 runtime** *(optional)* | OpenKneeboard's web tabs, which is how a board reaches the headset. Windows 11 has it; some Windows 10 machines do not | [developer.microsoft.com](https://developer.microsoft.com/microsoft-edge/webview2/) |
+| **HTML Briefing** (`Tools\html_brief_win`, optional) | showing the kneeboard that tool exports | ships with BMS |
+
+Nothing is installed or downloaded by BMS Companion on your behalf: the first-run card names what is missing and opens the maker's own page.
 
 ## Quick setup
 

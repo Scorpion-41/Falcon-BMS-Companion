@@ -126,6 +126,11 @@ object DashLayouts {
             DashItem(DashCard.MAP, DashWidth.M, 1), DashItem(DashCard.TIME), DashItem(DashCard.BULLSEYE), DashItem(DashCard.STEERPOINTS),
             DashItem(DashCard.AIRBASES), DashItem(DashCard.THREATS), DashItem(DashCard.COMMS),
         ),
+        // what the Flight tab used to show, for anyone who lived on it
+        "In flight" to listOf(
+            DashItem(DashCard.OWNSHIP, DashWidth.L), DashItem(DashCard.RWR, DashWidth.S, 2), DashItem(DashCard.DED),
+            DashItem(DashCard.PICTURE), DashItem(DashCard.FUEL),
+        ),
         "Pre-flight" to listOf(
             DashItem(DashCard.MISSION), DashItem(DashCard.TIME), DashItem(DashCard.AIRBASES), DashItem(DashCard.COMMS, DashWidth.M),
             DashItem(DashCard.SUPPORT, DashWidth.M), DashItem(DashCard.PRESETS), DashItem(DashCard.BOARDS), DashItem(DashCard.STEERPOINTS),

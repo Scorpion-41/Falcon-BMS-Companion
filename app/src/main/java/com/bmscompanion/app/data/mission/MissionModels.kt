@@ -188,6 +188,40 @@ data class MissionData(
     val briefing: Briefing? = null,
     val dtc: Dtc? = null,
     val board: Board? = null,
+    /** What the campaign planned for the tankers and the AWACS, when the mission file gives it. */
+    val tracks: List<SupportTrack> = emptyList(),
+)
+
+/**
+ * The track a tanker or an AWACS is planned to fly.
+ *
+ * Read from the mission file Falcon BMS is flying, which is the only place the plan for somebody else's flight
+ * exists — the live feeds carry where an aircraft is, never where it is going. [points] is the whole route in
+ * theater feet; the ones the flight is on station for are marked, because that pair is what a tanker track is
+ * drawn between.
+ */
+@Serializable
+data class SupportTrack(
+    val role: String = "",
+    /** what the campaign calls the job: "AIR REFUEL", "AEW/ABCCC" */
+    val mission: String? = null,
+    /** "Texaco1", so the app can tie the track to the tanker the briefing gave you */
+    val callsign: String? = null,
+    /** true for the tanker or AWACS your own flight is assigned to */
+    val yours: Boolean = false,
+    val points: List<TrackPoint> = emptyList(),
+)
+
+/** One point of a planned track, with the clock times the campaign gave it. */
+@Serializable
+data class TrackPoint(
+    val x: Double = 0.0,
+    val y: Double = 0.0,
+    val altFt: Double = 0.0,
+    /** true where the flight holds — the legs of a tanker's racetrack */
+    val station: Boolean = false,
+    val arriveMs: Long = 0,
+    val departMs: Long = 0,
 )
 
 @Serializable

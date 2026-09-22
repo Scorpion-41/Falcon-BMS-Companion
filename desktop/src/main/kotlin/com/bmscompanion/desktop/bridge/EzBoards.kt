@@ -11,7 +11,8 @@ import kotlin.concurrent.thread
 
 /**
  * Runs the EZBoards tool (by "Logic", shipped in <BMS>\Tools\EZBoards) without a console window.
- * EZBOARDS.BAT skips its PAUSE when given any argument and ends with "SUCCESS." / "### ERROR ###".
+ * EZBOARDS.BAT skips its PAUSE when given any argument and ends with "SUCCESS." / "### ERROR ###", but a pilot may
+ * have rewritten it: the exit code decides whether a run worked, and those two lines only colour the message.
  */
 class EzBoardsRunner {
     private val busy = AtomicBoolean(false)
@@ -45,11 +46,20 @@ class EzBoardsRunner {
             }
             reader.join(2000)
             val lines = synchronized(log) { log.filter { it.isNotEmpty() && !progressLine.matches(it) } }
-            val success = !p.isAlive && p.exitValue() == 0 && lines.any { "SUCCESS." in it }
+            // What counts as having worked is what cmd says: the batch finished and returned 0. The stock
+            // EZBOARDS.BAT also prints "SUCCESS." or "### ERROR ###", but pilots edit that file — one who had
+            // replaced it with his own was told every run had failed while the boards were being written
+            // perfectly well. The stock lines are now only read for what to say, never for the verdict.
+            val ended = !p.isAlive && runCatching { p.exitValue() }.getOrDefault(-1) == 0
+            val complained = lines.any { "### ERROR ###" in it }
+            val success = ended && !complained
             result = EzRun(
                 time = time, auto = auto, ok = success, log = lines.takeLast(40),
-                message = if (success) "Kneeboards generated."
-                else lines.lastOrNull { "Could not find" in it || "ERROR" in it || it.contains("error", ignoreCase = true) } ?: "EZBoards failed (see log).",
+                message = when {
+                    success -> "Kneeboards generated."
+                    !ended -> "EZBoards did not finish (see log)."
+                    else -> lines.lastOrNull { "Could not find" in it || "ERROR" in it || it.contains("error", ignoreCase = true) } ?: "EZBoards failed (see log)."
+                },
             )
         } catch (e: Exception) {
             result = EzRun(time = time, auto = auto, message = "Could not start EZBoards: ${e.message}")

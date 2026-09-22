@@ -4,6 +4,8 @@ import com.bmscompanion.app.data.mission.BmsStatus
 import com.bmscompanion.app.data.mission.Board
 import com.bmscompanion.app.data.mission.BridgeInfo
 import com.bmscompanion.app.data.mission.Briefing
+import com.bmscompanion.app.data.mission.SupportTrack
+import com.bmscompanion.app.data.mission.TrackPoint
 import com.bmscompanion.app.data.mission.BriefingStatus
 import com.bmscompanion.app.data.mission.Dtc
 import com.bmscompanion.app.data.mission.EzRun
@@ -22,6 +24,7 @@ import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import kotlin.math.hypot
 
 /** One API call, from the network (Android app, browsers, client PCs) or from this PC's own app window. */
 class ApiRequest(val method: String, val path: String, val query: Map<String, String> = emptyMap(), val body: ByteArray = ByteArray(0), val remote: String = "127.0.0.1")
@@ -39,6 +42,75 @@ class ApiResponse(val status: Int, val contentType: String, val body: ByteArray)
  */
 object Bridge {
     val install = BmsInstall()
+
+    /**
+     * The planned tanker and AWACS tracks of the mission being flown, or nothing when they cannot be had.
+     *
+     * The routes come out of the file BMS is flying ([PlannedRoutes]), and they are only believed when that file
+     * also contains your own flight plan — which is what keeps a save from another campaign, another theater or
+     * last week's training mission off the map. Ground units and the other hundreds of flights are left alone:
+     * what is wanted here is the two a pilot has to find.
+     */
+    fun supportTracks(dtc: Dtc?): List<SupportTrack> {
+        // Your flight plan, which is what proves the file on disk is the mission being flown. It comes from the
+        // DTC you saved; in 3D, BMS also puts your steerpoints in shared memory, so a pilot who never presses SAVE
+        // still gets the tracks once airborne.
+        val own = dtc?.steerpoints.orEmpty().filter { it.x != 0.0 || it.y != 0.0 }.map { it.x to it.y }
+            .ifEmpty {
+                snapshot().live.navPoints.filter { it.type == "WP" && (it.x != 0.0 || it.y != 0.0) }.map { it.x to it.y }
+            }
+        if (own.isEmpty()) return emptyList()
+        val routes = PlannedRoutes.current(install, install.theater, own)
+        if (routes.isEmpty()) return emptyList()
+
+        // Your own flight is in there too — it is what let the file be trusted in the first place — and its first
+        // and last times are the window you are airborne for. A tanker that lands before you push, or takes off
+        // after you are home, is not your tanker and is not drawn.
+        val mine = routes.maxByOrNull { r -> own.count { (x, y) -> r.points.any { hypot(it.x - x, it.y - y) < 1.5 * 6076.12 } } }
+        val from = mine?.points?.minOfOrNull { it.arriveMs } ?: 0L
+        val to = mine?.points?.maxOfOrNull { maxOf(it.arriveMs, it.departMs) } ?: Long.MAX_VALUE
+
+        // the tanker and the AWACS your flight was given, as the sim itself names them
+        val voice = snapshot().live.voice
+        val assigned = listOfNotNull(voice?.tanker, voice?.awacs).map { it.trim().lowercase() }
+
+        return routes.mapNotNull { route ->
+            val name = route.missionName.orEmpty()
+            val role = when {
+                name.contains("REFUEL", true) -> "Tanker"
+                name.contains("AWACS", true) || name.contains("AEW", true) || name.contains("ABCCC", true) -> "AWACS"
+                else -> return@mapNotNull null
+            }
+            // The track itself is the leg the flight spends its time on: of all its points, the one it is planned
+            // to sit at longest, and the point it flies in from. A tanker holds there for hours and the two
+            // together are the racetrack a pilot looks for; the rest of the route is the transit to and from it.
+            val longest = route.points.indices.maxByOrNull { route.points[it].departMs - route.points[it].arriveMs } ?: 0
+            val station = route.points.getOrNull(longest)
+            val onStationFrom = station?.arriveMs ?: route.points.firstOrNull()?.arriveMs ?: 0L
+            val onStationTo = station?.departMs ?: route.points.lastOrNull()?.arriveMs ?: 0L
+            // no overlap with your flight, no track
+            if (onStationTo < from || onStationFrom > to) return@mapNotNull null
+            val legs = setOf(longest, (longest - 1).coerceAtLeast(0))
+            SupportTrack(
+                role = role,
+                mission = route.missionName,
+                callsign = route.callsign,
+                yours = route.callsign != null && route.callsign.lowercase() in assigned,
+                points = route.points.mapIndexed { i, p ->
+                    TrackPoint(
+                        x = p.x,
+                        y = p.y,
+                        altFt = p.altFt,
+                        station = i in legs && (station?.departMs ?: 0L) > (station?.arriveMs ?: 0L),
+                        arriveMs = p.arriveMs,
+                        departMs = p.departMs,
+                    )
+                },
+            )
+        }
+    }
+
+
     val tacview = TacviewClient()
     val ez = EzBoardsRunner()
     val shots = ScreenshotStore()
@@ -305,7 +377,8 @@ object Bridge {
             "GET" to "/api/mission" -> {
                 refreshFiles()
                 val b = boardNow()
-                encode(MissionData.serializer(), MissionData("$briefingMtime-$dtcMtime-${b?.time ?: 0}", briefingMtime, briefing, dtc, b))
+                val tracks = if (d != null) d.tracks() else supportTracks(dtc)
+                encode(MissionData.serializer(), MissionData("$briefingMtime-$dtcMtime-${b?.time ?: 0}", briefingMtime, briefing, dtc, b, tracks))
             }
             "POST" to "/api/ezboards/generate" -> {
                 val s = _settings.value

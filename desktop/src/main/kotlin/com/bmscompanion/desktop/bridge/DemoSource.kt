@@ -103,6 +103,31 @@ class DemoSource {
         )
     }
 
+    /** The two tracks a demo mission plans: a tanker track east of Larissa and an AWACS orbit inland. */
+    fun tracks(): List<com.bmscompanion.app.data.mission.SupportTrack> = listOf(
+        com.bmscompanion.app.data.mission.SupportTrack(
+            role = "Tanker",
+            mission = "AIR REFUEL",
+            callsign = "Texaco1",
+            points = listOf(
+                com.bmscompanion.app.data.mission.TrackPoint(2337000.0, 900000.0, 24000.0),
+                com.bmscompanion.app.data.mission.TrackPoint(2400000.0, 1010000.0, 24000.0, station = true),
+                com.bmscompanion.app.data.mission.TrackPoint(2400000.0, 1260000.0, 24000.0, station = true),
+            ),
+        ),
+        com.bmscompanion.app.data.mission.SupportTrack(
+            role = "AWACS",
+            mission = "AEW/ABCCC",
+            callsign = "Dragnet5",
+            yours = true,
+            points = listOf(
+                com.bmscompanion.app.data.mission.TrackPoint(2180000.0, 700000.0, 30000.0),
+                com.bmscompanion.app.data.mission.TrackPoint(2230000.0, 760000.0, 30000.0, station = true),
+                com.bmscompanion.app.data.mission.TrackPoint(2230000.0, 940000.0, 30000.0, station = true),
+            ),
+        ),
+    )
+
     fun contacts(): Contacts {
         val t = simSeconds
         val own = live()
@@ -149,6 +174,12 @@ class DemoSource {
         val uzi1 = add("60", "air", uziX, uziY, 31000.0, uziHdg % 360, 540.0, "Su-27", "Uzi2", "Albania", false)
         add("61", "air", uziX + 12000, uziY - 9000, 29000.0, uziHdg % 360, 540.0, "Su-27", "Uzi2", "Albania", false)
         if (sqrt((uziX - coltX).pow(2) + (uziY - coltY).pow(2)) < 45 * FT_PER_NM) list[uzi1] = list[uzi1].copy(locked = "50")
+        // the air defences a real feed carries: one contact per site, named the way BMS names them
+        add("70", "sam", samSite.first, samSite.second, 0.0, 0.0, 0.0, "SA-5 Gammon", null, "Albania", false)
+        add("71", "sam", 2825000.0, 372000.0, 0.0, 0.0, 0.0, "SA-6 Gainful TEL", null, "Albania", false)
+        add("72", "sam", 2762000.0, 455000.0, 0.0, 0.0, 0.0, "SA-8 Gecko", null, "Albania", false)
+        add("73", "sam", 2690000.0, 268000.0, 0.0, 0.0, 0.0, "ZSU-23-4 Shilka", null, "Albania", false)
+        add("74", "sam", 2464000.0, 355000.0, 0.0, 0.0, 0.0, "Hawk battery", null, "Greece", true)
         add("20", "ship", 2400000.0, 330000.0, 0.0, 150.0, 12.0, "Elli class frigate", null, "Greece", true)
         // hostile ejected crew close to ownship: the Picture list must still show the MiGs first
         add("40", "crew", own.x + 4 * FT_PER_NM, own.y - 3 * FT_PER_NM, 0.0, 0.0, 0.0, "Ejected Crew", null, "Albania", false)

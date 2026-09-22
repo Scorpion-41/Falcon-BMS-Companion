@@ -66,35 +66,52 @@ import com.bmscompanion.app.ui.theme.Hud
 
 // Shared by the Android and PC MissionScreen: the tab list, tab strip and what each tab shows.
 
+/**
+ * What Mission is divided into.
+ *
+ * Fewer tabs than there were, because several of them were drawing the same figures. There is no **Flight** tab: every
+ * panel it had — ownship, RWR, DED, the picture — was already a Dashboard card, so the tab was a second copy of a
+ * screen the pilot had arranged himself. The cards stay, and the "In flight" layout puts them out the way the tab did.
+ * **Kneeboards** is one page for everything that gets printed or pinned in the headset: the BMS kneeboards, the VR
+ * boards ([vrBoardsPane], PC only) and the HTML Briefing pages, which were a tab, a tab and a card on Briefing.
+ * **AWACS** is a whole page for a job most pilots never do, so it is off until [MissionTabPrefs.showAwacs] says otherwise.
+ */
 enum class MissionTab(val label: String, val icon: ImageVector) {
     DASH("Dashboard", Icons.Default.Dashboard),
     MAP("Map", Icons.Default.Map),
     AWACS("AWACS", Icons.Default.Radar),
-    FLIGHT("Flight", Icons.Default.Flight),
     BRIEF("Briefing", Icons.Default.Description),
     COMMS("Comms", Icons.Default.Headset),
-    BOARDS("Boards", Icons.Default.Assignment),
-    /**
-     * Setting up the VR boards. Only the PC window shows this: the boards are OpenKneeboard tabs on the PC that runs
-     * the headset, and a pilot sets them up with a mouse before the flight. [vrBoardsPane] is what fills it in, and
-     * the tab appears only where something has.
-     */
-    VRBOARDS("VR boards", Icons.Default.ViewInAr),
+    BOARDS("Kneeboards", Icons.Default.Assignment),
     SETUP("Setup", Icons.Default.Settings),
 }
 
-/** The VR board page, set by the PC entry point. Null everywhere else, and then the tab is not offered. */
+/**
+ * The VR board setup, set by the PC entry point. Null everywhere else. It is a section of the Kneeboards page rather
+ * than a tab of its own, so what it returns is laid into that page's scroll and must not scroll itself.
+ */
 var vrBoardsPane: (@Composable () -> Unit)? = null
 
+/** What the pilot has chosen to see. Kept in the prefs file, which an update never rewrites. */
+object MissionTabPrefs {
+    private const val AWACS_KEY = "mission_tab_awacs"
+    private var awacs by mutableStateOf(Repo.getInt(AWACS_KEY, 0))
+
+    /** The AWACS page: off until it is asked for, on every device and every install. */
+    var showAwacs: Boolean
+        get() = awacs == 1
+        set(v) { awacs = if (v) 1 else 0; Repo.putInt(AWACS_KEY, awacs) }
+}
+
 /** The tabs this build actually has. */
-val missionTabs: List<MissionTab> get() = MissionTab.entries.filter { it != MissionTab.VRBOARDS || vrBoardsPane != null }
+val missionTabs: List<MissionTab> get() = MissionTab.entries.filter { it != MissionTab.AWACS || MissionTabPrefs.showAwacs }
 
 
 /**
- * The tabs a VR kneeboard offers. Nobody runs a GCI picture from the cockpit, the EZBoards tab holds the same tables
- * as the briefing, and the setup guides are for before the flight.
+ * The tabs a VR kneeboard offers. Nobody runs a GCI picture from the cockpit, the kneeboards page is for setting up
+ * before the flight, and so are the setup guides.
  */
-val kneeboardMissionTabs = listOf(MissionTab.DASH, MissionTab.MAP, MissionTab.FLIGHT, MissionTab.BRIEF, MissionTab.COMMS)
+val kneeboardMissionTabs = listOf(MissionTab.DASH, MissionTab.MAP, MissionTab.BRIEF, MissionTab.COMMS)
 
 /** Things every Mission pane needs: bundled theater data resolved from the BMS theater name. */
 data class MissionEnv(val nav: NavHostController, val theater: Theater?, val set: AirportSet?)
@@ -148,7 +165,8 @@ private fun PublishMapMission(env: MissionEnv) {
 /** The open tab, remembered across launches; Setup until a bridge is configured. */
 @Composable
 fun rememberMissionTab(): MutableState<MissionTab> = rememberSaveable {
-    val saved = Repo.getString("mission_tab")?.let { s -> MissionTab.entries.firstOrNull { it.name == s } }
+    val savedName = Repo.getString("mission_tab")
+    val saved = savedName?.let { s -> MissionTab.entries.firstOrNull { it.name == s } }?.takeIf { it in missionTabs }
     val start = if (MissionLink.host == null) MissionTab.SETUP else saved ?: MissionTab.DASH
     // a kneeboard is served by the PC it talks to, and only offers the tabs worth having in the cockpit
     mutableStateOf(if (com.bmscompanion.app.ui.Kneeboard.on && start !in kneeboardMissionTabs) MissionTab.DASH else start)
@@ -201,11 +219,9 @@ fun MissionTabContent(tab: MissionTab, env: MissionEnv, onTab: (MissionTab) -> U
         MissionTab.DASH -> MissionDashboardPane(env, mapState, mapSel, { mapSel = it }, onOpenTab = onTab)
         MissionTab.MAP -> MissionMapPane(env, mapState, mapSel, { mapSel = it }, onOpenTab = onTab)
         MissionTab.AWACS -> MissionAwacsPane(env, awacs, onOpenTab = onTab)
-        MissionTab.FLIGHT -> MissionFlightPane(env)
         MissionTab.BRIEF -> MissionBriefingPane(env, showOnMap)
         MissionTab.COMMS -> MissionCommsPane(env)
         MissionTab.BOARDS -> MissionBoardsPane(env, onSetup = { onTab(MissionTab.SETUP) })
-        MissionTab.VRBOARDS -> vrBoardsPane?.invoke()
         MissionTab.SETUP -> MissionSetupPane(onConnected = { onTab(MissionTab.DASH) })
     }
 }
@@ -294,6 +310,33 @@ fun OverlayPill(text: String, color: Color = Hud.Text, modifier: Modifier = Modi
         text, modifier.clip(RoundedCornerShape(8.dp)).background(Hud.Bg.copy(alpha = 0.82f)).border(1.dp, Hud.Outline.copy(alpha = 0.7f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp),
         color = color, style = LocalExtra.current.monoSmall, maxLines = 1,
     )
+}
+
+/**
+ * Which Mission pages this pilot wants. One card on Setup, on the phone and on the PC alike.
+ *
+ * The AWACS page is the only one that hides: it is a GCI console, and the pilots who want it know they do. Everything
+ * on it — the picture, the bullseye calls — a Dashboard card shows as well.
+ */
+@Composable
+fun TabsCard() {
+    com.bmscompanion.app.ui.components.SectionCard("Mission pages", accent = Hud.Cyan) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Show the AWACS page", color = Hud.Text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text(
+                    "A GCI station: the whole picture, ranges and bearings between contacts, and the calls to read out. " +
+                        "The Dashboard's Picture card covers the everyday need.",
+                    color = Hud.TextDim, fontSize = 12.sp,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            androidx.compose.material3.Switch(
+                checked = MissionTabPrefs.showAwacs,
+                onCheckedChange = { MissionTabPrefs.showAwacs = it },
+            )
+        }
+    }
 }
 
 @Composable

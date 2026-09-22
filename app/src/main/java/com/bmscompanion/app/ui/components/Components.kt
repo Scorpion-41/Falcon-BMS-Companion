@@ -264,9 +264,27 @@ fun SectionCard(
     }
 }
 
+/**
+ * A card that folds away. Give it a [rememberKey] and the fold is remembered for good — opened once, it is open the
+ * next time the app starts, and folded again it stays folded. That is kept in the prefs file, which an update never
+ * rewrites, so a pilot sets it once per device rather than once per version.
+ */
 @Composable
-fun CollapsibleCard(title: String, initiallyOpen: Boolean = false, accent: Color = Hud.Amber, preview: String? = null, content: @Composable () -> Unit) {
-    var open by rememberSaveable(title) { mutableStateOf(initiallyOpen) }
+fun CollapsibleCard(
+    title: String,
+    initiallyOpen: Boolean = false,
+    accent: Color = Hud.Amber,
+    preview: String? = null,
+    rememberKey: String? = null,
+    content: @Composable () -> Unit,
+) {
+    var open by rememberSaveable(title) {
+        mutableStateOf(rememberKey?.let { Repo.getInt("open_$it", if (initiallyOpen) 1 else 0) == 1 } ?: initiallyOpen)
+    }
+    val toggle = {
+        open = !open
+        if (rememberKey != null) Repo.putInt("open_$rememberKey", if (open) 1 else 0)
+    }
     Surface(
         modifier = Modifier.fillMaxWidth().animateContentSize(),
         color = Hud.Surface,
@@ -275,7 +293,7 @@ fun CollapsibleCard(title: String, initiallyOpen: Boolean = false, accent: Color
     ) {
         Column {
             Row(
-                Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 16.dp, vertical = 14.dp),
+                Modifier.fillMaxWidth().clickable(onClick = toggle).padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.size(width = 3.dp, height = 14.dp).background(accent, RoundedCornerShape(2.dp)))
@@ -286,7 +304,7 @@ fun CollapsibleCard(title: String, initiallyOpen: Boolean = false, accent: Color
             if (!open && !preview.isNullOrBlank()) {
                 Text(
                     preview, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = Hud.TextDim,
-                    modifier = Modifier.fillMaxWidth().clickable { open = true }.padding(start = 27.dp, end = 16.dp, bottom = 14.dp),
+                    modifier = Modifier.fillMaxWidth().clickable(onClick = toggle).padding(start = 27.dp, end = 16.dp, bottom = 14.dp),
                 )
             }
             AnimatedVisibility(open, enter = fadeIn()) {

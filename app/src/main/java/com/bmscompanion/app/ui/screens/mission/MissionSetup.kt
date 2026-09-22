@@ -60,6 +60,7 @@ fun MissionSetupPane(onConnected: () -> Unit) {
         Masonry(minColumn = 440.dp, maxColumns = 2) {
             ConnectionCard(onConnected)
             StatusCard()
+            TabsCard()
             GuideStep(1, "Run BMS Companion on the BMS PC", Hud.Amber) {
                 Para("Install **BMS Companion for Windows** (BMS-Companion-PC.msi or the portable zip) from the project's GitHub Releases page on the PC that runs Falcon BMS.")
                 Para("It opens on its **server page** (or the full app, if you use it there too). Either way it reads Falcon BMS and serves this device.")
@@ -99,7 +100,7 @@ fun MissionSetupPane(onConnected: () -> Unit) {
                 Para("Flying in VR? BMS Companion can be your kneeboard there too — not from this tablet, but through **OpenKneeboard** (openkneeboard.com) on the BMS PC, which places the board on your knee, drags, resizes and rotates it and toggles it with your own key.")
                 Bullet("Turn **Browser access** on in BMS Companion on the PC.")
                 Bullet("In OpenKneeboard: **Settings → Tabs → Add a tab → Web Dashboard**.")
-                Bullet("Addresses: **BMS Companion on the PC → Mission → VR boards** lists one address per board, with a copy button. Add one OpenKneeboard tab per board.")
+                Bullet("Addresses: **BMS Companion on the PC → Mission → Kneeboards → VR boards** lists one address per board, with a copy button. Add one OpenKneeboard tab per board.")
                 Para("You can try the layout without a headset: open that address in any browser and make the window small (about 800 x 800). The buttons fade a couple of seconds after the mouse stops — move it to bring them back.")
                 Para("**In the headset you flip the board, you do not press it.** OpenKneeboard supports graphics tablets and nothing else — its own FAQ says \"Mice are not supported in-game\" — so bind a button (HOTAS, keyboard, StreamDeck) to OpenKneeboard's **next page** and **previous page** and it walks through BMS Companion's sections: Mission, Arsenal, Threats, Airfields, Cockpit. Nothing to aim at. A graphics tablet, if you have one, points at the board as well.")
                 Para("**Print too small?** The board is drawn at a headset-friendly resolution, and **☰ → Print size** decides how large that resolution is used — Normal, Large or Very large. It is remembered per board.")

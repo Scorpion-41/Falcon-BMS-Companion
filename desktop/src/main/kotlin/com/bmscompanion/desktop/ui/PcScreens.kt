@@ -104,6 +104,7 @@ fun ServerScreen(onOpenApp: () -> Unit, onOpenAbout: () -> Unit, onUseAsClient: 
             Masonry(minColumn = 420.dp, maxColumns = 3) {
                 // draws nothing at all when this is the newest version
                 UpdateCard(onOpenAbout = onOpenAbout)
+                PrerequisitesCard(status)
                 ConnectDevicesCard(status)
                 SetupChecklistCard(status)
                 BmsSettingsCard()

@@ -54,37 +54,11 @@ import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.sin
 
-@Composable
-fun MissionFlightPane(env: MissionEnv) {
-    val live by MissionLink.live.collectAsState()
-    val contacts by MissionLink.contacts.collectAsState()
-    val info by MissionLink.info.collectAsState()
-    val l = live
-    if (l == null || !l.flying) {
-        PaneEmpty(
-            "Not flying",
-            if (info?.bms?.running == true) "Live flight data appears once you are in the 3D world." else "Start Falcon BMS and BMS Companion on your PC.",
-        )
-        return
-    }
-    val ctcs = contacts?.contacts.orEmpty()
-    val bull = bullseye(l, ctcs)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp)) {
-        // Ownship table spans the full width (its groups sit side by side on tablets); instruments below.
-        FlightTiles(l, bull, compact = false)
-        Spacer(Modifier.height(12.dp))
-        Masonry(minColumn = 380.dp, maxColumns = 3) {
-            SectionCard("RWR", accent = Hud.Green, trailing = { Text("${l.rwr.size} emitters", fontSize = 11.sp, color = Hud.TextDim) }) {
-                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    RwrScope(l, Modifier.widthIn(max = 360.dp).fillMaxWidth().aspectRatio(1f))
-                }
-                RwrList(l)
-            }
-            SectionCard("DED", accent = Hud.Green) { DedPanel(l) }
-            PictureCard(ctcs, ownship(l), l.hdgTrue, bull, onPick = {})
-        }
-    }
-}
+/*
+ * There is no Flight pane any more. Ownship, the RWR scope, the DED and the picture were each a Dashboard card as
+ * well as a panel here, so the tab was a second copy of a screen the pilot had already arranged for himself. What it
+ * drew lives on below, and the "In flight" layout puts those four out the way the tab did.
+ */
 
 @Composable
 fun FlightTiles(live: Live?, bull: Pair<Double, Double>?, compact: Boolean) {

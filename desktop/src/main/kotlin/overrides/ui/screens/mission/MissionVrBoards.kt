@@ -105,8 +105,10 @@ fun MissionVrBoardsPane() {
     val c = cfg
     val boards = c?.slots?.size ?: 0
 
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        // Step 1. Nothing else on this page works until the headset PC can reach this one, so it is the first thing
+    // A section of the Kneeboards page now, not a page of its own: the scroll belongs to the page around it, and a
+    // second one inside it would be an error rather than a nicety.
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        // Step 1. Nothing else here works until the headset PC can reach this one, so it is the first thing
         // asked and the first thing fixed — with the switch here rather than a sentence pointing at another page.
         SectionCard("1 · This PC", accent = if (PcConfig.webEnabled && address != null) Hud.Green else Hud.Amber) {
             Ready(
@@ -312,7 +314,12 @@ private fun MapOptions(options: Map<String, String>, onChange: (Map<String, Stri
         Text("The board opens at this zoom and stays there, centred on your jet.", fontSize = 11.sp, color = Hud.TextFaint)
         Text("LAYERS", style = LocalExtra.current.overline, color = Hud.TextFaint)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("route" to "Route", "threats" to "Threat rings", "traffic" to "Traffic", "hostiles" to "Hostiles").forEach { (key, label) ->
+            listOf("route" to "Route", "sams" to "SAMs and threat rings", "traffic" to "Traffic", "hostiles" to "Hostiles").forEach { (key, label) ->
+                Choice(label, flag(key)) { set(key, if (flag(key)) "0" else "1") }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("support" to "Tanker/AWACS tracks").forEach { (key, label) ->
                 Choice(label, flag(key)) { set(key, if (flag(key)) "0" else "1") }
             }
         }

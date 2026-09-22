@@ -42,6 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -87,18 +88,37 @@ sealed interface MapSel {
 }
 
 /** Map layer toggles, remembered across launches. */
+/** A ring that is a warning, not a boundary: dashed, so it never reads as a drawn border on the chart. */
+/** How wide a planned track is drawn: the width BMS uses for a tanker's own track. */
+private const val TRACK_WIDTH_NM = 12.0
+
+/** How wide a station is drawn: BMS names a point, and an orbit is a few miles across whatever the point. */
+private const val STATION_NM = 12.0
+
+private val SamRing = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(9f, 7f), 0f)
+
 object MapLayers {
     var follow by mutableStateOf(Repo.getInt("m_follow", 1) == 1)
     var route by mutableStateOf(Repo.getInt("m_route", 1) == 1)
-    var threats by mutableStateOf(Repo.getInt("m_threats", 1) == 1)
+    /**
+     * Air defences, under one switch: the sites the briefing named with the reach of each system, and the rings of
+     * the pre-planned threats entered in the DTC. Two switches asked a pilot to know which list a given missile
+     * battery came from before he could decide whether to see it, which is not a question anybody has.
+     */
+    var sams by mutableStateOf(Repo.getInt("m_sams", 1) == 1 && Repo.getInt("m_threats", 1) == 1)
     var traffic by mutableStateOf(Repo.getInt("m_traffic", 1) == 1)
     var hostiles by mutableStateOf(Repo.getInt("m_hostiles", 1) == 1)
     var labels by mutableStateOf(Repo.getInt("m_labels", 1) == 1)
     var fields by mutableStateOf(Repo.getInt("m_fields", 1) == 1)
+    /** The tanker and AWACS tracks the campaign planned, and the stations the briefing describes in words. */
+    var support by mutableStateOf(Repo.getInt("m_support", 1) == 1)
     fun save() {
-        Repo.putInt("m_follow", if (follow) 1 else 0); Repo.putInt("m_route", if (route) 1 else 0); Repo.putInt("m_threats", if (threats) 1 else 0)
+        Repo.putInt("m_follow", if (follow) 1 else 0); Repo.putInt("m_route", if (route) 1 else 0)
         Repo.putInt("m_traffic", if (traffic) 1 else 0); Repo.putInt("m_hostiles", if (hostiles) 1 else 0); Repo.putInt("m_labels", if (labels) 1 else 0)
         Repo.putInt("m_fields", if (fields) 1 else 0)
+        // one key for both, and the old one kept in step so an older version reads it the same way
+        Repo.putInt("m_sams", if (sams) 1 else 0); Repo.putInt("m_threats", if (sams) 1 else 0)
+        Repo.putInt("m_support", if (support) 1 else 0)
     }
 }
 
@@ -130,6 +150,9 @@ class MapData(
     val ownPos: Pair<Double, Double>?,
     val ownHdg: Double,
     val ctcs: List<Contact>,
+    val sams: List<SamSite>,
+    val stations: List<SupportStation>,
+    val tracks: List<com.bmscompanion.app.data.mission.SupportTrack>,
     val bull: Pair<Double, Double>?,
     val depField: Airport?,
     val arrField: Airport?,
@@ -137,12 +160,50 @@ class MapData(
     val contactsConnected: Boolean?,
 )
 
+/** Which of the two roles a briefing station is, in the words the campaign uses. */
+private fun role(st: SupportStation) = if (st.role.contains("tanker", true)) "Tanker" else "AWACS"
+
+/** The stations named in the briefing's support section, placed against this theater's airfields and towns. */
+private fun supportStations(
+    mission: com.bmscompanion.app.data.mission.MissionData?,
+    set: com.bmscompanion.app.data.AirportSet?,
+    geo: com.bmscompanion.app.data.GeoLayers?,
+): List<SupportStation> {
+    val entries = mission?.briefing?.support.orEmpty()
+    if (entries.isEmpty()) return emptyList()
+    fun one(name: String): Pair<Double, Double>? {
+        val n = name.trim().lowercase()
+        if (n.length < 3) return null
+        set?.airports?.firstOrNull { it.name.lowercase().startsWith(n) || it.icao?.lowercase() == n }?.let { return it.x to it.y }
+        geo?.places?.firstOrNull { it.n.lowercase() == n }?.let { return it.x to it.y }
+        return geo?.places?.firstOrNull { it.n.lowercase().startsWith(n) }?.let { it.x to it.y }
+    }
+    // "Nea Anchialos" is a place; so is the "Larissa" of "Larissa Airbase". Try what the briefing said, then its
+    // first word, because a briefing writes a name the way a pilot says it and a map writes it the way it is.
+    fun place(name: String): Pair<Double, Double>? =
+        one(name) ?: name.trim().substringBefore(' ').takeIf { it.length >= 3 }?.let { one(it) }
+    return entries.mapNotNull { e ->
+        val role = e.role ?: return@mapNotNull null
+        if (!role.contains("tanker", true) && !role.contains("awacs", true) && !role.contains("jstars", true)) return@mapNotNull null
+        val (at, text) = stationFromNotes(e.notes, ::place) ?: return@mapNotNull null
+        SupportStation(e.callsign, role, at.first, at.second, text)
+    }
+}
+
 @Composable
 fun rememberMapData(env: MissionEnv): MapData {
     val live by MissionLink.live.collectAsState()
     val contacts by MissionLink.contacts.collectAsState()
     val mission by MissionLink.mission.collectAsState()
-    return remember(live, contacts, mission, env.set) {
+    // the threat reference is read once and kept: it is what gives an air defence its ring
+    val reference by androidx.compose.runtime.produceState(emptyList<com.bmscompanion.app.data.Threat>()) {
+        value = com.bmscompanion.app.data.Repo.threats()
+    }
+    // the theater's towns, so "20 nm northeast of Larissa" can be turned back into a place
+    val geo by androidx.compose.runtime.produceState<com.bmscompanion.app.data.GeoLayers?>(null, env.theater?.mapId) {
+        value = env.theater?.mapId?.let { com.bmscompanion.app.data.Repo.geo(it) }
+    }
+    return remember(live, contacts, mission, env.set, reference, geo) {
         val stpts = steerpoints(mission, live)
         val own = ownship(live)
         val ctcs = contacts?.contacts.orEmpty()
@@ -158,6 +219,13 @@ fun rememberMapData(env: MissionEnv): MapData {
             ownPos = own ?: ownContact?.let { it.x to it.y },
             ownHdg = if (own != null) live!!.hdgTrue else ownContact?.hdg ?: 0.0,
             ctcs = ctcs,
+            sams = samSites(ctcs, reference).let { all ->
+                // what the briefing did not name is not the pilot's to see
+                val briefed = briefedSystems(mission, reference)
+                all.filter { it.threatId != null && it.threatId in briefed }
+            },
+            stations = supportStations(mission, env.set, geo),
+            tracks = mission?.tracks.orEmpty(),
             bull = bullseye(live, ctcs),
             depField = matchAirport(env.set, bases.departure),
             arrField = matchAirport(env.set, bases.arrival),
@@ -215,12 +283,14 @@ fun LiveMap(
     val th = env.theater ?: return
     val link by MissionLink.state.collectAsState()
     // measuring labels is the most expensive part of a redraw: cache layouts across the 4 Hz updates
+    // the same table the Tankers & AWACS page builds: it carries the channel and which one is yours
+    val support = rememberSupportAssets(env)
     val tm = rememberTextMeasurer(cacheSize = 256)
     val density = LocalDensity.current
     val hitPx = with(density) { 30.dp.toPx() }
     var layersOpen by remember { mutableStateOf(!compactControls) }
     val visibleContacts = d.ctcs.filter { c ->
-        c.kind != "bullseye" && !c.own && MapLayers.traffic && (c.friendly || MapLayers.hostiles)
+        c.kind != "bullseye" && c.kind != "sam" && !c.own && MapLayers.traffic && (c.friendly || MapLayers.hostiles)
     }
 
     // First view: the route (or ownship) instead of the whole theater.
@@ -258,7 +328,8 @@ fun LiveMap(
                 val cands = buildList<Pair<MapSel, Double>> {
                     visibleContacts.forEach { add(MapSel.Ctc(it.id) to dist(it.x, it.y)) }
                     if (MapLayers.route) d.route.forEach { add(MapSel.Stp(it.n) to dist(it.x!!, it.y!!) + 4) }
-                    if (MapLayers.threats) d.ppts.forEachIndexed { i, p -> add(MapSel.Ppt(i) to dist(p.x, p.y) + 6) }
+                    if (MapLayers.sams) d.ppts.forEachIndexed { i, p -> add(MapSel.Ppt(i) to dist(p.x, p.y) + 6) }
+                    if (MapLayers.sams) d.sams.forEach { add(MapSel.Ctc(it.id) to dist(it.x, it.y) + 6) }
                     if (MapLayers.fields) env.set?.airports?.forEach { add(MapSel.Field(it.id) to dist(it.x, it.y) + 8) }
                 }
                 val best = cands.minByOrNull { it.second }
@@ -285,7 +356,7 @@ fun LiveMap(
             }
 
             // pre-planned threat rings
-            if (MapLayers.threats) d.ppts.forEach { t ->
+            if (MapLayers.sams) d.ppts.forEach { t ->
                 val c = pr.toScreen(t.x, t.y)
                 val r = (t.rangeNm * pr.pxPerNm).toFloat()
                 if (c.x + r < 0 || c.y + r < 0 || c.x - r > size.width || c.y - r > size.height) return@forEach
@@ -293,6 +364,97 @@ fun LiveMap(
                 drawCircle(Hostile.copy(alpha = 0.75f), r, c, style = Stroke(2.5f))
                 drawCircle(Hostile, 5f, c)
                 placeText(tm, t.name, c + Offset(8f, 2f), labelStyle.copy(color = Hostile), placed)
+            }
+
+            // The air defences BMS is streaming, each with the reach of its own system. Drawn under everything
+            // that moves: a ring is a place you do not want to be, not a thing to look at.
+            if (MapLayers.sams) d.sams.forEach { site ->
+                val c = pr.toScreen(site.x, site.y)
+                val ink = if (site.friendly) Friendly else Hostile
+                val r = ((site.rangeNm ?: 0.0) * pr.pxPerNm).toFloat()
+                if (r > 2f) {
+                    if (c.x + r < 0 || c.y + r < 0 || c.x - r > size.width || c.y - r > size.height) return@forEach
+                    drawCircle(ink.copy(alpha = 0.06f), r, c)
+                    drawCircle(ink.copy(alpha = 0.5f), r, c, style = Stroke(2f, pathEffect = SamRing))
+                } else if (!on(c)) return@forEach
+                // a launcher is a square: the shape every briefing draws a SAM with
+                val h = 4.5f
+                drawRect(Color.Black.copy(alpha = 0.55f), Offset(c.x - h - 1.5f, c.y - h - 1.5f), Size(2 * h + 3f, 2 * h + 3f))
+                drawRect(ink, Offset(c.x - h, c.y - h), Size(2 * h, 2 * h), style = Stroke(2f))
+                if (MapLayers.labels) placeText(tm, site.label, c + Offset(9f, 2f), labelStyle.copy(color = ink), placed)
+            }
+
+            // What the campaign planned for the tankers and the AWACS, when the mission file gave it to us: the
+            // transit drawn thin, and the leg they hold on drawn as the corridor a pilot goes looking for.
+            if (MapLayers.support) d.tracks.forEach { t ->
+                val ink = if (t.role.contains("tanker", true)) TankerColor else AwacsColor
+                // the one your flight was given is the one you will actually fly to: drawn as such, with the
+                // channel you tune written where you are looking
+                val mine = t.yours
+                val strong = if (mine) 1f else 0.6f
+                val route = t.points.map { pr.toScreen(it.x, it.y) }
+                if (route.size >= 2) {
+                    for (i in 1 until route.size) {
+                        val a = route[i - 1]
+                        val b = route[i]
+                        if (!on(a) && !on(b)) continue
+                        drawLine(ink.copy(alpha = 0.35f * strong), a, b, strokeWidth = 1.5f, pathEffect = SamRing)
+                    }
+                }
+                val legs = t.points.withIndex().filter { it.value.station }.map { route[it.index] }
+                if (legs.size >= 2) {
+                    val from = legs.first()
+                    val to = legs.last()
+                    val dx = to.x - from.x
+                    val dy = to.y - from.y
+                    val len = hypot(dx.toDouble(), dy.toDouble()).toFloat()
+                    if (len > 1f && (on(from) || on(to))) {
+                        // the corridor is as wide as a track is flown: twelve miles, the width BMS draws its own
+                        val half = (TRACK_WIDTH_NM * pr.pxPerNm / 2).toFloat()
+                        val nx = -dy / len * half
+                        val ny = dx / len * half
+                        val box = androidx.compose.ui.graphics.Path().apply {
+                            moveTo(from.x + nx, from.y + ny)
+                            lineTo(to.x + nx, to.y + ny)
+                            lineTo(to.x - nx, to.y - ny)
+                            lineTo(from.x - nx, from.y - ny)
+                            close()
+                        }
+                        drawPath(box, ink.copy(alpha = if (mine) 0.16f else 0.07f))
+                        drawPath(box, ink.copy(alpha = if (mine) 0.9f else 0.45f), style = Stroke(if (mine) 3f else 2f))
+                        if (MapLayers.labels) {
+                            val mid = Offset((from.x + to.x) / 2, (from.y + to.y) / 2)
+                            // what to call it, and what to tune: the channel comes from the support table, which
+                            // knows the briefing's TACAN and BMS's own allocation
+                            val asset = support.firstOrNull { a -> a.callsign.equals(t.callsign, true) }
+                            val label = listOfNotNull(
+                                t.callsign ?: t.role.uppercase(),
+                                asset?.tacan?.let { "TCN $it" },
+                                if (mine) "YOURS" else null,
+                            ).joinToString(" · ")
+                            placeText(tm, label, mid + Offset(6f, -6f), labelStyle.copy(color = ink), placed)
+                        }
+                    }
+                }
+            }
+
+            // Where the briefing says the tanker and the AWACS will be — on the map from the moment it is printed,
+            // and drawn as an area rather than a point, because a station is an orbit and not a parking space.
+            // A role the campaign gave us a real track for needs none of this.
+            if (MapLayers.support) d.stations.forEach { st ->
+                if (d.tracks.any { it.role.equals(role(st), true) }) return@forEach
+                val c = pr.toScreen(st.x, st.y)
+                val ink = if (st.role.contains("tanker", true)) TankerColor else AwacsColor
+                val r = (STATION_NM * pr.pxPerNm).toFloat()
+                if (c.x + r < 0 || c.y + r < 0 || c.x - r > size.width || c.y - r > size.height) return@forEach
+                drawCircle(ink.copy(alpha = 0.06f), r, c)
+                drawCircle(ink.copy(alpha = 0.55f), r, c, style = Stroke(2f, pathEffect = SamRing))
+                drawCircle(Color.Black.copy(alpha = 0.5f), 6f, c)
+                drawCircle(ink, 4f, c)
+                if (MapLayers.labels) {
+                    val what = st.role.uppercase()
+                    placeText(tm, "$what ${st.callsign} station", c + Offset(9f, -8f), labelStyle.copy(color = ink), placed)
+                }
             }
 
             // bullseye
@@ -376,7 +538,8 @@ fun LiveMap(
                     com.bmscompanion.app.ui.components.MapLookButton()
                     HudChip("Follow", MapLayers.follow) { MapLayers.follow = !MapLayers.follow; MapLayers.save() }
                     HudChip("Route", MapLayers.route) { MapLayers.route = !MapLayers.route; MapLayers.save() }
-                    HudChip("Threats", MapLayers.threats) { MapLayers.threats = !MapLayers.threats; MapLayers.save() }
+                    HudChip("SAMs", MapLayers.sams) { MapLayers.sams = !MapLayers.sams; MapLayers.save() }
+                    HudChip("Support", MapLayers.support) { MapLayers.support = !MapLayers.support; MapLayers.save() }
                     HudChip("Traffic", MapLayers.traffic) { MapLayers.traffic = !MapLayers.traffic; MapLayers.save() }
                     HudChip("Hostiles", MapLayers.hostiles) { MapLayers.hostiles = !MapLayers.hostiles; MapLayers.save() }
                     HudChip("Labels", MapLayers.labels) { MapLayers.labels = !MapLayers.labels; MapLayers.save() }
@@ -410,7 +573,8 @@ private fun MapOptionsButton() {
         DropdownMenu(open, onDismissRequest = { open = false }, modifier = Modifier.background(Hud.Surface).widthIn(min = 210.dp)) {
             LayerRow("Follow ownship", MapLayers.follow) { MapLayers.follow = it }
             LayerRow("Route and steerpoints", MapLayers.route) { MapLayers.route = it }
-            LayerRow("Threat rings", MapLayers.threats) { MapLayers.threats = it }
+            LayerRow("SAMs and threat rings", MapLayers.sams) { MapLayers.sams = it }
+            LayerRow("Tanker and AWACS stations", MapLayers.support) { MapLayers.support = it }
             LayerRow("Traffic", MapLayers.traffic) { MapLayers.traffic = it }
             LayerRow("Hostiles", MapLayers.hostiles) { MapLayers.hostiles = it }
             LayerRow("Labels", MapLayers.labels) { MapLayers.labels = it }
@@ -540,6 +704,17 @@ fun SelectionCard(env: MissionEnv, sel: MapSel, d: MapData, modifier: Modifier, 
     when (sel) {
         is MapSel.Ctc -> {
             val c = ctcs.firstOrNull { it.id == sel.id } ?: return
+            // an air defence is not a contact to intercept: what is wanted is the system, its reach and where it is
+            if (c.kind == "sam") {
+                val site = d.sams.firstOrNull { it.id == c.id }
+                accent = if (c.friendly) Friendly else Hostile
+                title = site?.label ?: c.name ?: "Air defence"
+                subtitle = listOfNotNull(c.name?.takeIf { it != title }, c.coalition).joinToString(" · ").ifBlank { null }
+                rows += "RING" to (site?.rangeNm?.let { "${it.toInt()} nm engagement" } ?: "range not known")
+                own?.let { rows += "BRAA" to bra(it.first, it.second, c.x, c.y) }
+                d.bull?.let { rows += "BULLS" to bra(it.first, it.second, c.x, c.y) }
+                pos = c.x to c.y
+            } else {
             accent = contactColor(c)
             title = c.group ?: c.name ?: "Contact"
             subtitle = listOfNotNull(c.name?.takeIf { it != title }, c.pilot, c.coalition).joinToString(" · ")
@@ -548,6 +723,7 @@ fun SelectionCard(env: MissionEnv, sel: MapSel, d: MapData, modifier: Modifier, 
             if (c.gsKts > 0) rows += "GS" to "${c.gsKts.toInt()} kt"
             own?.let { rows += "BRAA" to "${bra(it.first, it.second, c.x, c.y)} · ${flightLevel(c.altFt)} · ${aspect(c.hdg, c.x, c.y, it.first, it.second)}" }
             pos = c.x to c.y
+            }
         }
         is MapSel.Stp -> {
             val s = stpts.firstOrNull { it.n == sel.n } ?: return

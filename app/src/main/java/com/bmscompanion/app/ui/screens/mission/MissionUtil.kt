@@ -99,6 +99,114 @@ fun preplannedThreats(m: MissionData?, live: Live?): List<Threat> {
     return m?.dtc?.ppts.orEmpty().map { Threat(it.name ?: "PPT ${it.n}", it.x, it.y, it.rangeNm) }
 }
 
+/**
+ * Where a tanker or an AWACS is planned to be: the station the briefing names, before anybody is airborne.
+ *
+ * BMS publishes no flight plan for its support aircraft — not in the briefing tables, not in the DTC, not in
+ * shared memory. What it does publish is the sentence in the support section ("Friendly tanker aircraft will be
+ * orbiting 20 nm northeast of Larissa"), which is the planned station written out in words. That sentence is read
+ * here and turned back into a position, so the station can be drawn on the map from the moment the briefing is
+ * printed, rather than waiting for the aircraft to fly its orbit.
+ */
+data class SupportStation(
+    val callsign: String,
+    val role: String,
+    val x: Double,
+    val y: Double,
+    /** how far from the named place the briefing put it, for the label */
+    val fromText: String,
+)
+
+/** The compass words a briefing uses, as true bearings. */
+private val COMPASS = mapOf(
+    "north" to 0.0, "nne" to 22.5, "north-northeast" to 22.5, "northeast" to 45.0, "north-east" to 45.0,
+    "ene" to 67.5, "east-northeast" to 67.5, "east" to 90.0, "ese" to 112.5, "east-southeast" to 112.5,
+    "southeast" to 135.0, "south-east" to 135.0, "sse" to 157.5, "south-southeast" to 157.5, "south" to 180.0,
+    "ssw" to 202.5, "south-southwest" to 202.5, "southwest" to 225.0, "south-west" to 225.0,
+    "wsw" to 247.5, "west-southwest" to 247.5, "west" to 270.0, "wnw" to 292.5, "west-northwest" to 292.5,
+    "northwest" to 315.0, "north-west" to 315.0, "nnw" to 337.5, "north-northwest" to 337.5,
+)
+
+private val STATION = Regex(
+    // the place is one or two words and stops there: a greedy match ran on into "Larissa. Available for air
+    // refueling", which is not a town in any theater
+    """(\d+(?:\.\d+)?)\s*(?:nm|nautical\s+miles?)\s+([a-z\-]+)\s+(?:of|from)\s+([A-Za-z][A-Za-z'\-]{1,20}(?:\s+[A-Za-z][A-Za-z'\-]{1,20})?)""",
+    RegexOption.IGNORE_CASE,
+)
+
+/**
+ * Reads "20 nm northeast of Larissa" out of [notes] and turns it into a point, with [place] resolving a name to
+ * theater feet. Anything it cannot read — an unknown compass word, a place this theater does not have — is left
+ * alone rather than guessed at.
+ */
+fun stationFromNotes(notes: String?, place: (String) -> Pair<Double, Double>?): Pair<Pair<Double, Double>, String>? {
+    val m = STATION.find(notes.orEmpty()) ?: return null
+    val nm = m.groupValues[1].toDoubleOrNull() ?: return null
+    val brg = COMPASS[m.groupValues[2].lowercase()] ?: return null
+    val name = m.groupValues[3].trim().trimEnd('.', ',')
+    val at = place(name) ?: return null
+    val r = Math.toRadians(brg)
+    val d = nm * 6076.12
+    return (at.first + Math.cos(r) * d to at.second + Math.sin(r) * d) to "$nm nm ${m.groupValues[2].lowercase()} of $name"
+}
+
+/**
+ * An air-defence site on the map: what the feed calls it, what system it is, and how far that system reaches.
+ *
+ * BMS streams its ground air defences by name ("SA-6 Gainful TEL", "SA-2 Guideline"), which is enough to find the
+ * system in the app's own threat reference and draw its engagement range. A site whose name matches nothing is
+ * still drawn — it is still a launcher — but without a ring, because an invented radius is worse than none.
+ */
+data class SamSite(
+    val id: String,
+    val x: Double,
+    val y: Double,
+    val label: String,
+    val rangeNm: Double?,
+    val friendly: Boolean,
+    val threatId: String?,
+)
+
+/**
+ * The air defences in [contacts], each matched against [reference] for its range.
+ *
+ * The longest matching name wins, so "SA-10 Grumble" is not read as "SA-1": a shorter name is a substring of the
+ * longer one often enough to matter.
+ */
+/**
+ * The systems the briefing named, as ids of the threat reference.
+ *
+ * A pilot is told what is out there in the threat section of the briefing; everything else the campaign knows is
+ * not theirs to know yet. Matching those sentences against the reference gives the set of systems that may be
+ * drawn, so a site the campaign has not briefed stays off the map however plainly the feed reports it.
+ */
+fun briefedSystems(mission: MissionData?, reference: List<com.bmscompanion.app.data.Threat>): Set<String> {
+    val said = mission?.briefing?.threats.orEmpty().flatMap { listOfNotNull(it.title) + it.lines }.joinToString(" ").lowercase()
+    if (said.isBlank()) return emptySet()
+    return reference.filter { t ->
+        (listOf(t.name) + t.aliases).any { it.length >= 3 && said.contains(it.lowercase()) }
+    }.map { it.id }.toSet()
+}
+
+fun samSites(contacts: List<com.bmscompanion.app.data.mission.Contact>, reference: List<com.bmscompanion.app.data.Threat>): List<SamSite> {
+    if (contacts.isEmpty()) return emptyList()
+    val keys = reference.flatMap { t -> (listOf(t.name) + t.aliases).filter { it.length >= 3 }.map { it.lowercase() to t } }
+        .sortedByDescending { it.first.length }
+    return contacts.filter { it.kind == "sam" }.map { c ->
+        val name = c.name.orEmpty()
+        val hit = name.lowercase().let { n -> keys.firstOrNull { (k, _) -> n.contains(k) } }?.second
+        SamSite(
+            id = c.id,
+            x = c.x,
+            y = c.y,
+            label = hit?.name ?: name.ifBlank { "Air defence" },
+            rangeNm = hit?.let { it.numbers["maxRangeNm"] ?: it.numbers["typicalRangeNm"] },
+            friendly = c.friendly,
+            threatId = hit?.id,
+        )
+    }
+}
+
 fun markpoints(live: Live?): List<NavPoint> = live?.navPoints?.filter { it.type == "MK" || it.type == "DL" }.orEmpty()
 
 fun ownship(live: Live?): Pair<Double, Double>? = live?.takeIf { it.flying && (it.x != 0.0 || it.y != 0.0) }?.let { it.x to it.y }

@@ -68,6 +68,7 @@ import com.bmscompanion.desktop.PcConfig
 import com.bmscompanion.desktop.PcServer
 import com.bmscompanion.desktop.PcServices
 import com.bmscompanion.desktop.SystemTools
+import com.bmscompanion.desktop.Prerequisites
 import com.bmscompanion.desktop.serverPort
 import com.bmscompanion.desktop.bridge.Bridge
 import com.bmscompanion.desktop.bridge.BridgeLog
@@ -246,17 +247,29 @@ private fun AcmiRow() {
  * So the chooser is kept off the shell, it opens where the answer probably is instead of at "This PC", and anything
  * that still goes wrong is written to the log and answered with a null — every folder here can also be typed into the
  * box in Settings.
+ *
+ * `useShellFolder` covers the file list, but not the "Look in" drop-down: the Windows look and feel fills that from
+ * `ShellFolder.get("fileChooserComboBoxFolders")` whatever that property says, and a pilot on 1.3.3 still got a stack
+ * out of it (the dialog itself carried on working, which is exactly what that failure looks like). The whole dialog is
+ * therefore built under the plain cross-platform look and feel, where no Windows shell code runs at all, and the look
+ * and feel is put back the moment it closes. A duller dialog that always opens beats a handsome one that throws.
  */
 fun pickFolder(title: String, start: String? = null): String? = runCatching {
     var picked: String? = null
     val show = Runnable {
-        val chooser = javax.swing.JFileChooser(startFolder(start)).apply {
-            dialogTitle = title
-            fileSelectionMode = javax.swing.JFileChooser.DIRECTORIES_ONLY
-            // keep it on plain java.io.File: no shell icons, no shell places list, nothing that can throw
-            putClientProperty("FileChooser.useShellFolder", false)
+        val previous = javax.swing.UIManager.getLookAndFeel()
+        runCatching { javax.swing.UIManager.setLookAndFeel(javax.swing.UIManager.getCrossPlatformLookAndFeelClassName()) }
+        try {
+            val chooser = javax.swing.JFileChooser(startFolder(start)).apply {
+                dialogTitle = title
+                fileSelectionMode = javax.swing.JFileChooser.DIRECTORIES_ONLY
+                // keep it on plain java.io.File: no shell icons, no shell places list, nothing that can throw
+                putClientProperty("FileChooser.useShellFolder", false)
+            }
+            if (chooser.showOpenDialog(null) == javax.swing.JFileChooser.APPROVE_OPTION) picked = chooser.selectedFile?.path
+        } finally {
+            runCatching { javax.swing.UIManager.setLookAndFeel(previous) }
         }
-        if (chooser.showOpenDialog(null) == javax.swing.JFileChooser.APPROVE_OPTION) picked = chooser.selectedFile?.path
     }
     if (javax.swing.SwingUtilities.isEventDispatchThread()) show.run() else javax.swing.SwingUtilities.invokeAndWait(show)
     picked
@@ -350,7 +363,7 @@ fun ConnectDevicesCard(status: PcStatus) {
         DeviceBlock(Icons.Default.ViewInAr, "VR kneeboard (OpenKneeboard)", Hud.Amber) {
             Text(
                 "Each board is one OpenKneeboard tab with one thing on it — the map, the briefing, your charts. " +
-                    "Set them up in the app: Mission → VR boards, which hands you an address per board.",
+                    "Set them up in the app: Mission → Kneeboards, which hands you an address per board.",
                 fontSize = 13.sp, color = Hud.TextDim,
             )
         }
@@ -519,6 +532,50 @@ fun SetupChecklistCard(status: PcStatus) {
     }
 }
 
+/**
+ * What else this PC needs for the parts of BMS Companion that lean on something Windows may not have.
+ *
+ * The program itself brings its own Java runtime and needs nothing. Two things it does are different: EZBoards is
+ * a .NET program, and a board in a headset is drawn by OpenKneeboard inside a WebView2 window. Without those, the
+ * failure is silent and baffling — a button that does nothing, a kneeboard tab that stays white — so they are
+ * checked here, named, and each one links to the page its own makers publish it on. Nothing is downloaded or
+ * installed by BMS Companion.
+ *
+ * The card shows itself the first time a version runs, and after that only while something is missing.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun PrerequisitesCard(status: PcStatus) {
+    var dismissed by remember { mutableStateOf(false) }
+    val needs = remember(status.dotNet8, dismissed) { Prerequisites.check { status.dotNet8 } }
+    val missing = needs.filter { !it.installed }
+    val firstRun = remember { Prerequisites.firstRunOfThisVersion() }
+    if (dismissed || (missing.isEmpty() && !firstRun)) return
+    SectionCard("What this PC needs", accent = if (missing.isEmpty()) Hud.Green else Hud.Amber) {
+        Text(
+            if (missing.isEmpty()) "Everything optional is already installed. BMS Companion itself needs nothing else."
+            else "BMS Companion runs without these; each one is needed for the part of it named beside it.",
+            fontSize = 12.sp, color = Hud.TextDim,
+        )
+        Spacer(Modifier.height(6.dp))
+        needs.forEach { need ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (need.installed) "✓" else "•", color = if (need.installed) Hud.Green else Hud.Amber, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Column(Modifier.weight(1f).padding(start = 8.dp)) {
+                    Text(need.name, color = Hud.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (need.installed) "Installed · for ${need.forWhat}" else "Not found · needed for ${need.forWhat}",
+                        color = Hud.TextFaint, fontSize = 11.sp,
+                    )
+                }
+                if (!need.installed) SmallButton("Get it", null, primary = false) { SystemTools.openUrl(need.url) }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        SmallButton("Done", null, primary = false) { Prerequisites.markSeen(); dismissed = true }
+    }
+}
+
 /** Settings of the part that reads Falcon BMS: folders, AWACS feed, EZBoards, demo mode, port. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -558,7 +615,7 @@ fun BmsSettingsCard() {
         Overline("HTML BRIEFING TOOL (UOAF HTML_BRIEF)")
         Text(
             "Where the tool itself lives. You run it and export as you always have; BMS Companion only reads the " +
-                "pages it last wrote. Run it from Mission → Briefing → HTML Briefing generated kneeboard.",
+                "pages it last wrote. Run it from Mission → Kneeboards → HTML Briefing kneeboard.",
             color = Hud.TextDim, fontSize = 12.sp,
         )
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -580,7 +637,7 @@ fun BmsSettingsCard() {
                 kb == null || !kb.configured -> "Not set. BMS ships html_brief in Tools\\html_brief_win — choose that folder and its exported pages show in Briefing, on your devices and as a VR board."
                 !kb.available -> "Folder found: ${kb.path}. Nothing exported yet — print the briefing in BMS, then export in the HTML Briefing window."
                 kb.stale -> "${kb.pages} pages exported, but the briefing has been printed since. Export again to bring them up to date."
-                else -> "${kb.pages} pages, ready: Briefing → HTML Briefing generated kneeboard, and a row option in Mission → VR boards."
+                else -> "${kb.pages} pages, ready under Mission → Kneeboards → HTML Briefing kneeboard, and as a board of its own."
             },
             color = if (kb?.stale == true) Hud.Amber else Hud.TextDim, fontSize = 12.sp,
         )
