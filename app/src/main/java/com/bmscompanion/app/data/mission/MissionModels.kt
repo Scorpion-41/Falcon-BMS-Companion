@@ -159,13 +159,28 @@ data class Contact(
     val coalition: String? = null,
     val color: String? = null,
     val own: Boolean = false,
+    /**
+     * On your side. Not the same thing as the same [coalition]: BMS writes the *country* there ("Hellas", "U.S."), so
+     * the server decides this from the campaign's own table of which teams are allied or friendly.
+     */
     val friendly: Boolean = false,
     /** Tacview extras when BMS sends them: indicated airspeed (kt), Mach, fuel (lb), id of the contact this one has locked. */
     val ias: Double? = null,
     val mach: Double? = null,
     val fuelLb: Double? = null,
     val locked: String? = null,
-)
+    /** In your own flight: the same callsign with another number — "Tiger12" when you are "Tiger11". */
+    val wingman: Boolean = false,
+    /** A team the campaign says your side is neutral toward, or has no relations with: neither friend nor foe. */
+    val neutral: Boolean = false,
+) {
+    /**
+     * On the other side: not you, not an ally, not a neutral. Everything that counts threats uses this rather than
+     * "not friendly", which used to sweep neutrals — and, before the server read the campaign's alliances, every
+     * allied nation's aircraft — into the enemy.
+     */
+    val hostile: Boolean get() = !own && !friendly && !neutral
+}
 
 @Serializable
 data class Contacts(

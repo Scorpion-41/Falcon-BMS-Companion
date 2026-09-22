@@ -753,7 +753,7 @@ private fun picturePages(env: MissionEnv): List<BoardPage> {
     val contacts by MissionLink.contacts.collectAsState()
     val live by MissionLink.live.collectAsState()
     val all = contacts?.contacts.orEmpty()
-    val hostiles = all.filter { !it.friendly && !it.own && it.kind == "air" }
+    val hostiles = all.filter { it.hostile && it.kind == "air" }
     if (hostiles.isEmpty()) return listOf(BoardPage("Picture") {
         BoardNotice("No hostile air", "The picture comes from BMS's Tacview feed — press F in the cockpit to start ACMI recording.")
     })

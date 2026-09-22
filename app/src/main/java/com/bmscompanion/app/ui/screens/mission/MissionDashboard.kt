@@ -575,7 +575,7 @@ private fun BullseyeCard(d: MapData) {
             BigStat("YOU FROM BULLS", own?.let { bra(bull.first, bull.second, it.first, it.second) } ?: "—", Modifier.weight(1f), Hud.Cyan)
             BigStat("BULLS FROM YOU", own?.let { bra(it.first, it.second, bull.first, bull.second) } ?: "—", Modifier.weight(1f))
         }
-        val nearest = d.ctcs.filter { !it.friendly && !it.own && it.kind in setOf("air", "heli") && !it.isCrew() }
+        val nearest = d.ctcs.filter { it.hostile && it.kind in setOf("air", "heli") && !it.isCrew() }
             .minByOrNull { c -> own?.let { rangeNm(it.first, it.second, c.x, c.y) } ?: rangeNm(bull.first, bull.second, c.x, c.y) }
         if (nearest != null) {
             Spacer(Modifier.height(8.dp))

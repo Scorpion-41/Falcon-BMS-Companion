@@ -197,7 +197,7 @@ object PlannedRoutes {
      *
      * The fields before the route are fixed in size, so the route is found by counting past them.
      */
-    private fun routeAt(body: ByteArray, at: Int, names: Map<Int, String>): PlannedRoute? {
+    internal fun routeAt(body: ByteArray, at: Int, names: Map<Int, String>): PlannedRoute? {
         var p = at + 2 + 8 + 2 // the type, the unit's id, and the copy of the type
         p += 2 + 2 + 4 // where it is, and its height
         p += 4 + 2 + 2 + 1 + 2 + 4 // when it was last seen, its flags, whose it is, its campaign id, its last check
@@ -284,12 +284,9 @@ object PlannedRoutes {
      * Every unit record starts with a number that points into the theater's class table; the table says what the
      * thing is. A theater brings its own table, and it never changes while BMS is installed, so it is read once.
      */
-    private fun flightTypes(theaterDir: File, install: BmsInstall): Set<Int>? {
+    internal fun flightTypes(theaterDir: File, install: BmsInstall): Set<Int>? {
         flightTypesByDir[theaterDir.path]?.let { return it }
-        val table = listOfNotNull(
-            File(theaterDir, "TerrData\\Objects\\Falcon4_CT.xml"),
-            install.baseDir?.let { File(it, "Data\\TerrData\\Objects\\Falcon4_CT.xml") },
-        ).firstOrNull { it.isFile } ?: return null
+        val table = classTable(theaterDir, install) ?: return null
         val found = HashSet<Int>()
         runCatching {
             table.bufferedReader().use { reader ->
@@ -320,7 +317,41 @@ object PlannedRoutes {
     }
 
     /** The campaign's string table: "AIR REFUEL", "CAP", "SEAD" and the rest, by number. */
-    private fun missionNames(theaterDir: File, install: BmsInstall): Map<Int, String> {
+    /**
+     * The class table a theater's units are numbered by.
+     *
+     * Not necessarily in the theater's own folder. A campaign pack — Hellas WCP is one — ships a campaign and nothing
+     * else, and its theater definition (`Theaterdefinition\\*.tdf`) names the theater whose objects it uses:
+     * `objectdir Add-On Hellas\\Terrdata\\objects`. Looking only in the pack's folder found nothing, fell through to
+     * Korea's table, and every aircraft the pack's parent theater adds — the Greek F-16s, the HAF EMB-145H AWACS, 6500
+     * and up — was not a flight. Your own flight among them: the save then held nothing of yours, was not believed to be
+     * your mission, and no track was drawn at all; the briefing's circle stood in. So the definition is read first, then
+     * the theater's own folder, then Korea's. File names are matched without regard to case (FALCON4_CT.XML turns up).
+     */
+    private fun classTable(theaterDir: File, install: BmsInstall): File? {
+        val data = install.baseDir?.let { File(it, "Data") }
+        val declared = objectDirOf(theaterDir)?.let { rel -> data?.let { File(it, rel) } }
+        val places = listOfNotNull(declared, File(theaterDir, "TerrData\\Objects"), data?.let { File(it, "TerrData\\Objects") })
+        return places.firstNotNullOfOrNull { dir ->
+            runCatching { dir.listFiles()?.firstOrNull { it.isFile && it.name.equals("Falcon4_CT.xml", true) } }.getOrNull()
+        }
+    }
+
+    /** The `objectdir` a theater definition names, relative to the Data folder, or null when it names none. */
+    private fun objectDirOf(theaterDir: File): String? {
+        val defs = listOf(File(theaterDir, "Theaterdefinition"), File(theaterDir, "TerrData\\theaterdefinition"))
+            .flatMap { d -> runCatching { d.listFiles { f -> f.isFile && f.name.endsWith(".tdf", true) }?.toList() }.getOrNull().orEmpty() }
+        for (tdf in defs) {
+            val line = runCatching { tdf.readLines(Charsets.ISO_8859_1) }.getOrDefault(emptyList())
+                .map { it.trim() }
+                .firstOrNull { it.startsWith("objectdir", ignoreCase = true) && !it.startsWith("#") }
+                ?: continue
+            return line.substring("objectdir".length).trim().takeIf { it.isNotEmpty() }
+        }
+        return null
+    }
+
+    internal fun missionNames(theaterDir: File, install: BmsInstall): Map<Int, String> {
         namesByDir[theaterDir.path]?.let { return it }
         val file = listOfNotNull(
             File(theaterDir, "Campaign\\Strings.txt"),

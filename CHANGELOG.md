@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.3.5 (BMS 4.38) — September 2026
+
+**Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install** — everything you have set up carries over.
+
+### Friend and foe, by alliance
+- **Allies from other nations are friendly.** BMS reports an aircraft's country, not its side, so an American jet flying for Greece used to be drawn as an enemy. The app now reads who is allied with whom from the campaign itself — in every theater.
+- **Neutrals are neither**: drawn as a square in their own colour, and no longer counted as threats in the Picture, the Dashboard, VR boards or the AWACS page.
+- **Your wingmen stand out** in lime green: you in amber, your flight in lime, the rest of your side in blue.
+
+### The map
+- **Airfields look like airfields** — a ring with the field's runways drawn across it at their real headings. Your home base is solid, your alternate an open ring, every other field small and faint.
+- **The live map on a VR board is brighter.** Symbols and labels were drawn in the board's muted paper colours and sank into the terrain; they now use the same bright colours as the app, while the rest of the board keeps its paper look.
+
+### Fixed
+- **Tanker and AWACS showed as a circle instead of their planned track** in campaign packs such as Hellas WCP, which borrow their aircraft from another theater. The app now finds them there.
+- **Tankers and AWACS from other times of day could appear** as if they were on station during your mission.
+
 ## 1.3.4 (BMS 4.38) — September 2026
 
 **Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. iPhone, iPad and any other browser need nothing installed — they open the PC's address. Installing over 1.3.3 keeps everything you have set up.

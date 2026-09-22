@@ -85,7 +85,32 @@ private val PaperNight = Skin(
 object HudSkin {
     var board by mutableStateOf(false)
     var night by mutableStateOf(false)
-    val current: Skin get() = if (!board) HudDark else if (night) PaperNight else Paper
+
+    /**
+     * True for the length of one map drawing pass on a board ([inMapInks]). Deliberately not Compose state: it is set
+     * and cleared inside a single draw, so nothing observes it and nothing recomposes because of it.
+     */
+    var mapPass = false
+
+    val current: Skin get() = if (!board || mapPass) HudDark else if (night) PaperNight else Paper
+}
+
+/**
+ * Draws [block] in the screen's inks, even on a kneeboard.
+ *
+ * A board's map is a picture of the ground, not a sheet of paper. The paper inks — sepia, slate, brick, mixed down on
+ * purpose so that nothing on a page jumps — sank into the relief: route labels, friendlies, hostiles and your own jet
+ * could hardly be read in the headset, while the tanker and AWACS tracks, which have fixed bright colours, read fine.
+ * So the map's symbols and labels are drawn as the app draws them; the page around the map keeps its paper.
+ */
+inline fun <T> inMapInks(block: () -> T): T {
+    val was = HudSkin.mapPass
+    HudSkin.mapPass = true
+    try {
+        return block()
+    } finally {
+        HudSkin.mapPass = was
+    }
 }
 
 /**
@@ -110,6 +135,9 @@ object Hud {
 
     /** True while the app is drawing on paper rather than on a screen. */
     val onPaper: Boolean get() = HudSkin.board
+
+    /** On paper and drawing in paper inks — false inside a board's map, which is drawn in screen inks. */
+    val paperInks: Boolean get() = HudSkin.board && !HudSkin.mapPass
 }
 
 private fun schemeFor(s: Skin) = if (s.light) {

@@ -48,6 +48,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.StrokeCap
+import com.bmscompanion.app.ui.theme.inMapInks
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.LocalDensity
@@ -124,15 +126,22 @@ object MapLayers {
 
 // Symbol colours. On a board they come from the skin instead, so a printed page is drawn in printed inks
 // rather than in the HUD's cyan and red.
-val Friendly: Color get() = if (Hud.onPaper) Hud.Blue else Color(0xFF56C8F5)
-val Hostile: Color get() = if (Hud.onPaper) Hud.Red else Color(0xFFFF5A5F)
-val Neutral: Color get() = if (Hud.onPaper) Hud.Amber else Color(0xFFFFD27A)
+val Friendly: Color get() = if (Hud.paperInks) Hud.Blue else Color(0xFF56C8F5)
+val Hostile: Color get() = if (Hud.paperInks) Hud.Red else Color(0xFFFF5A5F)
+val Neutral: Color get() = if (Hud.paperInks) Hud.Amber else Color(0xFFFFD27A)
+
+/**
+ * Your own flight. Lime rather than the tanker's mint, and well away from your own amber, so the three read apart at
+ * a glance: you, the jets flying on your wing, and everyone else on your side.
+ */
+val Wingman: Color get() = if (Hud.paperInks) Hud.Green else Color(0xFFB4F04A)
 
 fun contactColor(c: Contact) = when {
     c.own -> Hud.Amber
+    c.wingman -> Wingman
     supportColor(c) != null -> supportColor(c)!!
     c.friendly -> Friendly
-    c.coalition.isNullOrBlank() -> Neutral
+    c.neutral || c.coalition.isNullOrBlank() -> Neutral
     else -> Hostile
 }
 
@@ -290,7 +299,7 @@ fun LiveMap(
     val hitPx = with(density) { 30.dp.toPx() }
     var layersOpen by remember { mutableStateOf(!compactControls) }
     val visibleContacts = d.ctcs.filter { c ->
-        c.kind != "bullseye" && c.kind != "sam" && !c.own && MapLayers.traffic && (c.friendly || MapLayers.hostiles)
+        c.kind != "bullseye" && c.kind != "sam" && !c.own && MapLayers.traffic && (!c.hostile || MapLayers.hostiles)
     }
 
     // First view: the route (or ownship) instead of the whole theater.
@@ -315,8 +324,6 @@ fun LiveMap(
     }
 
     val labelStyle = remember { TextStyle(color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, shadow = MapShadow) }
-    val stptStyle = remember { TextStyle(color = Hud.Amber, fontSize = 11.sp, fontWeight = FontWeight.Bold, shadow = MapShadow) }
-    val fieldStyle = remember { TextStyle(color = Hud.Green, fontSize = 11.sp, fontWeight = FontWeight.Bold, shadow = MapShadow) }
 
     Box(modifier) {
         TheaterMap(
@@ -335,23 +342,41 @@ fun LiveMap(
                 val best = cands.minByOrNull { it.second }
                 onSel(if (best != null && best.second < hitPx * 1.6) best.first else MapSel.Pt(x, y))
             },
-        ) { pr ->
+        ) { pr -> inMapInks {
+            // the colours are taken here, inside the pass: remembered once, they kept whatever ink was current when
+            // the map first appeared — the paper's, on a board
+            val stptStyle = labelStyle.copy(color = Hud.Amber)
+            val fieldStyle = labelStyle.copy(color = Hud.Green)
             val placed = ArrayList<androidx.compose.ui.geometry.Rect>()
             fun on(p: Offset) = p.x > -60 && p.y > -60 && p.x < size.width + 60 && p.y < size.height + 60
 
-            // airfields: mission bases highlighted, others as small dots
+            // Airfields, drawn as airfields: a ring with the field's own runways across it, at their real headings.
+            // Where you take off and land is solid, the alternate an open ring, every other field small and faint —
+            // three kinds that read apart without a legend. Home and alternate are drawn later, over the route: the
+            // take-off and landing steerpoints sit on them, and their rings hid the symbol beneath.
+            val missionFields = ArrayList<Triple<Offset, List<Offset>, FieldMark>>()
             if (MapLayers.fields) env.set?.airports?.forEach { a ->
                 val p = pr.toScreen(a.x, a.y)
                 if (!on(p)) return@forEach
                 val role = when (a.id) { d.depField?.id -> "DEP"; d.arrField?.id -> "ARR"; d.altField?.id -> "ALT"; else -> null }
+                // each runway once — parallel ones are one line on a symbol this size
+                val runways = a.runways.mapNotNull { it.ends.firstOrNull()?.headingTrue }
+                    .map { ((it % 180) + 180) % 180 }
+                    .distinctBy { (it / 6).toInt() }
+                    .map { h ->
+                        val rad = Math.toRadians(h)
+                        val v = pr.toScreen(a.x + cos(rad) * 6076.12, a.y + sin(rad) * 6076.12) - p
+                        val len = v.getDistance()
+                        if (len > 0f) v / len else Offset(0f, -1f)
+                    }
+                    .ifEmpty { listOf(Offset(0.7071f, -0.7071f)) }
                 if (role != null) {
-                    drawCircle(Color.Black.copy(alpha = 0.6f), 11f, p)
-                    drawCircle(Hud.Green, 8f, p)
                     val tag = if (d.depField?.id == d.arrField?.id && role != "ALT") "HOME" else role
-                    placeText(tm, "$tag ${a.icao ?: a.name}", p + Offset(12f, -8f), fieldStyle, placed)
+                    missionFields += Triple(p, runways, if (role == "ALT") FieldMark.ALTERNATE else FieldMark.HOME)
+                    // the name is placed now all the same, so it keeps its place ahead of the labels that follow
+                    placeText(tm, "$tag ${a.icao ?: a.name}", p + Offset(15f, -8f), fieldStyle, placed)
                 } else {
-                    drawCircle(Color.Black.copy(alpha = 0.5f), 5.5f, p)
-                    drawCircle(Hud.Green.copy(alpha = 0.55f), 3.5f, p)
+                    drawAirfield(p, runways, FieldMark.OTHER)
                 }
             }
 
@@ -489,6 +514,9 @@ fun LiveMap(
                 val text = if (MapLayers.labels && pr.scale >= 2.5f) "${s.n} ${s.desc ?: ""}".trim() else "${s.n}"
                 placeText(tm, text, p + Offset(11f, -18f), stptStyle, placed)
             }
+            // home and alternate, over the steerpoints that sit on them
+            missionFields.forEach { (p, runways, mark) -> drawAirfield(p, runways, mark) }
+
             // markpoints and datalink points
             if (MapLayers.route) d.marks.forEach { m ->
                 val p = pr.toScreen(m.x, m.y)
@@ -517,7 +545,7 @@ fun LiveMap(
                 drawCircle(Hud.Magenta, 22f, p, style = Stroke(3f))
                 d.ownPos?.let { (ox, oy) -> drawLine(Hud.Magenta.copy(alpha = 0.6f), pr.toScreen(ox, oy), p, 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))) }
             }
-        }
+        } }
 
         // Top controls. The full-screen map on a kneeboard has no chip row of its own: MissionMapPane puts the same
         // options behind the ⋯ button, and the corner above is left to the floating sections button.
@@ -646,10 +674,49 @@ fun DrawScope.drawContact(c: Contact, p: Offset, col: Color, pr: MapProjection) 
             drawCircle(Color.Black.copy(alpha = 0.6f), 9f, p)
             drawCircle(col, 7f, p, style = Stroke(3f))
             if (c.kind == "heli") drawCircle(col, 2.5f, p)
+        } else if (c.neutral) {
+            // neither side: a square, the way a picture marks a neutral, so it never passes for a threat
+            drawRect(Color.Black.copy(alpha = 0.6f), p - Offset(8f, 8f), androidx.compose.ui.geometry.Size(16f, 16f))
+            drawRect(col, p - Offset(6.5f, 6.5f), androidx.compose.ui.geometry.Size(13f, 13f), style = Stroke(2.5f))
         } else {
             val path = Path().apply { moveTo(p.x, p.y - 9f); lineTo(p.x + 9f, p.y); lineTo(p.x, p.y + 9f); lineTo(p.x - 9f, p.y); close() }
             drawPath(path, Color.Black.copy(alpha = 0.6f), style = Stroke(6f))
             drawPath(path, col, style = Stroke(3f))
+        }
+    }
+}
+
+private enum class FieldMark { HOME, ALTERNATE, OTHER }
+
+/**
+ * The chart symbol for an airfield: a ring and its runways, [runways] being unit screen directions. Home is a solid
+ * disc with the runways cut dark through it; the alternate an open ring with the runways drawn across and past it;
+ * any other field the same, small and faint. Each sits on a dark halo so it holds on relief and satellite alike.
+ */
+private fun DrawScope.drawAirfield(p: Offset, runways: List<Offset>, mark: FieldMark) {
+    val ink = Hud.Green
+    val halo = Color.Black.copy(alpha = 0.6f)
+    when (mark) {
+        FieldMark.HOME -> {
+            val r = 10f
+            drawCircle(halo, r + 3f, p)
+            drawCircle(ink, r, p)
+            runways.forEach { v -> drawLine(Color.Black.copy(alpha = 0.8f), p - v * (r * 0.78f), p + v * (r * 0.78f), 3.5f, cap = StrokeCap.Round) }
+        }
+        FieldMark.ALTERNATE -> {
+            val r = 9f
+            drawCircle(halo, r, p, style = Stroke(6f))
+            runways.forEach { v -> drawLine(halo, p - v * (r + 4f), p + v * (r + 4f), 7f, cap = StrokeCap.Round) }
+            drawCircle(ink, r, p, style = Stroke(2.5f))
+            runways.forEach { v -> drawLine(ink, p - v * (r + 4f), p + v * (r + 4f), 3f, cap = StrokeCap.Round) }
+        }
+        FieldMark.OTHER -> {
+            val r = 5f
+            val faint = ink.copy(alpha = 0.75f)
+            drawCircle(halo, r, p, style = Stroke(4f))
+            runways.forEach { v -> drawLine(halo, p - v * (r + 2.5f), p + v * (r + 2.5f), 4f, cap = StrokeCap.Round) }
+            drawCircle(faint, r, p, style = Stroke(1.5f))
+            runways.forEach { v -> drawLine(faint, p - v * (r + 2.5f), p + v * (r + 2.5f), 1.75f, cap = StrokeCap.Round) }
         }
     }
 }
@@ -707,7 +774,7 @@ fun SelectionCard(env: MissionEnv, sel: MapSel, d: MapData, modifier: Modifier, 
             // an air defence is not a contact to intercept: what is wanted is the system, its reach and where it is
             if (c.kind == "sam") {
                 val site = d.sams.firstOrNull { it.id == c.id }
-                accent = if (c.friendly) Friendly else Hostile
+                accent = if (c.friendly) Friendly else if (c.neutral) Neutral else Hostile
                 title = site?.label ?: c.name ?: "Air defence"
                 subtitle = listOfNotNull(c.name?.takeIf { it != title }, c.coalition).joinToString(" · ").ifBlank { null }
                 rows += "RING" to (site?.rangeNm?.let { "${it.toInt()} nm engagement" } ?: "range not known")
@@ -812,7 +879,7 @@ private fun airportKindShort(a: Airport) = com.bmscompanion.app.ui.screens.airpo
 /** AWACS-style picture: nearest hostile air contacts first, ejected crews last, with bullseye position and BRAA. */
 @Composable
 fun PictureCard(ctcs: List<Contact>, own: Pair<Double, Double>?, ownHdg: Double, bull: Pair<Double, Double>?, onPick: (Contact) -> Unit) {
-    val hostiles = ctcs.filter { !it.friendly && !it.own && (it.kind in setOf("air", "heli", "missile") || it.isCrew()) }
+    val hostiles = ctcs.filter { it.hostile && (it.kind in setOf("air", "heli", "missile") || it.isCrew()) }
     val ref = own ?: bull
     val sorted = hostiles.sortedWith(compareBy({ it.isCrew() }, { c -> ref?.let { rangeNm(it.first, it.second, c.x, c.y) } ?: 0.0 }))
     val threats = hostiles.count { !it.isCrew() }

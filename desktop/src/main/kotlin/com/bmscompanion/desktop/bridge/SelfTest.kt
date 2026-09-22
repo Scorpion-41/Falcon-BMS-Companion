@@ -156,9 +156,154 @@ object SelfTest {
                     appendLine("first points with y == 0: ${routes.count { it.points.firstOrNull()?.y == 0.0 }} of ${routes.size}")
                 })
             }
-            args.size == 2 && args[0] == "--atotest" -> {
+            // --teamtest out.txt : the parts of the current save, and the team part laid out as bytes — to find who is
+            // allied with whom, which the Tacview stream does not say (its "Coalition" is the country).
+            args.size == 2 && args[0] == "--teamtest" -> {
                 val install = BmsInstall().apply { refresh(Bridge.settings.value.BmsDirOverride) }
                 val source = PlannedRoutes.sourceFor(install, install.theater)
+                val out = File(args[1])
+                if (source == null) { out.writeText("no campaign save found"); return true }
+                val blob = source.file.readBytes()
+                val parts = MissionArchive.parts(blob)
+                out.writeText(buildString {
+                    appendLine("file: ${source.file.name} (${blob.size} bytes), theater ${install.theater}")
+                    parts.forEach { appendLine("  ${it.name}  at ${it.at}  ${it.length} bytes") }
+                    val teams = TeamRelations.read(source.file)
+                    val word = mapOf(0 to "-", 1 to "ALLIED", 2 to "friendly", 3 to "neutral", 4 to "hostile", 5 to "WAR")
+                    appendLine()
+                    appendLine("teams read: ${teams.size}")
+                    teams.forEach { t ->
+                        appendLine("  %d %-14s %s".format(t.number, t.name, teams.joinToString("  ") { o -> "%s=%s".format(o.name, word[t.stance[o.number]]) }))
+                    }
+                    parts.filter { it.name.endsWith(".tea", true) }.forEach { p ->
+                        val b = blob.copyOfRange(p.at, p.at + p.length)
+                        appendLine()
+                        appendLine("=== ${p.name} raw, ${b.size} bytes")
+                        for (row in b.indices step 32) {
+                            val hex = (row until minOf(row + 32, b.size)).joinToString(" ") { "%02x".format(b[it].toInt() and 0xFF) }
+                            val txt = (row until minOf(row + 32, b.size)).joinToString("") { val c = b[it].toInt() and 0xFF; if (c in 32..126) c.toChar().toString() else "." }
+                            appendLine("%6d  %-95s  %s".format(row, hex, txt))
+                        }
+                    }
+                })
+            }
+            // --sidetest <recording.txt> <callsign> <stop at seconds> out.txt : a recording replayed through the Tacview
+            // client up to that moment, with ownship where that callsign was, and the picture it gives — who is
+            // friendly, who hostile, who neutral, who is in your flight. Sides come from the current save's alliances.
+            args.size == 5 && args[0] == "--sidetest" -> {
+                val install = BmsInstall().apply { refresh(Bridge.settings.value.BmsDirOverride) }
+                val teams = TeamRelations.current(install, install.theater)
+                val client = TacviewClient().apply { relation = { from, toward -> TeamRelations.stance(teams, from, toward) } }
+                val stopAt = args[3].toDouble()
+                var ownId: String? = null
+                File(args[1]).useLines { lines ->
+                    for (line in lines) {
+                        if (line.startsWith("#") && (line.substring(1).toDoubleOrNull() ?: 0.0) > stopAt) break
+                        if (ownId == null && line.contains("CallSign=${args[2]},")) ownId = line.substringBefore(',')
+                        client.feed(line)
+                    }
+                }
+                // where that callsign is now, from the client's own reading of it
+                val probe = client.snapshot(null, null).contacts.firstOrNull { it.id == ownId }
+                val pic = client.snapshot(probe?.x, probe?.y)
+                File(args[4]).writeText(buildString {
+                    appendLine("teams from the save: ${teams.size}; own ${args[2]} = id $ownId")
+                    val air = pic.contacts.filter { it.kind == "air" || it.kind == "heli" }
+                    fun side(c: com.bmscompanion.app.data.mission.Contact) = when {
+                        c.own -> "OWN"; c.wingman -> "WINGMAN"; c.friendly -> "friendly"; c.neutral -> "neutral"; else -> "HOSTILE"
+                    }
+                    air.groupBy { "${it.coalition} -> ${side(it)}" }.toSortedMap().forEach { (k, v) -> appendLine("  %-28s %d".format(k, v.size)) }
+                    appendLine("own: " + air.filter { it.own }.joinToString { it.group ?: it.id })
+                    appendLine("wingmen: " + air.filter { it.wingman }.joinToString { it.group ?: it.id })
+                    // and what the old rule — same coalition name — would have called hostile that is not
+                    val wrong = air.filter { !it.own && it.friendly && !it.coalition.equals(pic.contacts.firstOrNull { o -> o.own }?.coalition, true) }
+                    appendLine("allies of another nation, hostile under the old rule: ${wrong.size} (${wrong.map { it.coalition }.distinct()})")
+                })
+            }
+            // --teamfile out.txt <save> [<save>…] : each save's team table, or why it could not be read
+            args.size >= 3 && args[0] == "--teamfile" -> {
+                val word = mapOf(0 to "-", 1 to "ALLY", 2 to "frnd", 3 to "neut", 4 to "host", 5 to "WAR")
+                File(args[1]).writeText(buildString {
+                    args.drop(2).forEach { path ->
+                        val f = File(path)
+                        val teams = runCatching { TeamRelations.read(f) }.getOrDefault(emptyList())
+                        appendLine("=== ${f.parentFile?.parentFile?.name}/${f.name}: ${if (teams.isEmpty()) "NOT READ" else "${teams.size} teams"}")
+                        teams.forEach { t ->
+                            appendLine("  %d %-18s %s".format(t.number, t.name, teams.joinToString(" ") { o -> word[t.stance[o.number]] ?: "?" }))
+                        }
+                    }
+                })
+            }
+            // --supporttest <save> <your flight callsign, e.g. Tiger1> out.txt : your route taken from the save by callsign,
+            // then every tanker and AWACS put through the same tests Bridge.supportTracks applies, with the reason for
+            // each one kept or dropped — for "why was the AWACS a circle and not a track".
+            args.size == 4 && args[0] == "--supporttest" -> {
+                val install = BmsInstall().apply { refresh(Bridge.settings.value.BmsDirOverride) }
+                val save = File(args[1])
+                val routes = PlannedRoutes.read(PlannedRoutes.Source(save, save.parentFile.parentFile), install)
+                fun hm(ms: Long) = "%02d:%02d".format((ms / 3_600_000) % 24, (ms / 60_000) % 60)
+                File(args[3]).writeText(buildString {
+                    appendLine("save ${save.name}: ${routes.size} routes")
+                    appendLine("mission names in it: " + routes.mapNotNull { it.missionName }.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.joinToString { "${it.key} (${it.value})" })
+                    appendLine("callsigns: " + routes.mapNotNull { it.callsign }.sorted().joinToString(" "))
+                    val mine = routes.firstOrNull { it.callsign.equals(args[2], true) }
+                    if (mine == null) { appendLine("no route with callsign ${args[2]}"); return@buildString }
+                    val timed = mine.points.filter { it.arriveMs > 0 }
+                    val from = timed.minOf { it.arriveMs }
+                    val to = timed.maxOf { maxOf(it.arriveMs, it.departMs) }
+                    appendLine("yours ${mine.callsign} ${mine.missionName}: ${hm(from)}-${hm(to)}, ${mine.points.size} points")
+                    routes.filter { r ->
+                        val n = r.missionName.orEmpty()
+                        n.contains("REFUEL", true) || n.contains("AWACS", true) || n.contains("AEW", true) || n.contains("ABCCC", true) ||
+                            n.contains("EW", true) || n.contains("C2", true) || n.contains("JSTARS", true)
+                    }.forEach { r ->
+                        val n = r.missionName.orEmpty()
+                        val role = when {
+                            n.contains("REFUEL", true) -> "Tanker"
+                            n.contains("AWACS", true) || n.contains("AEW", true) || n.contains("ABCCC", true) -> "AWACS"
+                            else -> "NOT RECOGNISED"
+                        }
+                        val longest = r.points.indices.maxByOrNull { r.points[it].departMs - r.points[it].arriveMs } ?: 0
+                        val st = r.points[longest]
+                        val overlap = !(st.departMs < from || st.arriveMs > to)
+                        val verdict = if (role == "NOT RECOGNISED") "DROPPED: mission name" else if (!overlap) "DROPPED: not on station while you fly" else "KEPT"
+                        appendLine("--- ${r.callsign} '$n' -> $role; station at point $longest ${hm(st.arriveMs)}-${hm(st.departMs)}; $verdict")
+                        r.points.forEachIndexed { i, p -> appendLine("      %d  %s-%s  action %d  %.0f ft".format(i, hm(p.arriveMs), hm(p.departMs), p.action, p.altFt)) }
+                    }
+                })
+            }
+            // --anytype <save> out.txt : routes read at every double-written type, flight or not by the class table
+            args.size == 3 && args[0] == "--anytype" -> {
+                val install = BmsInstall().apply { refresh(Bridge.settings.value.BmsDirOverride) }
+                val save = File(args[1])
+                val dir = save.parentFile.parentFile
+                val types = PlannedRoutes.flightTypes(dir, install).orEmpty()
+                val names = PlannedRoutes.missionNames(dir, install)
+                val blob = save.readBytes()
+                val uni = MissionArchive.parts(blob).first { it.name.endsWith(".uni", true) }
+                val body = MissionArchive.contents(blob, uni)!!.bytes
+                File(args[2]).writeText(buildString {
+                    appendLine("class table flight types: ${types.size} (range ${types.minOrNull()}..${types.maxOrNull()})")
+                    var at = 0
+                    var outside = 0
+                    while (at + 12 < body.size) {
+                        val ty = MissionArchive.int16(body, at)
+                        if (ty in 1..9000 && MissionArchive.int16(body, at + 10) == ty && ty !in types) {
+                            PlannedRoutes.routeAt(body, at, names)?.let { r ->
+                                outside++
+                                appendLine("  type $ty NOT in the flight types: ${r.callsign} '${r.missionName}' ${r.points.size} points")
+                            }
+                        }
+                        at++
+                    }
+                    appendLine("routes read at types the table does not call flights: $outside")
+                })
+            }
+            // --atotest out.txt [save] : the current theater's newest save, or the one named
+            args.size in 2..3 && args[0] == "--atotest" -> {
+                val install = BmsInstall().apply { refresh(Bridge.settings.value.BmsDirOverride) }
+                val source = args.getOrNull(2)?.let { File(it) }?.let { PlannedRoutes.Source(it, it.parentFile.parentFile) }
+                    ?: PlannedRoutes.sourceFor(install, install.theater)
                 val out = File(args[1])
                 if (source == null) {
                     out.writeText("no campaign save or engagement found under ${install.baseDir}")

@@ -67,8 +67,11 @@ object Bridge {
         // and last times are the window you are airborne for. A tanker that lands before you push, or takes off
         // after you are home, is not your tanker and is not drawn.
         val mine = routes.maxByOrNull { r -> own.count { (x, y) -> r.points.any { hypot(it.x - x, it.y - y) < 1.5 * 6076.12 } } }
-        val from = mine?.points?.minOfOrNull { it.arriveMs } ?: 0L
-        val to = mine?.points?.maxOfOrNull { maxOf(it.arriveMs, it.departMs) } ?: Long.MAX_VALUE
+        // Only points the campaign has put a time on. A route ends with an untimed point (an alternate landing, at
+        // 00:00), and counting it opened your window at midnight — every support flight of the day then "overlapped".
+        val timed = mine?.points?.filter { it.arriveMs > 0 }.orEmpty()
+        val from = timed.minOfOrNull { it.arriveMs } ?: 0L
+        val to = timed.maxOfOrNull { maxOf(it.arriveMs, it.departMs) } ?: Long.MAX_VALUE
 
         // the tanker and the AWACS your flight was given, as the sim itself names them
         val voice = snapshot().live.voice
@@ -111,7 +114,10 @@ object Bridge {
     }
 
 
-    val tacview = TacviewClient()
+    /** The picture's sides come from the campaign's own alliances — see [TeamRelations] for why the feed cannot say. */
+    val tacview = TacviewClient().apply {
+        relation = { from, toward -> TeamRelations.stance(TeamRelations.current(install, install.theater), from, toward) }
+    }
     val ez = EzBoardsRunner()
     val shots = ScreenshotStore()
     val acmi = AcmiStore()

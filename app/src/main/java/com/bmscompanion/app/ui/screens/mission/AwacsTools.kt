@@ -254,7 +254,7 @@ data class AwAlert(val text: String, val severity: Int, val focus: Contact)
 fun awacsAlerts(ctcs: List<Contact>, commitNm: Int): List<AwAlert> {
     val byId = ctcs.associateBy { it.id }
     val friendlies = ctcs.filter { it.friendly && it.isAirborneTrack() && !it.isCrew() }
-    val hostiles = ctcs.filter { !it.friendly && it.isAirborneTrack() && !it.isCrew() && !it.coalition.isNullOrBlank() }
+    val hostiles = ctcs.filter { it.hostile && it.isAirborneTrack() && !it.isCrew() && !it.coalition.isNullOrBlank() }
     val out = ArrayList<AwAlert>()
     friendlies.forEach { f ->
         val who = f.group ?: f.name ?: "Friendly"
@@ -267,9 +267,9 @@ fun awacsAlerts(ctcs: List<Contact>, commitNm: Int): List<AwAlert> {
     }
     ctcs.forEach { c ->
         val target = c.locked?.let { byId[it] } ?: return@forEach
-        if (!c.friendly && target.friendly) out += AwAlert("${target.group ?: target.name} SPIKED by ${c.group ?: c.name}", 3, target)
+        if (c.hostile && target.friendly) out += AwAlert("${target.group ?: target.name} SPIKED by ${c.group ?: c.name}", 3, target)
     }
-    ctcs.filter { it.kind == "missile" && !it.friendly }.forEach { m ->
+    ctcs.filter { it.kind == "missile" && it.hostile }.forEach { m ->
         friendlies.minByOrNull { hypot(it.x - m.x, it.y - m.y) }?.let { f ->
             val r = hypot(f.x - m.x, f.y - m.y) / NM
             if (r <= 15) out += AwAlert("MISSILE ${r.roundToInt()} nm from ${f.group ?: f.name}", 3, f)

@@ -110,7 +110,7 @@ fun MissionAwacsPane(env: MissionEnv, aw: AwacsState, onOpenTab: (MissionTab) ->
     val altMin = AwacsSettings.altMinK * 1000.0
     val altMax = AwacsSettings.altMaxK * 1000.0
     val visible = tracks.filter { t -> visibleOnAwacs(t.c, altMin, altMax) }
-    val hostileAir = visible.map { it.c }.filter { !it.friendly && it.isAirborneTrack() && !it.isCrew() && !it.coalition.isNullOrBlank() }
+    val hostileAir = visible.map { it.c }.filter { it.hostile && it.isAirborneTrack() && !it.isCrew() && !it.coalition.isNullOrBlank() }
     val groups = remember(all, AwacsSettings.groupNm) { groupContacts(hostileAir, AwacsSettings.groupNm) }
     val alerts = remember(all, AwacsSettings.commitNm) { awacsAlerts(all, AwacsSettings.commitNm) }
     val ref = all.firstOrNull { it.id == aw.reference }
@@ -330,9 +330,11 @@ private fun AwacsMap(
 
 private fun awColor(c: Contact) = when {
     c.isCrew() -> Hud.TextDim
+    c.own -> Hud.Amber
+    c.wingman -> Wingman
     supportColor(c) != null -> supportColor(c)!!
     c.friendly -> Friendly
-    c.coalition.isNullOrBlank() -> Neutral
+    c.neutral || c.coalition.isNullOrBlank() -> Neutral
     else -> Hostile
 }
 
@@ -350,7 +352,7 @@ private fun DrawScope.drawAwSymbol(c: Contact, p: Offset, col: Color) {
             drawCircle(col, 7f, p, style = Stroke(3f))
             if (c.kind == "heli") drawCircle(col, 2.5f, p)
         }
-        c.coalition.isNullOrBlank() -> drawRect(col, p - Offset(7f, 7f), androidx.compose.ui.geometry.Size(14f, 14f), style = Stroke(2.5f))
+        c.neutral || c.coalition.isNullOrBlank() -> drawRect(col, p - Offset(7f, 7f), androidx.compose.ui.geometry.Size(14f, 14f), style = Stroke(2.5f))
         else -> {
             val path = Path().apply { moveTo(p.x, p.y - 9f); lineTo(p.x + 9f, p.y); lineTo(p.x, p.y + 9f); lineTo(p.x - 9f, p.y); close() }
             drawPath(path, Color.Black.copy(alpha = 0.6f), style = Stroke(6f))
@@ -479,7 +481,7 @@ private fun ContactPanel(aw: AwacsState, all: List<Contact>, tracks: List<Track>
     }
     val c = t.c
     val col = awColor(c)
-    SectionCard(c.group ?: c.name ?: "Contact", accent = col, trailing = { Text(if (c.friendly) "FRIENDLY" else if (c.coalition.isNullOrBlank()) "UNKNOWN" else "HOSTILE", style = LocalExtra.current.overline, color = col) }) {
+    SectionCard(c.group ?: c.name ?: "Contact", accent = col, trailing = { Text(if (c.friendly) "FRIENDLY" else if (c.neutral) "NEUTRAL" else if (c.coalition.isNullOrBlank()) "UNKNOWN" else "HOSTILE", style = LocalExtra.current.overline, color = col) }) {
         KV("Type", listOfNotNull(c.name, c.pilot).joinToString(" · ").ifBlank { c.kind }, labelWidth = 90.dp)
         KV("Altitude", "%,d ft".format(Locale.US, c.altFt.toInt()), mono = true, labelWidth = 90.dp)
         KV("Track", "${b3(c.hdg)} ${cardinal(c.hdg)} · ${c.gsKts.roundToInt()} kt GS", mono = true, labelWidth = 90.dp)
@@ -498,7 +500,7 @@ private fun ContactPanel(aw: AwacsState, all: List<Contact>, tracks: List<Track>
             SmallButton("Measure from here", null, primary = false) { aw.measuring = true; aw.selB = null; aw.panel = AwPanel.MEASURE }
         }
     }
-    if (!c.friendly && c.isAirborneTrack()) {
+    if (c.hostile && c.isAirborneTrack()) {
         val g = groups.firstOrNull { gr -> gr.members.any { it.id == c.id } } ?: AwGroup(listOf(c))
         bull?.let { CallBox("BULLSEYE CALL", bullseyeCall(g, it), Hud.Cyan) }
         if (ref != null) CallBox("BRAA CALL", braaCall(ref, g))

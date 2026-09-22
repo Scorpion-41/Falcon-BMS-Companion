@@ -148,7 +148,16 @@ class DemoSource {
 
         add("1", "air", own.x, own.y, own.altFt, own.hdgTrue, own.gsKts, "F-16CM-52", "Ouranos5", "Greece", true, true)
         val wing = along(max(0.0, t * 480 * FT_PER_NM / 3600 - 1.5 * FT_PER_NM))
-        add("2", "air", wing.x + 2500, wing.y - 2500, 21500.0, wing.hdg, 480.0, "F-16CM-52", "Ouranos5", "Greece", true)
+        val two = add("2", "air", wing.x + 2500, wing.y - 2500, 21500.0, wing.hdg, 480.0, "F-16CM-52", "Ouranos5", "Greece", true)
+        list[two] = list[two].copy(wingman = true)
+        // An ally of another nation, the way BMS reports one: a different "coalition" (the country) that the
+        // campaign nonetheless has on your side — and a neutral, which is neither.
+        val hornet = along(max(0.0, t * 450 * FT_PER_NM / 3600 - 22 * FT_PER_NM))
+        add("80", "air", hornet.x + 14000, hornet.y + 9000, 25000.0, hornet.hdg, 450.0, "F/A-18F", "Hornet7", "U.S.", true)
+        add("81", "air", hornet.x + 17000, hornet.y + 12000, 25500.0, hornet.hdg, 450.0, "F/A-18F", "Hornet7", "U.S.", true)
+        val transit = (t % 1800) / 1800
+        val neutral = add("85", "air", 2150000 + transit * 50 * FT_PER_NM * 6.0, 1250000 - transit * 50 * FT_PER_NM * 1.0, 33000.0, 80.0, 420.0, "C-130", "Kartal1", "Turkey", false)
+        list[neutral] = list[neutral].copy(neutral = true)
         val rider = along(max(0.0, t * 470 * FT_PER_NM / 3600 - 9 * FT_PER_NM))
         add("3", "air", rider.x - 6000, rider.y + 4000, 20000.0, rider.hdg, 470.0, "F-4E", "Rider5", "Greece", true)
         add("4", "air", rider.x - 8500, rider.y + 6500, 20500.0, rider.hdg, 470.0, "F-4E", "Rider5", "Greece", true)
