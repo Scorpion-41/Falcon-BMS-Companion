@@ -190,9 +190,15 @@ fun HomeScreen(nav: NavHostController) {
                     Icon(Icons.Default.Info, null, tint = Hud.TextDim)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("About BMS Companion", style = MaterialTheme.typography.titleSmall, color = Hud.Text)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("About BMS Companion", style = MaterialTheme.typography.titleSmall, color = Hud.Text)
+                            Spacer(Modifier.width(8.dp))
+                            com.bmscompanion.app.ui.components.UpdateDot()
+                        }
                         Text("Version ${AppVersion.NAME} · by ${AppVersion.AUTHOR} · check for updates", style = MaterialTheme.typography.bodySmall, color = Hud.TextDim)
                     }
+                    com.bmscompanion.app.ui.components.UpdateBadge(onClick = { nav.go(Routes.ABOUT) })
+                    Spacer(Modifier.width(10.dp))
                     Text("OPEN ›", color = Hud.TextDim, style = MaterialTheme.typography.labelLarge)
                 }
                 Text(

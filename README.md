@@ -1,15 +1,8 @@
 # Falcon BMS Companion
 
-A companion for **Falcon BMS 4.38** on **Windows PCs, Android phones and tablets, and iPhone, iPad or any browser**. The goal is simple: **never alt-tab out of the sim.**
+A companion for **Falcon BMS 4.38** that runs on **Windows PCs, Android phones and tablets, and iPhone, iPad or any browser**. One goal: **never alt-tab out of the sim.**
 
-- **Live Mission section:** the moving map with the AWACS picture, ownship data, RWR, DED, the briefing, loadout, comm plan and steerpoints, **tankers & support** (TACAN, UHF, position), one-tap **EZBoards** kneeboards, a **customizable Dashboard** and an **AWACS/GCI** page for a human controller.
-- **Maps in four styles** (relief, satellite, dark, chart) with sharp detail when zoomed in, **country and province borders**, and **towns**, all lined up with the campaign grid.
-- **Offline reference:** aircraft and loadouts, the Threat Guide, HARM/RWR, airfields with charts, HOTAS, checklists, comms and a bullseye trainer. All of it is extracted from the game files.
-- **Media:** your BMS screenshots on any device: browse, view, share, download and delete.
-- **One PC program:** BMS Companion for Windows reads Falcon BMS, serves your phones, tablets, browsers and other PCs, and is the full app too, in one window: a light **server page**, or the **full app** (borderless full screen with F11). On a laptop it runs as a **client** of the BMS PC.
-- **About page:** version, what it is, who wrote it (LoneWolf-41) and a link to the releases page to check for a newer build.
-- **VR kneeboard:** the browser version runs as an **OpenKneeboard web dashboard** (`/kneeboard`) in a board layout built for a few hundred pixels — the content fills the board, a ☰ and a ⋯ float in the corner and fade away when the mouse stops.
-- **Real browser version:** iPhone, iPad, Mac, Chromebook… open the address and the whole app runs **in the browser itself** (WebAssembly), as smooth as the native apps. Nothing to install.
+Everything it shows about the game — every airfield, chart, aircraft, weapon and threat — is **generated from your Falcon BMS install's own files**, not typed in by hand and not drawn by an artist. The install itself is only ever read.
 
 > Unofficial fan project, not affiliated with Benchmark Sims. See [Credits & legal](#credits--legal).
 
@@ -21,142 +14,237 @@ A companion for **Falcon BMS 4.38** on **Windows PCs, Android phones and tablets
 | **Live map & AWACS picture (tablet)** | **EZBoards from the tablet** | **Airfield charts** |
 | ![Mission map](docs/screenshots/mission-map.jpg) | ![EZBoards](docs/screenshots/mission-ezboards.jpg) | ![Charts](docs/screenshots/airfield-charts.jpg) |
 
-More in [docs/screenshots](docs/screenshots). What changed in each version: [CHANGELOG.md](CHANGELOG.md).
+More in [docs/screenshots](docs/screenshots) · what changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
 ## Contents
 
+**Getting it running**
 - [Which files do I need?](#which-files-do-i-need)
-- [Features](#features)
 - [Download & install](#download--install)
 - [What you need](#what-you-need)
-- [Quick setup](#quick-setup) (full guide in [docs/SETUP.md](docs/SETUP.md))
+- [Quick setup](#quick-setup)
+
+**What it does** — each feature says what it is, how to use it and what (if anything) to set up
+- [Taxi — ground charts for every airfield](#taxi--ground-charts-for-every-airfield)
+- [Mission: the live section](#mission-the-live-section)
+- [Maps](#maps)
+- [VR kneeboards](#vr-kneeboards)
+- [Config — Falcon BMS's own settings](#config--falcon-bmss-own-settings)
+- [Media — your BMS screenshots](#media--your-bms-screenshots)
+- [Offline reference](#offline-reference)
+- [BMS Companion for Windows](#bms-companion-for-windows)
+- [Staying up to date](#staying-up-to-date)
+
+**Under the hood**
 - [How it works](#how-it-works)
+- [Where the data comes from](#where-the-data-comes-from)
 - [Repository layout](#repository-layout)
 - [Building](#building)
 - [Updating for a new BMS version](#updating-for-a-new-bms-version)
 - [Credits & legal](#credits--legal)
 
+---
+
 ## Which files do I need?
 
-Every release has three files. Falcon BMS runs on a Windows PC, so **the BMS PC always gets BMS Companion for Windows**; it reads the sim and serves every other device. What else you download depends on where you want to see the companion:
+Every release has three files. Falcon BMS runs on a Windows PC, so **the BMS PC always gets BMS Companion for Windows**; it reads the sim and serves every other device. What else you download depends on where you want to see the companion.
 
-| Your setup | Download for the BMS PC | Download for the other device | How to connect |
+| Your setup | For the BMS PC | For the other device | How to connect |
 |---|---|---|---|
-| **One PC only** (second monitor, or next to a windowed sim) | `BMS-Companion-PC.msi` | — | Press **Open the full app** on the server page. **F11** for borderless full screen on the second monitor. |
-| **PC + Android phone or tablet** | `BMS-Companion-PC.msi` | `BMS-Companion.apk` (install on the phone/tablet) | Android app: Mission → Setup → **Find BMS PC**. |
-| **PC + iPhone or iPad** | `BMS-Companion-PC.msi` (keep **Browser access** on) | nothing to download | Scan the QR code on the server page with the camera, or open the address in Safari (iOS/iPadOS **18.2 or newer**). **Share → Add to Home Screen** for an app icon. |
-| **PC + any web browser** (Mac, Linux, Chromebook, a TV browser, a friend's tablet) | `BMS-Companion-PC.msi` (keep **Browser access** on) | nothing to download | Open the address shown on the server page in a current Chrome, Edge, Firefox or Safari. |
-| **2 PCs** (BMS PC + a laptop or second PC with the full app) | `BMS-Companion-PC.msi` | `BMS-Companion-PC.msi` on the laptop too | Laptop: **Open the full app** → Mission → Setup → **On another PC** → **Find BMS PC**. |
-| **2 PCs, the second one only in a browser** | `BMS-Companion-PC.msi` | nothing to download | Open the address shown on the server page in the second PC's browser. |
-| **Everything at once** (e.g. tablet + phone + iPad + laptop) | `BMS-Companion-PC.msi` | the file for each device, as above | All devices can be connected at the same time. |
-| **Reference only, no PC** (aircraft, threats, airfields and charts on the go) | — | `BMS-Companion.apk` | Nothing to connect; the reference works offline. |
+| **One PC only** (second monitor, or beside a windowed sim) | `BMS-Companion-PC.msi` | — | Press **Open the full app** on the server page. **F11** for borderless full screen. |
+| **PC + Android phone or tablet** | `BMS-Companion-PC.msi` | `BMS-Companion.apk` | In the app: **Setup → Find BMS PC**. |
+| **PC + iPhone or iPad** | `BMS-Companion-PC.msi` (keep **Browser access** on) | nothing | Scan the QR code on the server page, or open the address in Safari (iOS/iPadOS **18.2+**). **Share → Add to Home Screen** for an app icon. |
+| **PC + any browser** (Mac, Linux, Chromebook, a TV) | `BMS-Companion-PC.msi` (keep **Browser access** on) | nothing | Open the address shown on the server page. |
+| **2 PCs** (BMS PC + a laptop running the full app) | `BMS-Companion-PC.msi` | `BMS-Companion-PC.msi` | Laptop: **Open the full app** → **Setup** → **On another PC** → **Find BMS PC**. |
+| **VR** (OpenKneeboard in the headset) | `BMS-Companion-PC.msi` | nothing | Add a **Web Dashboard** tab per board, pointing at `http://<pc>:47474/kneeboard/1`, `/2`, … See [VR kneeboards](#vr-kneeboards). |
+| **Reference only, no PC** | — | `BMS-Companion.apk` | Nothing to connect: the reference and every ground chart work offline. |
 
-- **`.msi` or `.zip`?** Both are the same Windows program. The **MSI** installs it (Start menu, desktop shortcut, updates in place). The **zip** is portable: unzip anywhere and run `BMS Companion.exe`. Pick one.
-- **The browser version needs the PC:** iPhone, iPad and browsers load the app from BMS Companion on the BMS PC, over your home network. There's no App Store app.
-- **Coming from 1.2?** `BMSCompanionBridge.exe` is no longer used. Exit it (tray icon → Exit), delete it and install `BMS-Companion-PC.msi`; it uses the same port and keeps your settings. Android: install the new APK over the old one.
-
-## Features
-
-### Mission (live)
-| Tab | What you get |
-|---|---|
-| **Dashboard** | Your own page built from cards: live map, ownship, RWR, DED, picture, fuel (endurance, time to bingo, fuel to get home), time & TOT countdowns, bullseye, threat rings, steerpoints, mission, airbases, comm ladder, radio presets, tankers & support, kneeboards. **Edit** to add, move, resize (S/M/L) and remove cards, or pick a preset (Pilot, Cockpit, Navigator, Pre-flight). Small cards stack beside a wide map. Phones and wide screens keep their own layouts. |
-| **Map** | Theater map with your jet, the flight plan, target steerpoints, PPT threat rings, markpoints, bullseye rings, and the mission's home/alternate fields. It also shows the **AWACS picture**: friendly and hostile air, helicopters, ships and missiles, each with a speed vector, callsign and altitude; **tankers** (green, with a boom) and **AWACS/JSTARS** (purple, with a rotodome) stand out. If BMS isn't streaming yet, a reminder tells you to press **F** (ACMI recording) in the cockpit. Tap anything to get BRAA, bullseye position and aspect, or to open the airfield and its charts. Follow mode and layer toggles are included, plus the **Map** menu (style, borders, provinces, towns; see [Maps](#maps)). |
-| **AWACS** | For a **human AWACS/GCI** in multiplayer: the whole air picture with smooth motion, trails, speed vectors (where each aircraft will be in 1, 2 or 3 min), hostile group circles, radar-lock lines and labelled bullseye rings. **Picture** panel with a ready-to-read picture call, hostile groups and friendlies (altitude, speed, fuel). **Contact** details with bullseye and BRAA calls. **Control** a flight: its threats with BRAA, aspect, closure and time to merge, BRAA and intercept **vector** calls, nearest field and fuel to reach it. **Measure** A→B (contacts or map points): bearing/range, closure, intercept heading, time and fuel. **Calc**: time and fuel for a distance, bullseye→BRAA converter, time to merge. **Layers**: filters, altitude band, group radius, commit range. **Alerts** for merges, commit range, radar spikes, missiles and low fuel. |
-| **Flight** | An easy-to-read table: altitude, KIAS/Mach, heading, GS, fuel vs bingo, chaff/flares, bullseye position, VVI, G, TACAN (the channel you tuned, plus UFC and AUX COMM), UHF and Zulu time. There is also an ALR-56M-style **RWR scope** (launch and lock warnings), a **DED** replica and the hostile **picture** list (nearest threats first, ejected crews last). |
-| **Briefing** | Mission, package and TOT; departure, recovery and alternate airbases (TACAN, tower, ILS, runways, one tap to charts); the flight plan with TOS and bullseye; DTC targets; the package and roster; **loadout** per jet (tap a store to open the Arsenal page); threats linked to the Threat Guide; **tankers & support**; weather; ROE; emergency procedures. |
-| **Comms** | The comm ladder, grouped, with the tuned UHF frequency highlighted. **Tankers & support**. DTC UHF/VHF presets, IFF and Link 16. |
-| **Exported kneeboard** | The pages UOAF's **HTML Briefing** tool (`Tools\html_brief_win`) exported from this briefing, shown on the Briefing page and openable in the chart viewer — on the phone, the tablet, the PC and in the browser, and available as a VR board. **Run HTML Briefing** opens the tool on the BMS PC; the card says when the briefing has been printed since the export. |
-| **Boards** | **Generate kneeboards** with EZBoards from any device. The console runs hidden on the PC and you get success or error feedback plus the log. The kneeboard content (package, comm ladder, steerpoints with min fuel, targets, weather) is shown natively. |
-| **Setup** | Connection, and step-by-step guides for every kind of device, BMS configuration and troubleshooting. |
-
-**Tankers & support** (Dashboard card, Briefing and Comms): every tanker, AWACS, JSTARS and FAC of the mission in one table, like a support board: role, callsign and aircraft, **TACAN** (with the channel to set to tie on), **UHF** with its preset, **location** from bullseye and altitude when airborne, every **comm channel** the briefing gives for it (e.g. AWACS Check-In ch 5 and Tactical ch 6, Tanker ch 13; preset numbers also matched against your DTC), and the briefing notes. Your own tanker/AWACS is marked. Sources: the printed briefing (support list, package, comm ladder), the theater's radio plan (in BMS a callsign always has the same frequency), the AWACS feed, and BMS's tanker TACAN channels (first tanker 92Y, then 126Y, 125Y…, marked with * when not printed in the briefing).
-
-### Maps
-Every map (Mission map, Dashboard map, AWACS, Airfields) has **+ / −** zoom buttons (besides pinch, double-tap and the mouse wheel) and a **Map** menu:
-- **Styles:** **Relief** (shaded terrain from the BMS heightmap), **Satellite** (the sim's own photoreal ground texture), **Dark** (muted, for busy AWACS pictures) and **Chart** (light, paper-like). All styles line up exactly: switching never moves anything.
-- **Zoom levels:** a quick overview, then sharper tiles as you zoom in, up to 8192 px across a theater (about 125 m per pixel on the 1024 km theaters). Everything is included in the apps; nothing to download.
-- **Landmarks** (on/off): **country borders** as a clear line with the country names, **provinces/governorates** as faint dashed lines with their names, and **towns** as a faint dashed circle with the name (cities, towns and villages appear as you zoom in; labels never overlap).
-- **Towns → Mission** (the default): only the towns that matter for your mission: those the briefing names, the nearest town to each steerpoint, target, threat and airbase, and the larger towns along the route. The **target town** (e.g. "destroy the S-60 AAA above X", or the town at your target steerpoint) gets a solid amber ring with a target mark and a bold name.
-- Borders and names come from Natural Earth and are projected with each theater's own map projection (`NewTerrain/Theater.txt`), checked against real airport positions (median error under 0.4 nm).
-
-### Media (screenshots)
-The screenshots you take in Falcon BMS (`User\Pictures`, or `g_sPicturesDirectory`), on any device: a gallery grouped by day, a full-screen viewer with zoom and previous/next, multi-select, and **delete** (moved to the Recycle Bin on the BMS PC, so it can be undone). It is the last section of the navigation.
-- **Android:** Share (any app) and **Download to this device** (Pictures/BMS Companion).
-- **Browsers (iPhone, iPad…):** **Download to this device** and **Share** (the system share sheet), one or several at once.
-- **PC client (laptop):** **Download to this PC** (Downloads\BMS Companion), copy to the clipboard, save a copy.
-- **On the BMS PC:** copy to the clipboard, save a copy, open the screenshot folder.
-
-### Offline reference (no PC needed)
-- **Arsenal:** 323 flyable aircraft types (KTO + every add-on), per-theater variants, specs, station-by-station loadouts with rack capacity, and 518 stores.
-- **Threat Guide:** SAM, AAA, radars, MANPADS, aircraft, AAMs and ships, with RWR symbols, HARM/ALIC codes, engagement envelopes and a range chart. HARM & RWR tables are included.
-- **Airfields:** 519 unique airfields across the 5 theaters with their own map (KTO, Balkans, Hellas, Israel, Falklands). Runways, ILS, TACAN, frequencies, ATC patterns, nearest diverts, navaids and 1,386 charts, plus the **instrument charts** (approach, SID, STAR) of the theaters that ship them as PDFs: 245 charts, 1,133 pages, with a page bar. Also a searchable, zoomable theater map in every map style, with borders and towns.
-- **Cockpit:** real HOTAS illustrations for the F-16C/D and F-15C (tap a switch to see what it does), checklists with check-off, comms/brevity, calculators.
-- **Bullseye Trainer:** 5 game modes and 3 difficulty levels.
-- **Global search** and favorites. The UI is dark and adapts to phone and tablet (a navigation rail and split panes on tablets and PCs).
-
-### BMS Companion for Windows
-- **One program, one window, two faces**, remembered between runs:
-  - **Server page** (first start): a single light page for a PC that serves your devices. Live status (Falcon BMS, AWACS feed, briefing, connected devices), **Connect your devices** with the browser address and a QR code, the **setup checklist** with live ✓/✕ checks and a fix button for each step, Falcon BMS settings, recent activity and start-up options. The full app isn't loaded, so it uses little memory.
-  - **Full app**: every section, with data from Falcon BMS on this PC, or from the BMS PC on the network (**On another PC**, for a laptop client). A big **Open the full app** button on the server page, and a **Server** button in the app (bottom of the navigation rail and the Mission header) switch in one click.
-- **Borderless full screen**: **F11** or the full-screen button fills the monitor the window is on (Esc or F11 to leave). Keep window on top with the pin button.
-- **Only one copy runs**: opening it again brings the running window forward, also from the tray.
-- **Tray icon**: open, switch between server page and full app, browser access on/off, exit. Closing the window keeps it serving devices in the tray (optional), and it can start with Windows.
-- **Falcon BMS settings in the app:** BMS, EZBoards and screenshot folders, EZBoards on PRINT, Tacview stream on/off with host, port and password, demo mode, network port, firewall rules (one prompt), edit `Falcon BMS User.cfg`.
-- **Updating from inside the app** (About): it checks GitHub, shows the release notes of every version between yours and the newest, then downloads and installs — the MSI on Windows, the APK on Android — after checking the download against the checksum the release publishes. An interrupted download is kept and resumed rather than fetched again.
-- PC extras: mouse-wheel zoom on maps and charts, UI zoom with **Ctrl +/−/0**, dark title bar, remembered window size and position.
+- **`.msi` or `.zip`?** The same program. The **MSI** installs it (Start menu, desktop shortcut, updates in place); the **zip** is portable — unzip anywhere and run `BMS Companion.exe`. Pick one.
+- **The browser version needs the PC.** iPhone, iPad and browsers load the app from BMS Companion over your home network. There is no App Store app.
+- **Coming from 1.2?** `BMSCompanionBridge.exe` is gone. Exit it (tray icon → Exit), delete it, install `BMS-Companion-PC.msi`; it uses the same port and keeps your settings.
 
 ## Download & install
 
-Get the files from the **[latest release](https://github.com/Scorpion-41/Falcon-BMS-Companion/releases/latest)** (which ones you need: [Which files do I need?](#which-files-do-i-need)):
+From the **[latest release](https://github.com/Scorpion-41/Falcon-BMS-Companion/releases/latest)**:
 
-| File | What |
+| File | What it is |
 |---|---|
-| `BMS-Companion-PC.msi` | **BMS Companion for Windows**: reads Falcon BMS, serves your devices and browsers, and runs the full app (per-user install with Start menu and desktop shortcuts, includes its own Java runtime and the browser version; ~280 MB). |
-| `BMS-Companion-PC.zip` | The same, portable: unzip anywhere and run `BMS Companion.exe` (~280 MB). |
-| `BMS-Companion.apk` | Android app, including the airport charts and all map styles and zoom levels (~180 MB). |
+| `BMS-Companion-PC.msi` | **BMS Companion for Windows** — reads Falcon BMS, serves your devices and browsers, and is the full app. Per-machine install with Start menu and desktop shortcuts; brings its own Java runtime and the browser version (~325 MB). |
+| `BMS-Companion-PC.zip` | The same, portable (~323 MB). |
+| `BMS-Companion.apk` | The Android app, including every ground chart, instrument chart and map style (~215 MB). |
 
-Install the APK on the phone or tablet (allow "install unknown apps"), or use `adb install -r BMS-Companion.apk`. iPhone and iPad need nothing: see [Quick setup](#quick-setup).
+Install the APK on the phone or tablet (allow "install unknown apps"), or `adb install -r BMS-Companion.apk`. iPhone and iPad need nothing installed.
 
-The installer isn't code-signed, so Windows SmartScreen may ask you to confirm (**More info → Run anyway**). Coming from version 1.2? The separate `BMSCompanionBridge.exe` is no longer needed: close and delete it (BMS Companion uses the same port).
+The installer is not code-signed, so Windows SmartScreen may ask you to confirm (**More info → Run anyway**).
 
 ## What you need
 
-**BMS Companion itself needs nothing installed.** The Windows package brings its own Java runtime, and the browser version runs in a browser you already have. The list below is only for the parts that lean on something else — the app checks for them on its first run and links you to each one's official page.
+**BMS Companion itself needs nothing installed.** The Windows package brings its own Java runtime, and the browser version runs in a browser you already have. The list below is only for the parts that lean on something else — the app checks on first run and links each one's official page.
 
 | | What for | Where |
 |---|---|---|
 | **Falcon BMS 4.38** | everything: the app reads your install | [falcon-bms.com](https://www.falcon-bms.com) |
 | Windows 10 or 11 (64-bit) | the PC program | — |
-| A browser with WebAssembly GC — Edge/Chrome 119+, Firefox 120+, Safari 18.2+ | the browser version on a tablet, phone or second PC | already on the device |
+| A browser with WebAssembly GC — Edge/Chrome 119+, Firefox 120+, Safari 18.2+ | the browser version | already on the device |
 | Android 8 or newer | the Android app | — |
 | **.NET 8 runtime** *(optional)* | generating kneeboards with EZBoards, which BMS ships | [dotnet.microsoft.com](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) |
-| **OpenKneeboard** *(optional)* | the VR kneeboards — it draws the boards in the headset, and in the flat window too | [openkneeboard.com](https://openkneeboard.com) |
-| **Microsoft Edge WebView2 runtime** *(optional)* | OpenKneeboard's web tabs, which is how a board reaches the headset. Windows 11 has it; some Windows 10 machines do not | [developer.microsoft.com](https://developer.microsoft.com/microsoft-edge/webview2/) |
+| **OpenKneeboard** *(optional)* | the VR kneeboards | [openkneeboard.com](https://openkneeboard.com) |
+| **Microsoft Edge WebView2 runtime** *(optional)* | OpenKneeboard's web tabs. Windows 11 has it; some Windows 10 machines do not | [developer.microsoft.com](https://developer.microsoft.com/microsoft-edge/webview2/) |
 | **HTML Briefing** (`Tools\html_brief_win`, optional) | showing the kneeboard that tool exports | ships with BMS |
 
-Nothing is installed or downloaded by BMS Companion on your behalf: the first-run card names what is missing and opens the maker's own page.
+Nothing is installed or downloaded on your behalf: the first-run card names what is missing and opens the maker's own page.
 
 ## Quick setup
 
-1. **BMS PC:** install `BMS-Companion-PC.msi` and start it. It opens on the **server page**. When Windows asks, allow private networks (or press **Allow through Windows Firewall**). Flying with the app on this PC? Press **Open the full app**.
-2. **Falcon BMS:** in the Launcher, **Config → General → Briefing**: tick *Briefing Output to File*, untick *HTML Briefings*. In the mission Briefing screen press **PRINT**, and **Save** the DTC.
-3. **AWACS picture:** add these to `User\Config\Falcon BMS User.cfg` (the checklist has an edit button), then turn on ACMI recording in 3D:
+1. **BMS PC** — install `BMS-Companion-PC.msi` and start it. It opens on the **server page**. When Windows asks, allow private networks (or press **Allow through Windows Firewall**). Flying with the app on this PC? Press **Open the full app**.
+2. **Falcon BMS** — in the Launcher, **Config → General → Briefing**: tick *Briefing Output to File*, untick *HTML Briefings*. In the mission Briefing screen press **PRINT**, and **Save** the DTC.
+3. **AWACS picture** — add these to `User\Config\Falcon BMS User.cfg` (the setup checklist has an edit button, or use the [Config](#config--falcon-bmss-own-settings) section), then turn on ACMI recording in 3D with **F**:
    ```
    set g_bTacviewRealTime 1
    set g_bTacviewAcmi 1
    ```
-4. **Devices:**
-   - **Android:** Mission → Setup → **Find BMS PC** (same Wi-Fi/LAN).
-   - **iPhone/iPad/browser:** scan the QR code on the server page, or open the address it shows (e.g. `http://192.168.1.20:47474`). On iPhone/iPad, **Share → Add to Home Screen** for a full-screen icon.
-   - **Laptop/second PC (client):** install BMS Companion, **Open the full app**, choose **On another PC** in Mission → Setup, then **Find BMS PC**.
+4. **Your devices**
+   - **Android:** **Setup → Find BMS PC** (same Wi-Fi/LAN).
+   - **iPhone/iPad/browser:** scan the QR code on the server page, or open the address it shows (e.g. `http://192.168.1.20:47474`). **Share → Add to Home Screen** for a full-screen icon.
+   - **Laptop/second PC:** install BMS Companion, **Open the full app**, choose **On another PC** in **Setup**, then **Find BMS PC**.
 5. **EZBoards** ships with BMS in `Tools\EZBoards` and is found automatically. It needs the .NET 8 runtime.
 
-No BMS at hand? Turn on **Demo mode** in the Falcon BMS settings to try every Mission screen with a synthetic mission.
+The full guide is [docs/SETUP.md](docs/SETUP.md). The network API is [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
-The full guide is in [docs/SETUP.md](docs/SETUP.md). The network API is described in [docs/PROTOCOL.md](docs/PROTOCOL.md).
+---
+
+## Taxi — ground charts for every airfield
+
+**1,840 charted airfields across all 19 theaters, in the app itself.** Runways, every taxiway with its letter, hold short points, the real pavement, the buildings, and every parking spot with the number BMS gives it. 133 of them are carrier decks.
+
+**These are not pictures.** Every chart is generated from Falcon BMS's own game files: the airfield data the sim uses to taxi its own AI, and — for the asphalt — the airfield's 3D model, read directly out of the game. The taxiways run where the sim drives, the aprons and dispersals are the real shapes with straight edges and square corners, and the parking numbers are the ones the tower gives you. They were checked field by field against the parking charts the theaters ship, which print a latitude and longitude for every spot.
+
+**How to use it**
+
+1. Open **Mission → Taxi** (or **Airfields → a field → Ground chart → Open** for any field, any time).
+2. With Falcon BMS running the page already knows where you are: your field, and the spot you spawned on.
+3. Press the **RWY** button for the runway in use. In a mission it is usually chosen for you — the sim parks you on the half of the ramp nearest the active runway, so the spot you are on says which one it is.
+4. Pick your parking spot: tap it on the chart, or tap its number in the list.
+5. Read the clearance — *"Taxi to runway 26 via B, A, H. Hold short runway 26."* — with the way drawn in blue, the turn at each junction and the distance of every leg.
+6. Landed instead? Press **Taxi in** and pick the spot you were given; it draws the way in from the runway.
+
+Press the same **RWY** button again to clear it and put the chart back to plain. Nothing is drawn until you ask for it.
+
+**Also on the chart:** a **Day/Night** switch (remembered), zoom by wheel, pinch or buttons, hardened shelters and hangars drawn as bays you taxi into nose-first, taxiway letters on yellow boards where BMS puts its own signs, and spot numbers that step aside and draw a leader line rather than piling up.
+
+**Carriers.** Falcon BMS publishes nothing usable for a ship — its deck points run a mile past the bow because the approach path is in the same list, and its "runways" are that approach path, a catapult and sometimes a rectangle of no width. So a carrier is drawn from the **published dimensions of the real ship**: the flight deck with its angled-deck sponson, the landing area at its real angle, the catapults, the ski jump where the class has one, and the island. A carrier page is the deck and the day/night switch — no ramp, no runway buttons, no taxi route, because a ship steams into wind and the numbers turn with it.
+
+**Setting it up:** nothing. The charts are in the app. Live position and the runway in use come from Falcon BMS through the PC, so they need the normal [Quick setup](#quick-setup); everything else works with BMS closed.
+
+## Mission: the live section
+
+| Tab | What you get |
+|---|---|
+| **Dashboard** | Your own page, built from cards: live map, ownship, RWR, DED, picture, fuel (endurance, time to bingo, fuel to get home), time & TOT countdowns, bullseye, threat rings, steerpoints, mission, airbases, comm ladder, radio presets, tankers & support, kneeboards. **Edit** to add, move, resize (S/M/L) and remove cards, or take a preset (Pilot, Cockpit, Navigator, Pre-flight, In flight). Phones and wide screens keep their own layouts. |
+| **Map** | The theater with your jet, the flight plan, target steerpoints, PPT threat rings, markpoints, bullseye rings and the mission's fields — plus the **AWACS picture**: friendly and hostile air, helicopters, ships and missiles with speed vectors, callsigns and altitudes; tankers (green, with a boom) and AWACS/JSTARS (purple, with a rotodome) stand out; SAM sites carry their real ring. Tap anything for BRAA, bullseye position and aspect, or to open that airfield. Follow mode, layer toggles and the **Map** menu. |
+| **Taxi** | The ground chart — see [above](#taxi--ground-charts-for-every-airfield). |
+| **AWACS** *(optional, off by default)* | A GCI console for a human controller in multiplayer: the whole picture with trails and speed vectors, hostile group circles, radar-lock lines, labelled bullseye rings, ready-to-read picture calls, per-contact BRAA and bullseye, flight control (threats, closure, time to merge, vector calls, nearest field and fuel to reach it), an A→B measure tool, calculators, filters and alerts. Turn it on in **Setup → Mission pages**. |
+| **Briefing** | Mission, package and TOT; departure, recovery and alternate (TACAN, tower, ILS, runways, one tap to the charts); the flight plan with TOS and bullseye; DTC targets; package and roster; **loadout** per jet (tap a store for its Arsenal page); threats linked to the Threat Guide; tankers & support; weather; ROE; emergency procedures. Plus the pages UOAF's **HTML Briefing** tool exported, if you use it. |
+| **Comms** | The comm ladder, grouped, with the tuned UHF highlighted. Tankers & support. DTC UHF/VHF presets, IFF and Link 16. |
+| **Kneeboards** | Everything that gets printed or pinned: **generate BMS's kneeboards** with EZBoards from any device (the console runs hidden on the PC; you get success or failure and the log), the kneeboard content shown natively, the **VR boards** setup, and the HTML Briefing pages. |
+
+**Tankers & support** (a Dashboard card, and on Briefing and Comms): every tanker, AWACS, JSTARS and FAC in one table — role, callsign, aircraft, **TACAN** (with the channel to set to tie on), **UHF** with its preset, **location** from bullseye and altitude when airborne, every comm channel the briefing gives for it, and the briefing notes. Yours is marked. Planned tanker and AWACS **tracks** are drawn on the map, read out of the campaign file the mission is flying.
+
+**Setting it up:** the [Quick setup](#quick-setup) above. Briefing data needs **PRINT**; steerpoints before you are in 3D need the **DTC Save**; the AWACS picture needs the two Tacview lines and ACMI recording (**F**).
+
+## Maps
+
+Every map (Mission, Dashboard, AWACS, Airfields) has **+ / −** buttons besides pinch, double-tap and the mouse wheel, and a **Map** menu:
+
+- **Four styles** — **Relief** (shaded terrain from the BMS heightmap), **Satellite** (the sim's own ground texture), **Dark** (muted, for a busy picture) and **Chart** (light, paper-like). All four line up exactly: switching never moves anything.
+- **Zoom levels** — an overview, then sharper tiles as you go in, up to 8192 px across a theater (~125 m per pixel on the 1024 km theaters). All of it ships in the apps.
+- **Landmarks** — country borders with names, provinces as faint dashed lines, and towns as dashed circles (cities, then towns, then villages as you zoom; labels never overlap).
+- **Towns → Mission** (the default) — only the towns that matter: those the briefing names, the nearest town to each steerpoint, target, threat and airbase, and the larger towns on your route. The **target town** gets a solid amber ring and a bold name.
+
+Borders and names come from Natural Earth, projected with each theater's own projection out of `NewTerrain/Theater.txt` and checked against real airport positions (median error under 0.4 nm).
+
+**Setting it up:** nothing — the maps are in the app.
+
+## VR kneeboards
+
+The browser version doubles as an **OpenKneeboard web dashboard**, laid out for a board a few hundred pixels across: the content fills it, and a ☰ and ⋯ float in a corner and fade when the mouse stops. Each board is its own address, so you can have several tabs showing different things.
+
+**Board kinds:** live map · **Live taxi** · **Ground chart** · briefing · comms · HARM table · instrument charts · the exported HTML Briefing · the Dashboard.
+
+- **Live taxi** draws the field you are **actually standing on**, briefed or not, with your jet on it and what is ahead of you up the page. **Its pages are zoom steps** — the *next page* / *previous page* buttons you already have bound zoom the chart from the whole field down to a couple of stands either side. There is no mouse in VR, so a bound button is the only control there is.
+- **Ground chart** is one page per runway end, to read before start-up or on the way in, with your own position marked.
+
+Because OpenKneeboard stops at the last page it was given, every board lays down a run of pages and cycles through them, so a bound button always has somewhere to go. Print size and board shape are on the ☰ menu.
+
+**Setting it up**
+
+1. Install [OpenKneeboard](https://openkneeboard.com) (and the WebView2 runtime if Windows asks).
+2. In BMS Companion on the PC: **Mission → Kneeboards → VR boards**. Choose what each board shows and press **Configure** on a row for its options (day or night chart, which way up, how much of the field fits).
+3. In OpenKneeboard, add a **Web Dashboard** tab per board and give it `http://<your-pc>:47474/kneeboard/1` — then `/2`, `/3`, … for the rest. The page names its own tab.
+4. Bind next/previous page in OpenKneeboard if you have not already. That is how you flip boards and zoom the Live taxi chart.
+
+## Config — Falcon BMS's own settings
+
+Falcon BMS keeps several hundred settings in a text file its own screens never show you. This section lists all of them, says what each one does, and writes only the ones you change.
+
+**It is off until you ask for it:** **Setup → Mission pages → Show the Config section**. It then appears as a section of its own, on the PC, in the browser and on a tablet alike — so you can change a setting from the sofa for the flight about to start.
+
+**How to use it**
+
+1. Turn it on in Setup, then open **Config**.
+2. Press **Click to Back Up and Enable**. Your `Falcon BMS User.cfg` is copied into a `BackUp` folder beside it. That copy is taken **once and never replaced**, so there is always a way back to exactly what you had.
+3. Three profiles are laid down at the same time. **Profile 1** is a copy of what you already had; **2** and **3** start empty, which in a config file means every setting at its Falcon BMS default.
+4. Pick a file (**User**, or **VR** if you fly in a headset) and a profile, and change what you like: switches for switches, a list for the settings that take named choices, a box for the rest.
+5. **Search** by name or by what a setting does. The box never scrolls away, and the group you are looking at stays under it.
+6. **⋯** makes a profile the one BMS reads, copies one profile into another, or puts a profile back to your original file.
+
+**What it shows.** The settings your file actually holds are listed **first and marked**; everything else is shown dim at its default. Change one and it moves up into the first list — which is exactly what it does in the file, because a setting left at its default is not written at all. The 219 settings are grouped (VR, graphics, terrain, cockpit and avionics, views, sound, multiplayer, campaign) and described in BMS's own words, read out of the stock config your version ships with.
+
+**What it never touches.** The lines your BMS launcher writes at the end of the file: they are shown, carried across untouched when you switch profiles, and anything new is written above them. Nothing outside `User/Config` is written, and no file is written over in place — the new one is written beside it and moved across, so a failed write can never leave you with half a config.
+
+> These are Falcon BMS's own settings and a wrong one can stop BMS starting. That is what the backup is for. The page says so in red, and it is meant.
+
+## Media — your BMS screenshots
+
+The screenshots you take in Falcon BMS (`User\Pictures`, or `g_sPicturesDirectory`), on any device: a gallery grouped by day, a full-screen viewer with zoom and previous/next, multi-select, and **delete** — to the Recycle Bin on the BMS PC, so it can be undone.
+
+- **Android:** Share to any app, or **Download to this device** (Pictures/BMS Companion).
+- **Browsers (iPhone, iPad…):** Download, or the system share sheet, one or several at once.
+- **PC client (laptop):** Download to this PC, copy to clipboard, save a copy.
+- **On the BMS PC:** copy to clipboard, save a copy, open the folder.
+
+**Setting it up:** nothing, once the device is connected. If BMS writes its screenshots somewhere unusual, point **Screenshots folder** at it in the PC's Falcon BMS settings.
+
+## Offline reference
+
+Works with no PC and no connection — it is all in the app.
+
+- **Arsenal** — 323 flyable aircraft types (KTO and every add-on), per-theater variants, specs, station-by-station loadouts with rack capacity, and 518 stores.
+- **Threat Guide** — SAMs, AAA, radars, MANPADS, aircraft, AAMs and ships, with RWR symbols, HARM/ALIC codes, engagement envelopes and a range chart. HARM and RWR tables included.
+- **Airfields** — every field across the theaters: runways, ILS, TACAN, frequencies, ATC patterns, nearest diverts, navaids, the **ground chart** (above), and the **instrument charts** of the theaters that ship them as PDFs — 244 charts, 988 pages, with a page bar.
+- **Cockpit** — real HOTAS illustrations for the F-16C/D and F-15C (tap a switch to see what it does), checklists with check-off, comms and brevity, calculators.
+- **Bullseye Trainer** — 5 game modes, 3 difficulty levels.
+- **Global search** and favorites, on a dark UI that adapts from a phone to a tablet to a PC.
+
+## BMS Companion for Windows
+
+**One program, one window, two faces**, remembered between runs.
+
+- **Server page** (first start) — one light page for a PC that serves your devices: live status (Falcon BMS, AWACS feed, briefing, connected devices), **Connect your devices** with the address and a QR code, the **setup checklist** with live ✓/✕ checks and a fix button for each step, Falcon BMS settings, recent activity and start-up options. The full app is not loaded, so it uses little memory.
+- **Full app** — every section, with data from Falcon BMS on this PC or from the BMS PC over the network (**On another PC**, for a laptop). **Open the full app** on the server page and the **Server** button at the foot of the navigation rail switch between them in one click.
+- **Borderless full screen** — **F11**, or the button at the top of the rail, fills the monitor the window is on. Esc or F11 to leave. The pin keeps the window on top.
+- **Only one copy runs** — opening it again brings the running window forward, also from the tray.
+- **Tray icon** — open, switch faces, browser access on/off, exit. Closing the window can keep it serving in the tray, and it can start with Windows.
+- **Falcon BMS settings in the app** — BMS, EZBoards and screenshot folders, kneeboards on PRINT, the Tacview stream (host, port, password), network port, firewall rules in one prompt, and a button to edit `Falcon BMS User.cfg`.
+- **PC extras** — mouse-wheel zoom on maps and charts, UI zoom with **Ctrl +/−/0**, dark title bar, remembered window size and position.
+
+## Staying up to date
+
+The app checks GitHub once, quietly, when it starts — nothing interrupts you. If there is something newer, a small badge appears in the corner and a dot on the About card. **About → Download** shows the release notes of every version between yours and the newest, downloads it with the rate and time left, checks it against the checksum the release publishes, and installs it: the MSI on Windows, the APK on Android. An interrupted download is resumed, not fetched again.
+
+---
 
 ## How it works
 
@@ -166,85 +254,96 @@ Falcon BMS (shared memory, briefing.txt, DTC .ini, Tacview RT stream, EZBoards, 
    ▼
 BMS Companion for Windows ──┬─ its own window: server page or full app (reads BMS directly)
    HTTP 47474, UDP 47475    ├─ Android app, client PCs: mission API (/api/…), discovery on UDP 47475
-                            └─ browsers: the web app (/) runs on the device, data from /api and /assets
+                            ├─ browsers: the web app (/) runs on the device, data from /api and /assets
+                            └─ VR: /kneeboard/<n>, one OpenKneeboard Web Dashboard tab each
 ```
+
+The Android app, the PC program and the browser version are built from the same Kotlin/Compose code, so every device shows the same screens. The browser version is that code compiled to WebAssembly: it runs on the phone or tablet like a native app, and the PC only sends it data.
+
+**BMS Companion only reads your BMS install**, with three things you trigger yourself: it runs EZBoards (which then writes the kneeboard textures as it always does), it moves screenshots you delete in Media to the Recycle Bin, and — only after you press the backup button — the [Config](#config--falcon-bmss-own-settings) section edits `User/Config`.
+
+## Where the data comes from
 
 | Data | Source on the PC |
 |---|---|
 | Ownship, RWR, DED, steerpoints, PPTs, bullseye, theater, aircraft, TACAN | BMS shared memory: `FalconSharedMemoryArea`, `…Area2`, `…AreaString` (layout from `Tools\SharedMem\FlightData.h`) |
-| Other aircraft (AWACS picture) with speed, fuel and radar locks | BMS's built-in Tacview real-time telemetry server (`g_bTacviewRealTime`, port 42674) |
+| Other aircraft (the AWACS picture) with speed, fuel and radar locks | BMS's own Tacview real-time telemetry server (`g_bTacviewRealTime`, port 42674) |
+| Who is friendly, hostile or neutral | the campaign save's team table — Tacview reports the *country*, not the side |
 | Briefing, package, loadout, comm ladder, weather | `User\Briefings\briefing.txt` (the PRINT button; honours `g_sBriefingsDirectory`) |
-| Steerpoint coordinates before 3D, targets, PPTs, radio presets | `User\Config\<callsign>.ini` (DTC Save) |
+| Steerpoints before 3D, targets, PPTs, radio presets | `User\Config\<callsign>.ini` (DTC Save) |
+| Planned tanker and AWACS tracks | the campaign file the mission is flying (`.cam`/`.tac`) |
+| Ground charts: runways, taxiways, ramp spots, buildings | each field's own authored data, `ObjectiveRelatedData/OCD_nnnnn/` |
+| Ground charts: the asphalt | the field's own 3D model, decoded from the game |
 | Kneeboard tables | EZBoards `bin\xbrief.exe` (read-only, output to memory) |
-| Screenshots (Media) | `User\Pictures` (or `g_sPicturesDirectory`); thumbnails and previews are made on the PC |
-| BMS folder, pilot callsign, theater | Registry `HKLM\SOFTWARE\WOW6432Node\Benchmark Sims\Falcon BMS 4.xx` (newest version found) |
+| Screenshots | `User\Pictures` (or `g_sPicturesDirectory`); thumbnails made on the PC |
+| The Config list | the stock `User\Config\Falcon BMS.cfg` your version ships with |
+| BMS folder, pilot callsign, theater | Registry `HKLM\SOFTWARE\WOW6432Node\Benchmark Sims\Falcon BMS 4.xx` |
 
-BMS Companion only reads BMS files, with two exceptions you trigger yourself: it runs EZBoards (which then writes the kneeboard textures as it always does), and it moves screenshots you delete in Media to the Recycle Bin.
-
-The Android app, the PC program and the browser version are built from the same Kotlin/Compose code, so every device shows the same screens. The browser version is that code compiled to WebAssembly: it runs on the phone or tablet like a native app, and the PC only sends it data.
+Everything bundled in the apps — aircraft, weapons, threats, airfields, charts, maps, ground charts — is produced by the extractor in `tools/extractor` from a real install, and checked against something the game itself publishes. [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md) has a row per feature: the file it comes from, how the reading is verified, and what to look at when that file changes.
 
 ## Repository layout
 
 ```
 app/                     Android app (Kotlin, Jetpack Compose, Material 3)
-  src/main/assets/       extracted game data (JSON/WebP), airport charts, maps/<theater>/<style> tiles and data/geo landmarks, generated by tools/extractor
+  src/main/assets/       extracted game data (JSON/WebP): ground charts, instrument charts,
+                         maps/<theater>/<style> tiles, data/geo landmarks, data/cfg options
   src/main/java/com/bmscompanion/app/
     data/                models + asset repository
+    data/airfield/       ground chart models and taxi routing
     data/mission/        mission client (HTTP polling, UDP discovery) and API models
-    ui/screens/          reference screens, Media (screenshots)
-    ui/screens/mission/  Mission section: tabs (MissionTabs), Dashboard, Map, AWACS (+ AwacsTools), Flight, Briefing, Comms, Boards, Setup
+    ui/board/            VR kneeboard pages
+    ui/screens/          reference screens, Airfields, Taxi, Config, Setup, Media
+    ui/screens/mission/  Mission section: tabs, Dashboard, Map, Taxi, AWACS, Briefing, Comms, Kneeboards
 desktop/                 BMS Companion for Windows (Kotlin, Compose for Desktop). Compiles app/src/main/java as-is, plus:
-  src/main/kotlin/overrides/   PC versions of the Android-only files (Repo, MissionLink, map/chart zoom, Mission screen & setup)
-  src/main/kotlin/shims/       tiny stand-ins for the Android APIs the shared screens call (Uri.encode, Bitmap, screen width)
+  src/main/kotlin/overrides/   PC versions of the Android-only files
+  src/main/kotlin/shims/       stand-ins for the Android APIs the shared screens call
   src/main/kotlin/com/bmscompanion/desktop/
     Main.kt                    the window (server page or full app, full screen), tray, single instance
-    PcConfig.kt, PcServer.kt   mode and services; the HTTP server (mission API, web app, bundled data)
-    bridge/                    reads Falcon BMS: shared memory, briefing/DTC parsers, Tacview client, EZBoards, screenshots, demo
+    PcConfig.kt, PcServer.kt   mode and services; the HTTP server (API, web app, bundled data, boards)
+    bridge/                    reads Falcon BMS: shared memory, briefing/DTC parsers, Tacview client,
+                               EZBoards, screenshots, campaign saves, and the Config file service
     ui/                        server page and settings cards
-web/                     browser version (Kotlin/Wasm, Compose for Web). Compiles app/src/main/java as-is, plus:
-  src/wasmJsMain/kotlin/overrides/   browser versions of Repo (data over HTTP, settings in the browser) and MissionLink
-  src/wasmJsMain/kotlin/shims/       stand-ins for the JVM and Android APIs the shared screens call
-pc/publish-desktop.ps1   builds BMS Companion for Windows (dist/BMS-Companion-PC.msi and .zip, the browser version inside)
+web/                     browser version (Kotlin/Wasm, Compose for Web), same shared code
+pc/publish-desktop.ps1   builds dist/BMS-Companion-PC.msi and .zip, with the browser version inside
 tools/extractor/         Node.js extractor: BMS install -> app assets (read-only)
-tools/curated/           data transcribed from the BMS manuals (threats, HOTAS, checklists, comms, HARM/RWR)
-docs/                    SETUP, PROTOCOL, UPDATING, screenshots
+tools/curated/           data transcribed from the BMS manuals, plus the carrier deck dimensions
+docs/                    SETUP, PROTOCOL, DATA-SOURCES, UPDATING, screenshots
 CHANGELOG.md             what changed in each version
-CLAUDE.md                orientation notes for AI-assisted maintenance (Claude Code)
+CLAUDE.md                orientation notes for AI-assisted maintenance
 ```
 
 ## Building
 
-**Requirements:** JDK 17 (with jpackage, for the PC installer), Android SDK (API 35), Node 18+ (extractor only). The browser version's build downloads its own Node.js, Yarn and Binaryen into the Gradle cache.
+**Requirements:** JDK 17 (with jpackage, for the PC installer), Android SDK (API 35), Node 18+ (extractor only). The browser build downloads its own Node.js, Yarn and Binaryen into the Gradle cache.
 
 ```bash
-# Android app (debug on a connected device / release APKs)
+# Android app
 ./gradlew installDebug
-./gradlew assembleRelease     # app/build/outputs/apk/release/app-release.apk
+./gradlew assembleRelease                                        # app/build/outputs/apk/release/
 
 # BMS Companion for Windows (the browser version is built and packed in automatically)
-./gradlew :desktop:run                                            # run from source
+./gradlew :desktop:run
 powershell -ExecutionPolicy Bypass -File pc/publish-desktop.ps1  # dist/BMS-Companion-PC.msi + .zip
 
 # Browser version on its own
-./gradlew :web:wasmJsBrowserDistribution   # web/build/dist/wasmJs/productionExecutable
+./gradlew :web:wasmJsBrowserDistribution
 
-# Regenerate reference data from a BMS install (read-only)
+# Regenerate the bundled data from a BMS install (read-only)
 cd tools/extractor && npm install
-BMS_ROOT="D:/Falcon BMS 4.38" node src/main.mjs   # aircraft, weapons, airports, theaters, images
-BMS_ROOT="D:/Falcon BMS 4.38" node src/charts.mjs # airport charts
-BMS_ROOT="D:/Falcon BMS 4.38" node src/maps.mjs   # map styles and tile levels (uses texconv from EZBoards; ~30 min)
-BMS_ROOT="D:/Falcon BMS 4.38" node src/geo.mjs    # borders, provinces and labels (Natural Earth files in tools/extractor/cache/ne)
+BMS_ROOT="D:/Falcon BMS 4.38" node src/main.mjs        # aircraft, weapons, airports, ground charts, theaters
+BMS_ROOT="D:/Falcon BMS 4.38" node src/airfieldrun.mjs # ground charts only
+BMS_ROOT="D:/Falcon BMS 4.38" node src/charts.mjs      # instrument charts
+BMS_ROOT="D:/Falcon BMS 4.38" node src/maps.mjs        # map styles and tile levels (~30 min)
+BMS_ROOT="D:/Falcon BMS 4.38" node src/geo.mjs         # borders, provinces and labels
 ```
 
-Release APKs are signed with the debug key so anyone can build and side-load them. Use your own keystore if you publish to a store.
+Release APKs are signed with the debug key so anyone can build and side-load them.
 
-The PC installer is built with jpackage (WiX is downloaded automatically by the Compose Gradle plugin).
-
-PC program switches: `--tray` (start in the tray, used by "Start with Windows"), `--route <route>` or env `BMSC_ROUTE=mission` (open a screen directly). Development: env `BMSC_DEMO=1` (demo mission for this run), `BMSC_PORT=<port>` (another network port for this run). Developer checks: `--selftest out.txt` (shared memory struct sizes and parser output), `--dumpstrings out.txt` (StringData from a running BMS), `--eztest <EZBoards copy> out.txt` (runs EZBoards like the app button), `--api /api/info,/api/mission out.txt` (API responses from BMS on this PC), `--maprender <theater> <folder> [xFt,yFt]` (every map style at three zoom levels as PNGs, to check landmarks and alignment), `--updatetest out.txt [download] [<version to pretend to be>]` (what About sees on GitHub; with `download`, fetches the release file and verifies its checksum without installing it). The browser version accepts `?route=mission` in its address.
+**PC program switches:** `--tray` (start in the tray), `--route <route>` or `BMSC_ROUTE=mission` (open a screen directly), `BMSC_PORT=<port>` (another port for this run). Developer checks: `--selftest`, `--dumpstrings`, `--eztest`, `--cfgtest`, `--api`, `--maprender`, `--updatetest`, and the campaign-save checks (`--atotest`, `--trackstest`, `--teamtest`, `--sidetest`). The browser version accepts `?route=mission`.
 
 ## Updating for a new BMS version
 
-See **[docs/UPDATING.md](docs/UPDATING.md)**. It is a checklist written so it can be handed straight to Claude Code: re-run the extractor, diff `FlightData.h`, compare a fresh `briefing.txt`, check the add-on theaters, bump versions.
+See **[docs/UPDATING.md](docs/UPDATING.md)** — a checklist written so it can be handed straight to Claude Code: re-run the extractor, diff `FlightData.h`, compare a fresh `briefing.txt`, check the add-on theaters, bump the version. [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md) says, per feature, what to look at when a BMS file changes.
 
 ## Credits & legal
 
@@ -252,5 +351,6 @@ See **[docs/UPDATING.md](docs/UPDATING.md)**. It is a checklist written so it ca
 - **[OpenKneeboard](https://openkneeboard.com/)** is by Fred Emmott. The VR boards are Web Dashboard tabs in it.
 - **EZBoards** is by "Logic" and ships with BMS. This project only launches it (and the extractor uses its bundled Microsoft `texconv` to decode the BMS ground texture).
 - Borders, provinces and country/region names: **[Natural Earth](https://www.naturalearthdata.com)** 1:10m data, public domain.
+- Carrier flight-deck dimensions are the published figures for each real class.
 - Tacview real-time telemetry is a protocol by Raia Software, implemented natively by BMS.
-- App, PC program and browser version code: built with Claude Code.
+- App, PC program and browser version: written by **LoneWolf-41** with Claude Code.

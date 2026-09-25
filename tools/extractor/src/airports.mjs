@@ -182,6 +182,10 @@ export function buildAirports(th) {
   };
 
   const airports = [];
+  // What the ground chart needs on top of the airport record: which object class the field is, and which point
+  // header belongs to which runway end. The designators are worked out here (from the threshold features), so the
+  // chart must not work them out again and risk disagreeing with the rest of the app.
+  const geoByCamp = new Map();
   const navaids = [];
   const placeRaw = [];
   const typeCache = new Map();
@@ -227,6 +231,10 @@ export function buildAirports(th) {
           list[0].des += 'L'; list[1].des += 'R';
         }
       }
+      geoByCamp.set(o.campId, {
+        ocd: o.ocd,
+        ends: ends.map((e) => ({ order: e.h.order, designator: e.des, rwyNo: e.h.rwyNo, headingTrue: e.hdgTrue })),
+      });
       const groups = new Map();
       for (const e of ends) (groups.get(e.h.rwyNo) || groups.set(e.h.rwyNo, []).get(e.h.rwyNo)).push(e);
       for (const [rwyNo, list] of groups) {
@@ -302,5 +310,5 @@ export function buildAirports(th) {
   }
   const placeList = places.map((p) => ({ n: p.n, t: p.t, x: Math.round(p.x), y: Math.round(p.y) }))
     .sort((a, b) => rank[a.t] - rank[b.t] || a.n.localeCompare(b.n));
-  return { airports, navaids, radio, places: placeList };
+  return { airports, navaids, radio, places: placeList, geo: geoByCamp };
 }

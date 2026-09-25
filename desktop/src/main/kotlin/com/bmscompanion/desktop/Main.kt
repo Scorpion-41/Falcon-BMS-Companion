@@ -88,6 +88,8 @@ fun main(args: Array<String>) {
     Repo.init()
     // the VR board page is the PC's own: it exists only where there is a mouse to set the boards up with
     com.bmscompanion.app.ui.screens.mission.vrBoardsPane = { com.bmscompanion.app.ui.screens.mission.MissionVrBoardsPane() }
+    com.bmscompanion.app.ui.railTop = railFullScreen
+    com.bmscompanion.app.ui.railBottom = railServerPage
     PcLog.install() // there is no console here: a failure that reaches nobody goes to the log in the settings folder
     if (SelfTest.run(args)) exitProcess(0)
     val trayStart = "--tray" in args
@@ -269,13 +271,28 @@ private fun AppMode(startRoute: String?, nav: NavHostController, pendingRoute: S
     val immersive = route.startsWith("bullseye") || route.startsWith("chart") || route.startsWith("media/view")
     BoxWithConstraints(Modifier.fillMaxSize()) {
         AppRoot(startRoute, nav)
-        if (!immersive && maxWidth >= 600.dp && maxHeight >= 660.dp) {
-            Column(Modifier.align(Alignment.BottomStart).width(80.dp).padding(bottom = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                RailButton(if (actions.isFullscreen()) Icons.Default.FullscreenExit else Icons.Default.Fullscreen, if (actions.isFullscreen()) "Window" else "Full screen", actions.toggleFullscreen)
-                RailButton(Icons.Default.Dns, "Server", actions.switchToServer)
-            }
-        }
     }
+}
+
+/**
+ * The window's own buttons, which live in the navigation rail: full screen at the top, the server page at the foot.
+ *
+ * Set once, at startup, and never reassigned — they read what they need themselves, so the rail has nothing to
+ * subscribe to and nothing to rebuild. Stacked in the bottom corner they used to sit right under the last section
+ * and read as two more sections; at the two ends of the rail, with a gap either side, they read as what they are.
+ */
+private val railFullScreen: @Composable () -> Unit = {
+    val actions = LocalPcActions.current
+    RailButton(
+        if (actions.isFullscreen()) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+        if (actions.isFullscreen()) "Window" else "Full screen",
+        actions.toggleFullscreen,
+    )
+}
+
+private val railServerPage: @Composable () -> Unit = {
+    val actions = LocalPcActions.current
+    RailButton(Icons.Default.Dns, "Server", actions.switchToServer)
 }
 
 @Composable

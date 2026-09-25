@@ -12,9 +12,11 @@ import java.io.File
 
 /**
  * Developer checks, run as `"BMS Companion.exe" --selftest out.txt` (or `./gradlew :desktop:run --args="--selftest out.txt"`):
- * - `--selftest out.txt`: shared memory struct sizes and parser output on the demo data;
+ * - `--selftest out.txt`: shared memory struct sizes, and the briefing parser on a real printed briefing kept as
+ *   a fixture (`resources/bridge/sample_briefing.txt`, with the names taken out);
  * - `--dumpstrings out.txt`: raw StringData ids and values from a running BMS (to verify the id table);
  * - `--eztest <EZBoards folder> out.txt`: runs EZBoards exactly like the app button does (use a copy of the folder).
+ * - `--cfgtest <a copy of the BMS folder> out.txt`: the Config page's backup, profiles and edits, checked on disk.
  * - `--api <path>[,<path>…] out.txt`: API responses (e.g. /api/info,/api/mission) from Falcon BMS on this PC, one per line.
  * - `--maprender <theater> <folder> [xFt,yFt]`: map styles and landmarks rendered to PNGs (see MapRender).
  * - `--updatetest out.txt [download]`: what the About page sees on GitHub — the releases newer than this build, the
@@ -26,12 +28,15 @@ object SelfTest {
         val json = Bridge.json
         when {
             args.size == 2 && args[0] == "--selftest" -> {
-                val demo = DemoSource()
+                // A real printed briefing, with the names taken out, kept as the parser's fixture: the thing worth
+                // checking is that a file BMS actually wrote still reads the same way after a change.
+                val sample = SelfTest::class.java.getResourceAsStream("/bridge/sample_briefing.txt")
+                    ?.readBytes()?.toString(Charsets.UTF_8).orEmpty()
                 val (fd, fd2) = SharedMemoryReader.structSizes
                 File(args[1]).writeText(buildString {
                     appendLine("sizeof(FlightData)=$fd sizeof(FlightData2)=$fd2")
-                    appendLine(json.encodeToString(Briefing.serializer(), BriefingParser.parse(demo.briefingText)))
-                    appendLine(json.encodeToString(Live.serializer(), demo.live()))
+                    appendLine("sample briefing: ${sample.length} characters")
+                    appendLine(json.encodeToString(Briefing.serializer(), BriefingParser.parse(sample)))
                     SharedMemoryReader.parseNavPoint("NP:56,PT,2910660.5,258538.0,0.0,52.1;PT:\"SA-5\",364567.0,0;")?.let { appendLine(json.encodeToString(NavPoint.serializer(), it)) }
                     appendLine(json.encodeToString(Voice.serializer(), SharedMemoryReader.parseVoice("Ouranos5|PAXX,None,Dragnet5,Larissa,Larissa,Nea Anchialos")))
                     System.getenv("BMSC_TEST_BOARD_HTML")?.let(::File)?.takeIf { it.isFile }?.let { appendLine(json.encodeToString(Board.serializer(), EzBoardsRunner.parseHtml(it.readText()))) }
@@ -47,6 +52,10 @@ object SelfTest {
                 })
             }
             args.size == 3 && args[0] == "--eztest" -> File(args[2]).writeText(json.encodeToString(EzRun.serializer(), EzBoardsRunner().generate(args[1], auto = false)))
+            // --cfgtest <a copy of the BMS folder> out.txt : the Config page's whole life against a folder that is
+            // not the real install. Every step is checked by reading the files back, because this is the one part of
+            // the program that writes into a BMS folder and the only proof that matters is what is on disk.
+            args.size == 3 && args[0] == "--cfgtest" -> File(args[2]).writeText(cfgTest(File(args[1])))
             // --atotest out.txt : what the mission file BMS is flying says the other flights will do
             // --axistest <save.cam> <dtc.ini> out.txt : which way round the campaign grid runs, checked against a
             // file we already read in the app's own convention
@@ -330,8 +339,16 @@ object SelfTest {
             args.size == 3 && args[0] == "--api" -> {
                 Bridge.start()
                 Thread.sleep(2500) // first tick: files and Tacview
-                // several paths separated by commas: one response per line
-                File(args[2]).writeText(args[1].split(',').joinToString("\n") { Bridge.handle(ApiRequest("GET", it)).body.toString(Charsets.UTF_8) })
+                // several paths separated by commas: one response per line. A path may carry a query
+                // (`/api/cfg/lines?kind=user&profile=1`), which is split off here the way the server does it —
+                // without that, every route that reads a parameter answered "not found".
+                File(args[2]).writeText(
+                    args[1].split(',').joinToString("\n") { p ->
+                        val query = p.substringAfter('?', "").split('&').filter { '=' in it }
+                            .associate { it.substringBefore('=') to it.substringAfter('=') }
+                        Bridge.handle(ApiRequest("GET", p.substringBefore('?'), query)).body.toString(Charsets.UTF_8)
+                    },
+                )
                 Bridge.stop()
             }
             args.size >= 2 && args[0] == "--updatetest" -> {
@@ -383,5 +400,103 @@ object SelfTest {
             else -> return false
         }
         return true
+    }
+
+    /**
+     * The Config page's whole life, against a copy of a BMS folder.
+     *
+     * Refuses to run on anything that looks like a live install — a folder holding `Falcon BMS.exe` — because the
+     * BMS folder is read only to this program and a check that writes into it is exactly the accident this rule
+     * exists to prevent. Copy `User/Config` into an empty folder and point this at that.
+     */
+    private fun cfgTest(root: File): String = buildString {
+        if (File(root, "Falcon BMS.exe").isFile || File(root, "Bin/x64/Falcon BMS.exe").isFile) {
+            appendLine("REFUSED: $root holds Falcon BMS.exe, so it is a real install. Point this at a copy.")
+            return@buildString
+        }
+        val install = BmsInstall().apply { refresh(root.path) }
+        if (install.baseDir == null) { appendLine("REFUSED: $root is not a folder."); return@buildString }
+        val cfg = BmsConfig(install)
+        val dir = File(root, "User\\Config")
+        val live = File(dir, "Falcon BMS User.cfg")
+        val back = File(dir, "BackUp")
+        fun check(what: String, ok: Boolean) = appendLine("${if (ok) "ok  " else "FAIL"} $what")
+
+        // A folder this has already run against has a BackUp, three profiles and a profile selected, and the checks
+        // below are written for a fresh copy. Copy the folder again rather than reading a pass that means nothing.
+        if (back.exists()) {
+            appendLine("REFUSED: $back already exists, so this has run here before. Copy User/Config again first.")
+            return@buildString
+        }
+        appendLine("folder: $root")
+        appendLine("before: live=${live.isFile} backup=${File(back, "Falcon BMS User.cfg").isFile}")
+        // the check's own read, which a locked-down folder refuses as well; the product's reads are guarded already
+        val beforeText = live.takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }.orEmpty()
+        val launcher = "LAUNCHER OVERRIDES BEGIN HERE" in beforeText
+        appendLine("the file has a launcher block: $launcher")
+
+        // --- the copy, and the copy taken twice
+        var s = cfg.backUp()
+        // A folder Windows will not let us write is the ordinary case for a Program Files install, and the only
+        // right answer is a sentence saying so. Nothing may throw, and the page may not simply go quiet.
+        if (!s.userBackedUp) {
+            appendLine("no backup was taken; the reason given: ${s.error ?: "(none)"}")
+            check("it said why instead of throwing", s.error != null)
+            appendLine(if ("FAIL" in this) "SOMETHING FAILED" else "all checks passed (read-only folder)")
+            return@buildString
+        }
+        check("backup taken", s.userBackedUp)
+        check("three profiles laid down", s.user.profiles == listOf(true, true, true))
+        val origText = File(back, "Falcon BMS User.cfg").readText()
+        check("profile 1 is what was there", File(back, "User Profile 1.cfg").readText() == beforeText)
+        check("profiles 2 and 3 hold no settings", cfg.read(BmsConfig.Kind.USER, 2).lines.isEmpty())
+        // pressing the button again must not replace the original with whatever the file says now
+        live.writeText(beforeText + "\r\nset g_bScratch 1\r\n")
+        s = cfg.backUp()
+        check("a second backup leaves the original alone", File(back, "Falcon BMS User.cfg").readText() == origText)
+        live.writeText(beforeText)
+
+        // --- one setting, in a profile that is not the one in use
+        val key = "g_bRealisticAvionics"
+        var f = cfg.set(BmsConfig.Kind.USER, 2, key, "0")
+        check("the line is in profile 2", f.lines.any { it.key == key && it.value == "0" })
+        check("profile 2 holds only that line", f.lines.size == 1)
+        check("the live file is untouched", live.readText() == beforeText)
+
+        // --- clearing it takes the line out again
+        f = cfg.set(BmsConfig.Kind.USER, 2, key, null)
+        check("clearing removes the line", f.lines.none { it.key == key })
+
+        // --- switching to profile 2, and what that does to the live file
+        cfg.set(BmsConfig.Kind.USER, 2, key, "0")
+        s = cfg.select(BmsConfig.Kind.USER, 2)
+        check("profile 2 is now the one in use", s.user.selected == 2)
+        val afterSelect = live.readText()
+        check("the live file has the setting", Regex("(?m)^set $key 0\\s*$").containsMatchIn(afterSelect))
+        check(
+            "the launcher's block survived",
+            !launcher || ("LAUNCHER OVERRIDES BEGIN HERE" in afterSelect &&
+                afterSelect.substringAfter("LAUNCHER OVERRIDES BEGIN HERE") == beforeText.substringAfter("LAUNCHER OVERRIDES BEGIN HERE")),
+        )
+        check("a new line went above the launcher's block", !launcher || afterSelect.indexOf("set $key 0") < afterSelect.indexOf("LAUNCHER OVERRIDES BEGIN HERE"))
+
+        // --- editing the profile in use reaches the live file straight away
+        cfg.set(BmsConfig.Kind.USER, 2, key, "1")
+        check("the live file followed the edit", Regex("(?m)^set $key 1\\s*$").containsMatchIn(live.readText()))
+
+        // --- copying one profile onto another
+        f = cfg.copy(BmsConfig.Kind.USER, 1, 3)
+        check("profile 3 now holds profile 1's settings", f.lines.map { it.key } == cfg.read(BmsConfig.Kind.USER, 1).lines.map { it.key })
+
+        // --- and the way back
+        f = cfg.restore(BmsConfig.Kind.USER, 2)
+        check("restoring profile 2 gives back the original", File(back, "User Profile 2.cfg").readText() == origText)
+        check("and the live file with it", live.readText().trimEnd() == origText.trimEnd())
+        check("nothing of ours is left in it", f.lines.none { it.key == key } || key in origText)
+
+        appendLine()
+        appendLine("state: ${Bridge.json.encodeToString(com.bmscompanion.app.data.mission.CfgState.serializer(), cfg.state())}")
+        appendLine("profile 1 holds ${cfg.read(BmsConfig.Kind.USER, 1).lines.size} lines")
+        appendLine(if ("FAIL" in this) "SOMETHING FAILED" else "all checks passed")
     }
 }

@@ -5,7 +5,9 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { loadTheaters } from './theaters.mjs';
 import { buildCatalog } from './catalog.mjs';
+import { buildCatalog as buildCfgCatalog } from './cfgcatalog.mjs';
 import { buildAirports } from './airports.mjs';
+import { buildAirfields } from './airfields.mjs';
 import { loadDb } from './db.mjs';
 import { terrainInfo } from './terrain.mjs';
 import { findTacRefImage, tgaToWebp } from './images.mjs';
@@ -43,15 +45,19 @@ function familyTitle(names) {
 }
 
 async function main() {
-  for (const d of ['airports', 'radio', 'curated']) fs.rmSync(path.join(OUT, d), { recursive: true, force: true });
+  for (const d of ['airports', 'airfields', 'radio', 'curated']) fs.rmSync(path.join(OUT, d), { recursive: true, force: true });
   fs.mkdirSync(OUT, { recursive: true });
   fs.mkdirSync(IMG, { recursive: true });
   fs.mkdirSync(MAPS, { recursive: true });
+  fs.mkdirSync(path.join(OUT, 'airfields'), { recursive: true });
   const theaters = loadTheaters();
   const aircraft = new Map(); // key -> { base, variants: Map(hash -> variant) }
   const weapons = new Map();
   const encyclopedia = new Map(); // key -> {entry, hash}
   const airportSets = new Map();
+  const airfieldFiles = new Map();   // af-hash -> one field's ground chart
+  const airfieldIndexes = new Map(); // ai-hash -> { campId: af-hash }
+  const airfieldWarnings = [];
   const radioSets = new Map();
   const maps = new Map();
   const imageJobs = new Map(); // pic -> source tga
@@ -61,7 +67,7 @@ async function main() {
     const t0 = Date.now();
     const db = loadDb(th);
     const { aircraft: acs, weapons: wps } = buildCatalog(th);
-    const { airports, navaids, radio, places } = buildAirports(th);
+    const { airports, navaids, radio, places, geo } = buildAirports(th);
 
     // --- encyclopedia (TacRef) ---
     const tacKeyByNum = new Map();
@@ -116,6 +122,18 @@ async function main() {
     const rh = 'rm-' + hash(radio);
     if (!radioSets.has(rh)) radioSets.set(rh, radio);
 
+    // --- ground charts (one file per field, shared between theaters that fly the same terrain) ---
+    const { fields, warnings } = await buildAirfields(th, airports, geo, db);
+    airfieldWarnings.push(...warnings);
+    const fieldIndex = {};
+    for (const f of fields) {
+      const fh = 'af-' + hash(f);
+      if (!airfieldFiles.has(fh)) airfieldFiles.set(fh, f);
+      fieldIndex[f.id] = fh;
+    }
+    const fih = 'ai-' + hash(fieldIndex);
+    if (!airfieldIndexes.has(fih)) airfieldIndexes.set(fih, fieldIndex);
+
     // --- terrain map ---
     const ti = terrainInfo(th);
     let mapFile = null;
@@ -131,10 +149,10 @@ async function main() {
     const primary = !th.addon ? true : !!ownAddon && terrRel.startsWith(ownAddon + '/');
     theaterIndex.push({
       id: th.id, name: th.name, desc: th.desc, addon: th.addon, sizeFt: ti?.sizeFt ?? 3358700, map: mapFile, mapId: mapFile?.split('/')[1] ?? null,
-      airportSet: ah, radioSet: rh, airportCount: airports.length, aircraftCount: acs.length,
+      airportSet: ah, radioSet: rh, airfieldSet: fields.length ? fih : null, airportCount: airports.length, aircraftCount: acs.length,
       primary, mapGroup: ti ? ti.bil : th.id,
     });
-    console.log(`${th.id}: ${acs.length} aircraft, ${wps.length} weapons, ${airports.length} airports, ${db.tacref.size} tacref (${Date.now() - t0}ms)`);
+    console.log(`${th.id}: ${acs.length} aircraft, ${wps.length} weapons, ${airports.length} airports, ${fields.length} ground charts, ${db.tacref.size} tacref (${Date.now() - t0}ms)`);
   }
 
   // group add-on theaters under their main theater
@@ -172,6 +190,17 @@ async function main() {
 
   fs.mkdirSync(path.join(OUT, 'airports'), { recursive: true });
   for (const [k, v] of airportSets) writeJson(path.join(OUT, 'airports', k + '.json'), v);
+  fs.mkdirSync(path.join(OUT, 'airfields'), { recursive: true });
+  for (const [k, v] of airfieldFiles) writeJson(path.join(OUT, 'airfields', k + '.json'), v);
+  for (const [k, v] of airfieldIndexes) writeJson(path.join(OUT, 'airfields', k + '.json'), v);
+  if (airfieldWarnings.length) {
+    console.log(`
+ground charts: ${airfieldWarnings.length} field(s) disagree with the airport record and need looking at:`);
+    for (const w of airfieldWarnings) console.log('  ! ' + w);
+  } else {
+    console.log(`
+ground charts: ${airfieldFiles.size} fields, all agreeing with their airport records`);
+  }
   fs.mkdirSync(path.join(OUT, 'radio'), { recursive: true });
   for (const [k, v] of radioSets) writeJson(path.join(OUT, 'radio', k + '.json'), v);
 
@@ -184,6 +213,12 @@ async function main() {
     writeJson(path.join(OUT, 'curated', f), obj);
     curated.push(f);
   }
+
+  // --- the config catalogue: every option this version has, out of BMS's own stock Falcon BMS.cfg ---
+  const cfgOptions = buildCfgCatalog();
+  fs.mkdirSync(path.join(OUT, 'cfg'), { recursive: true });
+  writeJson(path.join(OUT, 'cfg', 'options.json'), { version: '4.38', options: cfgOptions });
+  console.log(`config options: ${cfgOptions.length}`);
 
   writeJson(path.join(OUT, 'index.json'), {
     bmsVersion: '4.38', generated: new Date().toISOString(), theaters: theaterIndex, curated,

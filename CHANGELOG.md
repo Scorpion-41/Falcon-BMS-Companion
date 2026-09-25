@@ -1,5 +1,100 @@
 # Changelog
 
+## 1.3.7 (BMS 4.38) — September 2026
+
+**Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install** — everything you have set up carries over.
+
+Two big new things — a **Taxi page** with a ground chart for every airfield in the sim, and a **Config** section that edits Falcon BMS's own settings files — plus a general tidy-up of where things live.
+
+---
+
+### New: Taxi — a ground chart for every airfield BMS flies
+
+**What it is.** A new page in the Mission section, next to Map, and the same chart under Airfields for any field in any theater. It shows you the airfield from above: the runways, every taxiway with its letter, the hold short points, the pavement, the buildings, and every parking spot with the number BMS gives it. **1,840 charted airfields across all nineteen theaters**, drawn in the app itself — no Falcon BMS install needed on your phone or tablet.
+
+**Where the charts come from.** They are not drawings, and they are not the pictures in BMS's docs folder. Every chart is generated from **Falcon BMS's own game files**: the airfield data the sim itself uses to taxi its AI aircraft, and — for the asphalt — the airfield's actual 3D model, read straight out of the game. So what you see is the field as the sim has it: the taxiways run where the sim drives, the aprons and dispersals are the real shapes with straight edges and square corners, and the parking numbers are the ones the tower gives you. They were checked field by field against the parking charts the theaters ship, which print a latitude and longitude for every spot.
+
+**How to use it.**
+
+1. Open **Mission → Taxi** (or **Airfields → any field → Ground chart → Open**).
+2. If Falcon BMS is running, the page already knows where you are: it opens on your field and shows the spot you spawned on.
+3. Press the **RWY** button for the runway in use. (In a mission it is usually chosen for you — the sim parks you on the half of the ramp nearest the active runway, so the spot you are sitting on tells the app which one it is.)
+4. Pick your parking spot — tap it on the chart, or tap its number in the list.
+5. Read the clearance: *"Taxi to runway 26 via B, A, H. Hold short runway 26."* The way is drawn on the chart in blue, with the turn at each junction and the distance of every leg written out beside it.
+6. Landing instead? Press **Taxi in** and pick the spot you have been given; it draws the way in from the runway.
+
+Press the same **RWY** button again to clear it and put the chart back to plain. Nothing is drawn until you ask for it, so looking a field up before a flight shows you the field, not somebody else's clearance.
+
+**The rest of it.**
+
+- **Day or night chart**, whichever suits the light you are flying in, remembered between launches.
+- **Zoom** with the wheel, a pinch, or the buttons on the chart.
+- **You can see which spots have a roof** — a hardened shelter or a hangar is drawn as a bay you taxi into nose-first, open ramp as a thin stand box. The clearance says which kind you are leaving from or heading to.
+- **Taxiway letters sit where BMS puts its own signs**, on yellow boards like the real thing, and the spot numbers move aside and draw a line back to their spot rather than piling up on each other.
+- **Works with nothing running.** Tap a spot, pick a runway, read the clearance — all of it works from an armchair with BMS closed.
+- **And it is on your kneeboard in VR.** The same charts are two of the VR board kinds — see *In the headset* below.
+
+### New: Carriers are charted too
+
+Every deck in the sim — the Nimitz class and Enterprise, Kuznetsov and Liaoning, Hermes, the Invincibles and Ark Royal, Queen Elizabeth and Prince of Wales, Clemenceau, 25 de Mayo, Tarawa, Wasp and Ocean — **133 decks across the theaters, 51 distinct ships**.
+
+Falcon BMS publishes nothing usable for a carrier: its deck points run a mile past the bow because the approach path is in the same list, and its "runways" are that approach path, a catapult, and sometimes a rectangle of no width at all. So a carrier is drawn from the **published dimensions of the real ship**: the flight deck outline with its angled-deck sponson, the landing area at its real angle, the catapults, the ski jump where the class has one, and the island on the starboard side. BMS supplies the one thing only it knows — where the ship is and which way it lies.
+
+A carrier page is just the deck and the day/night switch. There is no ramp, no runway button and no taxi route on it, because a carrier steams into wind: the runway BMS names it and the numbers it gives its deck spots turn with the ship.
+
+### New: Config — Falcon BMS's own settings, with three profiles
+
+**What it is.** Falcon BMS keeps several hundred settings in a text file its own screens never show you. This page lists all of them, tells you what each one does, and writes only the ones you change.
+
+**It is off until you ask for it:** **Setup → Mission pages → Show the Config section**. It then appears as a section of its own, on the PC, in the browser and on a tablet alike — so you can change a setting from the sofa for the flight about to start.
+
+**How to use it.**
+
+1. Turn it on in Setup, then open **Config**.
+2. Press **Click to Back Up and Enable**. Your `Falcon BMS User.cfg` is copied into a `BackUp` folder beside it. That copy is taken **once and never replaced**, so there is always a way back to exactly what you had.
+3. Three profiles are laid down at the same time. **Profile 1** is a copy of what you already had; **2** and **3** start empty, which in a config file means every setting at its Falcon BMS default.
+4. Pick a file (**User**, or **VR** if you fly in a headset) and a profile, and change what you like. Switches for switches, a list for the settings that take named choices, a box for the rest.
+5. **Search** by name or by what a setting does — the box never scrolls away, and the group you are looking at stays under it.
+6. Press **⋯** to make a profile the one BMS reads, to copy one profile's settings into another, or to put a profile back to your original file.
+
+**What it shows you.** The settings your file actually holds are listed **first and marked**; everything else is shown dim at its Falcon BMS default. Change one and it moves up into the first list — which is exactly what it does in the file, because a setting left at its default is not written at all. 219 settings, grouped (VR, graphics, terrain, cockpit and avionics, views, sound, multiplayer, campaign), each described in BMS's own words, read out of the stock config the version ships with — so the list is right for the version you have.
+
+**What it never touches.** The lines your BMS launcher writes at the end of the file: they are shown, carried across untouched when you switch profiles, and anything new is written above them. Nothing outside `User/Config` is written at all, and no file is written over in place — the new one is written beside it and moved across, so a failed write can never leave you with half a config. If Windows will not let it write (Falcon BMS in Program Files, say), the page tells you so in a sentence you can act on.
+
+There is a red warning on that page and it is meant: these are Falcon BMS's own settings, and a wrong one can stop BMS starting. That is what the backup is for.
+
+### In the headset
+
+The new ground charts are on your kneeboards too — two new board kinds you can put on any OpenKneeboard tab.
+
+- **Live taxi board.** It draws the field you are **actually standing on**, briefed or not, with your jet on it and what is ahead of you up the page — the chart turns with you, the way you read the world through the canopy. **Its pages are zoom steps**, so the *next page* and *previous page* buttons you already have bound zoom the chart in and out: from the whole field down to a couple of stands either side. There is no mouse in VR, so a bound button is the only control there is. Airborne, the board says so and waits for you to land.
+- **Ground chart board** (this replaces the old Airfield plates board). One page per runway end, drawn from the field's own data instead of the pictures in BMS's docs folder, with your own position marked on it. Flip pages with the same buttons. It is the chart to read before start-up or on the way in; the way to taxi is the Live taxi board's job. (The instrument charts board is untouched.)
+- **Ground charts turn to fit the page.** A kneeboard is far taller than it is wide and most airfields are long and thin, so the field is turned to whatever angle fills the page — a runway lying east-west is drawn upright, at roughly twice the size. The north arrow says which way it ended up; heading-up and north-up are still there.
+- **Both boards are dark by default** and have a **Configure** button on their row: day or night, and which way up.
+- **Radio presets stand out**: a channel is boxed — C15 — beside its frequency instead of running together as one number.
+- **The hostile picture reads at a glance**: BRAA off your own jet in red, the bullseye call in cyan, with bearing, range and altitude each in their own weight.
+- **The weather is a table.** It used to read "Fair Fair Fair" with nothing to say which was which; now each figure sits under the part of the flight it belongs to.
+- **Your airfields are on the briefing board**: departure, recovery and alternate, each with its TACAN, tower, ground and approach frequencies, and every runway with its true heading, length and ILS.
+- **No live picture? The map says so in the middle of the page**, where you can read it in VR: press F in the cockpit to start ACMI recording, and the notice leaves the moment traffic arrives.
+
+### Elsewhere
+
+- **The Airfields page shows the chart** instead of offering it: the field is drawn on the page at the size it takes to recognise the place, and tapping it opens the full chart.
+- **The app is 52 MB smaller.** The flat pictures of the ground, parking and end-of-runway charts from BMS's docs folder are gone — the app draws all three itself now, from the field's own data, at any zoom and with your position on it. **Instrument charts are untouched**: every approach, SID and STAR plate is still there.
+- **Setup is its own section** beside Home, Mission and the rest, instead of a tab inside Mission. It is what you do once, before any mission — and a device that could not reach the PC used to have to open the very section that was empty because of it to find out why.
+- **Demo mode is gone**, on the PC and in the app. Everything BMS Companion shows now comes from Falcon BMS, so no screen can quietly be showing a made-up mission and there is no setting to remember to turn off.
+- **Kneeboards are generated when you press PRINT, by default.** It only runs the EZBoards folder you have configured, so with none set it does nothing.
+- **The navigation rail reads better**: an instrument face for Cockpit instead of a gamepad, room between one section's label and the next section's icon, and on the PC the window's own buttons out of the list — full screen at the top, the server page at the foot.
+
+### Fixed
+
+- **Kneeboards on PRINT, from wherever you are.** The Kneeboards page told every reader that pressing PRINT in BMS generates them by itself. That is only true when the setting is on, it was off to begin with, and it could only be changed on the PC — so following those instructions from a tablet did nothing and said nothing. The page now says which it is and has the switch on it.
+- **The live map flickered down one edge on a VR board** — a strip alternating between the map and the bare board several times a second, at some zoom steps only. The map now always covers the page, and the pan is held in place without fighting the jet it is following.
+- **Map labels were a smudge on the Chart style.** Names and figures were drawn as white text with a dark blur behind them, which works on dark terrain and disappears into pale terrain. The map now knows when the ground under it is light and turns its labels dark with a white glow; every symbol's halo turns white with them, and the tanker's mint and the AWACS's lilac go deeper so they still read.
+- **Airfield symbols could be hidden** behind a steerpoint ring or an aircraft parked on the field. They are drawn above everything else on the map now — only your own jet and whatever you have selected sit on top.
+- **Other aircraft sat slightly off.** Everyone else's position comes from the ACMI feed, which uses a reference of its own, and your own comes from BMS directly — so every contact could be displaced by the same small amount. Invisible on a theater map, but enough to matter now that the app draws the ground. They are anchored to your own aircraft, which is exact.
+
+
 ## 1.3.5 (BMS 4.38) — September 2026
 
 **Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install** — everything you have set up carries over.

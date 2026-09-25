@@ -14,6 +14,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -37,7 +39,9 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Radar
-import androidx.compose.material.icons.filled.SportsEsports
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
@@ -68,6 +72,7 @@ import com.bmscompanion.app.ui.components.isMedium
 import com.bmscompanion.app.ui.screens.AboutScreen
 import com.bmscompanion.app.ui.screens.AircraftDetailRoute
 import com.bmscompanion.app.ui.screens.AirportDetailRoute
+import com.bmscompanion.app.ui.screens.GroundChartRoute
 import com.bmscompanion.app.ui.screens.AirportsScreen
 import com.bmscompanion.app.ui.screens.ArsenalScreen
 import com.bmscompanion.app.ui.screens.BullseyeScreen
@@ -96,10 +101,13 @@ object Routes {
     const val COCKPIT = "cockpit"
     const val MISSION = "mission"
     const val MEDIA = "media"
+    const val SETUP = "setup"
+    const val CONFIG = "config"
     fun aircraft(key: String) = "aircraft/${Uri.encode(key)}"
     fun weapon(key: String) = "weapon/${Uri.encode(key)}"
     fun threat(id: String) = "threat/${Uri.encode(id)}"
     fun airport(theater: String, id: Int) = "airport/${Uri.encode(theater)}/$id"
+    fun groundChart(theater: String, id: Int) = "groundchart/${Uri.encode(theater)}/$id"
     fun ency(key: String) = "ency/${Uri.encode(key)}"
     fun hotas(ac: String) = "hotas/$ac"
     fun checklist(id: String) = "checklist/${Uri.encode(id)}"
@@ -114,22 +122,39 @@ object Routes {
     const val ABOUT = "about"
 }
 
+/**
+ * What the window itself puts at the top and the foot of the navigation rail, set by the PC entry point and null
+ * everywhere else: full screen at the top, the server page at the bottom. They are the window's own controls, not
+ * places to go, so they sit outside the list of sections with a gap either side.
+ */
+var railTop: (@Composable () -> Unit)? = null
+var railBottom: (@Composable () -> Unit)? = null
+
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
-private val tabs = listOf(
+private val allTabs = listOf(
     Tab(Routes.HOME, "Home", Icons.Default.Home),
     Tab(Routes.MISSION, "Mission", Icons.Default.MyLocation),
     Tab(Routes.ARSENAL, "Arsenal", Icons.Default.RocketLaunch),
     Tab(Routes.THREATS, "Threats", Icons.Default.Radar),
     Tab(Routes.AIRPORTS, "Airfields", Icons.Default.FlightLand),
-    Tab(Routes.COCKPIT, "Cockpit", Icons.Default.SportsEsports),
+    Tab(Routes.COCKPIT, "Cockpit", Icons.Default.Speed),
     Tab(Routes.MEDIA, "Media", Icons.Default.PhotoLibrary),
+    Tab(Routes.SETUP, "Setup", Icons.Default.Settings),
+    Tab(Routes.CONFIG, "Config", Icons.Default.Tune),
 )
+
+/**
+ * The sections this pilot has. Config edits Falcon BMS's own settings files, so it is off until it is asked for on
+ * Setup → Mission pages: nobody meets it by wandering into it.
+ */
+private val tabs: List<Tab>
+    get() = allTabs.filter { it.route != Routes.CONFIG || com.bmscompanion.app.ui.screens.mission.MissionTabPrefs.showConfig }
 
 private val tabOwner = mapOf(
     "aircraft" to Routes.ARSENAL, "weapon" to Routes.ARSENAL,
     "threat" to Routes.THREATS, "harm" to Routes.THREATS, "encyclopedia" to Routes.THREATS, "ency" to Routes.THREATS,
-    "airport" to Routes.AIRPORTS,
+    "airport" to Routes.AIRPORTS, "groundchart" to Routes.AIRPORTS,
     "hotas" to Routes.COCKPIT, "checklists" to Routes.COCKPIT, "checklist" to Routes.COCKPIT, "comms" to Routes.COCKPIT,
     "bullseye" to Routes.COCKPIT, "tools" to Routes.COCKPIT,
     // "m/..." = reference pages opened from the Mission section; they stay under the Mission tab
@@ -141,6 +166,9 @@ fun NavHostController.go(route: String) = navigate(route) { launchSingleTop = tr
 @Composable
 fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavController()) {
     androidx.compose.runtime.LaunchedEffect(startRoute) { if (startRoute != null) nav.navigate(startRoute) }
+    // Ask once, quietly, when the app starts. Nothing is shown unless there is a newer version, and nothing is
+    // downloaded: the pilot decides that on the About page.
+    androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { com.bmscompanion.app.data.update.Updates.check() } }
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: Routes.HOME
     val head = route.substringBefore('/').substringBefore('?')
@@ -158,7 +186,7 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
             // Home is the start destination, so this pops the sections off and shows it. It is one navigate and no
             // more: popBackStack + clearBackStack took entries out from under the NavHost while it was still showing
             // them, and navigation-compose then asked a destroyed entry for its ViewModel store. restoreState is off
-            // here on purpose — the stack saved under Home is whatever section was open, and restoring it would put
+            // here on purpose â the stack saved under Home is whatever section was open, and restoring it would put
             // that section straight back instead of showing Home.
             nav.navigate(Routes.HOME) {
                 popUpTo(nav.graph.findStartDestination().id) { saveState = true }
@@ -181,9 +209,9 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
         }
     }
 
-    // What the kneeboard's ☰ offers: the reference sections. The Home hub only leads to them, and nobody browses
+    // What the kneeboard's â° offers: the reference sections. The Home hub only leads to them, and nobody browses
     // screenshots from the cockpit, so both are left out.
-    val kneeSections = tabs.filter { it.route != Routes.HOME && it.route != Routes.MEDIA }
+    val kneeSections = tabs.filter { it.route != Routes.HOME && it.route != Routes.MEDIA && it.route != Routes.CONFIG && it.route != Routes.SETUP }
         .map { t -> KneeboardSection(t.route, t.label, t.icon) { onTab(t.route) } }
 
     // The sections, as pages the VR program can flip between, and the flipping followed back into the app. Both are
@@ -221,6 +249,15 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
                 containerColor = Hud.Surface,
                 modifier = Modifier.fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical)),
             ) {
+                // What the window itself offers, kept apart from the sections: full screen at the top, where it is
+                // out of the way of the list, and the server page at the foot. Neither is a place to navigate to,
+                // so neither belongs among the sections — and the gap is what says so.
+                val top = railTop
+                if (top != null) {
+                    Spacer(Modifier.height(6.dp))
+                    top()
+                    Spacer(Modifier.height(18.dp))
+                }
                 // Centred, not stacked from the top. Top-aligned, the first section sits in the very corner of the
                 // screen — the hardest place on a display to hit with a mouse and the easiest to miss with a thumb —
                 // and the rail is mostly empty below it. Centring puts every section within reach of the middle.
@@ -230,18 +267,27 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                tabs.forEach { t ->
-                    NavigationRailItem(
-                        selected = currentTab == t.route,
-                        onClick = { onTab(t.route) },
-                        icon = { Icon(t.icon, t.label) },
-                        label = { Text(t.label) },
-                        colors = NavigationRailItemDefaults.colors(
-                            selectedIconColor = Hud.Bg, indicatorColor = Hud.Amber,
-                            selectedTextColor = Hud.Amber, unselectedIconColor = Hud.TextDim, unselectedTextColor = Hud.TextDim,
-                        ),
-                    )
+                    tabs.forEach { t ->
+                        NavigationRailItem(
+                            // Room between one section and the next: the label of one sat directly under the icon
+                            // of the next, and on a rail of eight sections that reads as one column of text.
+                            modifier = Modifier.padding(vertical = 5.dp),
+                            selected = currentTab == t.route,
+                            onClick = { onTab(t.route) },
+                            icon = { Icon(t.icon, t.label) },
+                            label = { Text(t.label) },
+                            colors = NavigationRailItemDefaults.colors(
+                                selectedIconColor = Hud.Bg, indicatorColor = Hud.Amber,
+                                selectedTextColor = Hud.Amber, unselectedIconColor = Hud.TextDim, unselectedTextColor = Hud.TextDim,
+                            ),
+                        )
+                    }
                 }
+                val foot = railBottom
+                if (foot != null) {
+                    Spacer(Modifier.height(18.dp))
+                    foot()
+                    Spacer(Modifier.height(10.dp))
                 }
             }
             Box(Modifier.width(1.dp).fillMaxHeight().background(Hud.Outline.copy(alpha = 0.5f)))
@@ -251,9 +297,9 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
                 Modifier.weight(1f).windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Top))
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(if (rail || immersive) WindowInsetsSides.End + WindowInsetsSides.Bottom + (if (immersive) WindowInsetsSides.Start else WindowInsetsSides.End) else WindowInsetsSides.Horizontal)),
             ) {
-              // On a kneeboard the page gets the whole board: the ☰ sections button and the page's own ⋯ options
+              // On a kneeboard the page gets the whole board: the â° sections button and the page's own â¯ options
               // float over it and fade out with the mouse. Everywhere else this just draws the page.
-              // A numbered board has no chrome at all: the ☰ is a button, and a board has nothing to press it with.
+              // A numbered board has no chrome at all: the â° is a button, and a board has nothing to press it with.
               KneeboardFrame(enabled = knee, chrome = !immersive && Kneeboard.slot == null, sections = kneeSections, current = currentTab) {
                 val slot = Kneeboard.slot
                 if (slot != null) {
@@ -266,7 +312,7 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
                     // No transitions between sections, and that is deliberate. While one fades out, AnimatedContent
                     // goes on composing the page that has just been popped, and navigation-compose then asks that
                     // entry for its ViewModel store: "You cannot access the NavBackStackEntry's ViewModels until it is
-                    // added to the NavController's back stack" — an error dialog on the PC, a dead page in a browser,
+                    // added to the NavController's back stack" â an error dialog on the PC, a dead page in a browser,
                     // for anyone who clicked through the sections at a normal pace. Switching instantly cannot race.
                     enterTransition = { EnterTransition.None },
                     exitTransition = { ExitTransition.None },
@@ -280,6 +326,8 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
                     composable(Routes.COCKPIT) { CockpitHubScreen(nav) }
                     composable(Routes.MISSION) { com.bmscompanion.app.ui.screens.mission.MissionScreen(nav) }
                     composable(Routes.MEDIA) { com.bmscompanion.app.ui.screens.MediaScreen(nav) }
+                    composable(Routes.SETUP) { com.bmscompanion.app.ui.screens.SetupScreen(nav) }
+                    composable(Routes.CONFIG) { com.bmscompanion.app.ui.screens.ConfigScreen(nav) }
                     composable("media/view?name={name}", arguments = listOf(navArgument("name") { defaultValue = "" })) {
                         com.bmscompanion.app.ui.screens.MediaViewerScreen(nav, it.arguments?.getString("name").orEmpty())
                     }
@@ -287,6 +335,10 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
                         "m/airport/{theater}/{id}",
                         arguments = listOf(navArgument("id") { type = NavType.IntType }),
                     ) { AirportDetailRoute(nav, it.arguments?.getString("theater").orEmpty(), it.arguments?.getInt("id") ?: 0) }
+                    composable(
+                        "m/groundchart/{theater}/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { GroundChartRoute(nav, it.arguments?.getString("theater").orEmpty(), it.arguments?.getInt("id") ?: 0) }
                     composable("m/weapon/{key}") { WeaponDetailRoute(nav, it.arguments?.getString("key").orEmpty()) }
                     composable("m/threat/{id}") { ThreatDetailRoute(nav, it.arguments?.getString("id").orEmpty()) }
                     composable("aircraft/{key}") { AircraftDetailRoute(nav, it.arguments?.getString("key").orEmpty()) }
@@ -297,6 +349,10 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
                         "airport/{theater}/{id}",
                         arguments = listOf(navArgument("id") { type = NavType.IntType }),
                     ) { AirportDetailRoute(nav, it.arguments?.getString("theater").orEmpty(), it.arguments?.getInt("id") ?: 0) }
+                    composable(
+                        "groundchart/{theater}/{id}",
+                        arguments = listOf(navArgument("id") { type = NavType.IntType }),
+                    ) { GroundChartRoute(nav, it.arguments?.getString("theater").orEmpty(), it.arguments?.getInt("id") ?: 0) }
                     composable("hotas/{ac}") { HotasScreen(nav, it.arguments?.getString("ac") ?: "f16") }
                     composable(Routes.CHECKLISTS) { ChecklistsScreen(nav) }
                     composable("checklist/{id}") { ChecklistScreen(nav, it.arguments?.getString("id").orEmpty()) }
@@ -332,6 +388,13 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
                         SearchScreen(nav, it.arguments?.getString("q").orEmpty())
                     }
                 }
+              }
+              // A newer version, said once in the corner and nowhere else until it is wanted.
+              if (!immersive && !knee) {
+                com.bmscompanion.app.ui.components.UpdateBadge(
+                    onClick = { nav.go(Routes.ABOUT) },
+                    modifier = Modifier.align(Alignment.TopEnd).padding(top = 10.dp, end = 12.dp),
+                )
               }
             }
             if (!rail && !immersive && !knee) {

@@ -254,7 +254,7 @@ fun rememberMapData(env: MissionEnv): MapData {
 @Composable
 fun MissionMapPane(env: MissionEnv, state: MapState, sel: MapSel?, onSel: (MapSel?) -> Unit, onOpenTab: (MissionTab) -> Unit) {
     if (env.theater == null) {
-        PaneEmpty("No theater yet", "Connect to the BMS PC to load the mission theater.", "Setup") { onOpenTab(MissionTab.SETUP) }
+        PaneEmpty("No theater yet", "Connect to the BMS PC to load the mission theater.", "Setup") { env.nav.go(com.bmscompanion.app.ui.Routes.SETUP) }
         return
     }
     val d = rememberMapData(env)
@@ -589,8 +589,10 @@ fun LiveMap(
                 }
             }
             if (flightStrip) FlightStrip(d.live, d.bull)
-            if (!knee) AcmiReminder()
         }
+        // The picture is missing whenever BMS is not recording, and a VR board has no pointer to dismiss a corner
+        // pill with, so the warning sits in the middle of the map on every copy of it and leaves when data arrives.
+        AcmiCenterNotice(Modifier.align(Alignment.Center))
         // recenter
         if (!bare) Box(
             Modifier.align(Alignment.BottomEnd).padding(12.dp).size(46.dp).clip(RoundedCornerShape(23.dp)).background(Hud.Surface.copy(alpha = 0.95f))

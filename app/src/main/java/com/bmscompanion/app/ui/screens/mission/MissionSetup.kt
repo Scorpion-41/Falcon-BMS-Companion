@@ -65,7 +65,6 @@ fun MissionSetupPane(onConnected: () -> Unit) {
                 Para("Install **BMS Companion for Windows** (BMS-Companion-PC.msi or the portable zip) from the project's GitHub Releases page on the PC that runs Falcon BMS.")
                 Para("It opens on its **server page** (or the full app, if you use it there too). Either way it reads Falcon BMS and serves this device.")
                 Para("When Windows asks, allow it on **private networks**, or press **Allow through Windows Firewall** on the PC. It needs TCP **47474** and UDP **47475**, local network only.")
-                Para("No BMS handy? Turn on **Demo mode** in the Falcon BMS settings on the PC to try every screen with a fake mission.")
             }
             GuideStep(2, "Connect this device", Hud.Amber) {
                 Para("Put the tablet or phone on the same Wi-Fi/LAN as the PC, then tap **Find BMS PC** above.")
@@ -211,8 +210,8 @@ private fun StatusCard() {
     val info by MissionLink.info.collectAsState()
     val i = info ?: return
     SectionCard("What the PC sees", accent = Hud.Green) {
-        Row2("PC", "BMS Companion ${i.version} on ${i.host}${if (i.demo) " (demo mode)" else ""}", true)
-        Row2("Falcon BMS", when { i.demo -> "demo"; i.bms.running -> "running ${i.bms.version ?: ""} · ${if (i.bms.flying) "3D" else "UI"}"; i.bms.installed -> "installed, not running"; else -> "not found" }, i.bms.running)
+        Row2("PC", "BMS Companion ${i.version} on ${i.host}", true)
+        Row2("Falcon BMS", when { i.bms.running -> "running ${i.bms.version ?: ""} · ${if (i.bms.flying) "3D" else "UI"}"; i.bms.installed -> "installed, not running"; else -> "not found" }, i.bms.running)
         Row2("Theater", i.bms.theater ?: "—", i.bms.theater != null)
         Row2("Briefing", if (i.briefing.available) "printed ${i.briefing.generated ?: ""}" else "not printed yet", i.briefing.available)
         Row2("DTC file", if (i.briefing.dtcModified > 0) "found" else "not saved yet", i.briefing.dtcModified > 0)

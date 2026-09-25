@@ -19,7 +19,7 @@ android {
         applicationId = "com.bmscompanion.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
+        versionCode = 11
         versionName = "${appVersionConst("NAME")} (BMS ${appVersionConst("BMS")})"
     }
 

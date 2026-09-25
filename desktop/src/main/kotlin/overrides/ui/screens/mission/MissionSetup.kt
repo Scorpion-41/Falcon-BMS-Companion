@@ -86,7 +86,7 @@ fun MissionSetupPane(onConnected: () -> Unit) {
             }
             GuideStep(2, "Android phones and tablets", Hud.Amber) {
                 Para("Install **BMS-Companion.apk** (allow installing unknown apps). Put the device on the same Wi-Fi/LAN as the BMS PC.")
-                Para("In the app open **Mission → Setup → Find BMS PC**. If nothing is found, enter the BMS PC's address and port **47474**.")
+                Para("In the app open the **Setup** section and press **Find BMS PC**. If nothing is found, enter the BMS PC's address and port **47474**.")
                 Para("When Windows asks the first time, allow network access on **private networks**, or press **Allow through Windows Firewall** (TCP 47474 and UDP 47475, local network only).")
             }
             GuideStep(3, "iPhone, iPad and browsers", Hud.Cyan) {

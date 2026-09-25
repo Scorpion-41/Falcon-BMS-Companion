@@ -86,7 +86,9 @@ import com.bmscompanion.app.ui.components.AlphabetScrubber
 import com.bmscompanion.app.ui.components.ListRow
 import com.bmscompanion.app.ui.components.LoadingBox
 import com.bmscompanion.app.ui.components.SearchField
+import com.bmscompanion.app.ui.components.AirfieldChart
 import com.bmscompanion.app.ui.components.SectionCard
+import com.bmscompanion.app.ui.components.isMedium
 import com.bmscompanion.app.ui.components.Stat
 import com.bmscompanion.app.ui.components.StatGrid
 import com.bmscompanion.app.ui.components.Tag
@@ -508,6 +510,7 @@ fun AirportDetail(nav: NavHostController, theaterId: String, id: Int, onBack: ((
                     val ils = a.runways.flatMap { r -> r.ends.filter { it.ils != null } }
                     BigTile("ILS", ils.firstOrNull()?.ils ?: "—", ils.joinToString(" ") { it.designator }.ifBlank { null }, Hud.Cyan, Modifier.weight(1f))
                 }
+                GroundChartCard(nav, theaterId, a)
                 AirportChartsCard(nav, th!!.airportSet, a.id, a.name)
                 a.freqs?.let { f ->
                     SectionCard("Radio frequencies") {
@@ -566,6 +569,69 @@ fun AirportDetail(nav: NavHostController, theaterId: String, id: Int, onBack: ((
                 }
             })
         }
+    }
+}
+
+/**
+ * The field's ground chart, shown rather than described.
+ *
+ * It used to be a line of text and an Open button, which told a pilot nothing about the field they were looking at
+ * — and it is now the only ground chart in the app, since the pictures BMS ships in its docs folder are gone. So
+ * the card draws the real thing: the runways, the taxiways, the pavement and the ramp, at the size it takes to
+ * recognise the place. Tapping anywhere on it opens the full page, where the chart zooms, takes a spot and gives
+ * the clearance to the runway.
+ *
+ * The preview is deliberately inert — no panning, no tapping spots, no route — because a card that swallowed a
+ * drag would fight the page it sits on for every scroll.
+ */
+@Composable
+private fun GroundChartCard(nav: NavHostController, theaterId: String, a: Airport) {
+    val th by produceState<Theater?>(null, theaterId) { value = Repo.theater(theaterId) }
+    val field by produceState<com.bmscompanion.app.data.airfield.Airfield?>(null, th, a.id) {
+        value = th?.airfieldSet?.let { Repo.airfield(it, a.id) }
+    }
+    val f = field ?: return
+    val open = { nav.go(Routes.groundChart(theaterId, a.id)) }
+    SectionCard(
+        "Ground chart", accent = Hud.Green,
+        trailing = {
+            Text(
+                "Open",
+                Modifier.clip(RoundedCornerShape(8.dp)).background(Hud.Green.copy(alpha = 0.18f))
+                    .border(1.dp, Hud.Green.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+                    .clickable(onClick = open)
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                color = Hud.Green, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+            )
+        },
+    ) {
+        Box(
+            Modifier.fillMaxWidth().height(if (isMedium()) 320.dp else 240.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .border(1.dp, Hud.Outline.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                .clickable(onClick = open),
+        ) {
+            AirfieldChart(
+                field = f,
+                // the first route only so the ramp is drawn; no path, so no clearance line across the preview.
+                // A ship has no ramp to draw: its spot numbers turn with it.
+                route = if (f.ship == null) f.routes.firstOrNull() else null,
+                inks = TaxiPrefs.inks,
+                modifier = Modifier.fillMaxSize(),
+                labelScale = 0.85f,
+                // A thumbnail's job is to be recognisable, so the field is turned to whatever angle fills the
+                // card — most airfields lie diagonally and north-up left two thirds of it empty. The chart draws
+                // its own north arrow, and the full page opens north-up as always.
+                fitRotation = true,
+                interactive = false,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            if (f.ship != null) "The deck, the landing area and the island. Tap for the full chart."
+            else "Taxiways, hold shorts and every ramp spot. Tap for the full chart, a spot and the way to the runway.",
+            color = Hud.TextDim, fontSize = 12.sp,
+        )
     }
 }
 

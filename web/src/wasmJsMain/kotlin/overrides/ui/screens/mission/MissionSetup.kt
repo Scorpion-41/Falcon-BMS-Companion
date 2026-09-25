@@ -60,7 +60,7 @@ fun MissionSetupPane(onConnected: () -> Unit) {
                     state is LinkState.Online,
                 )
                 info?.let { i ->
-                    StatusRow("Falcon BMS", when { i.demo -> "demo mode"; i.bms.running -> "running · ${if (i.bms.flying) "3D" else "UI"}"; i.bms.installed -> "installed, not running"; else -> "not found" }, i.bms.running || i.demo)
+                    StatusRow("Falcon BMS", when { i.bms.running -> "running · ${if (i.bms.flying) "3D" else "UI"}"; i.bms.installed -> "installed, not running"; else -> "not found" }, i.bms.running)
                     StatusRow("Theater", i.bms.theater ?: "—", i.bms.theater != null)
                     StatusRow("Briefing", if (i.briefing.available) "printed ${i.briefing.generated ?: ""}" else "not printed yet", i.briefing.available)
                     StatusRow("DTC", if (i.briefing.dtcModified > 0) "saved" else "not saved yet", i.briefing.dtcModified > 0)

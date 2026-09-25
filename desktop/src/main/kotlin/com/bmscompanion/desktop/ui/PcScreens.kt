@@ -92,8 +92,8 @@ fun ServerScreen(onOpenApp: () -> Unit, onOpenAbout: () -> Unit, onUseAsClient: 
             // glanceable status tiles
             val i = status.info
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Tile("FALCON BMS", when { i == null -> "—"; i.demo -> "Demo mode"; i.bms.flying -> "In 3D"; i.bms.running -> "Running"; i.bms.installed -> "Not running"; else -> "Not found" },
-                    i?.bms?.running == true || i?.demo == true, i?.bms?.theater, Modifier.weight(1f))
+                Tile("FALCON BMS", when { i == null -> "—"; i.bms.flying -> "In 3D"; i.bms.running -> "Running"; i.bms.installed -> "Not running"; else -> "Not found" },
+                    i?.bms?.running == true, i?.bms?.theater, Modifier.weight(1f))
                 Tile("AWACS FEED", if (i?.tacview?.connected == true) "Connected" else "Waiting", i?.tacview?.connected == true,
                     i?.tacview?.let { if (it.connected) "${it.objects} objects" else it.state }, Modifier.weight(1f))
                 if (!narrow) Tile("BRIEFING", if (i?.briefing?.available == true) "Printed" else "Not yet", i?.briefing?.available == true, i?.briefing?.generated, Modifier.weight(1f))

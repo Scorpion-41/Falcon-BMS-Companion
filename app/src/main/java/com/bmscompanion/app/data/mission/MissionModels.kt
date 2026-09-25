@@ -11,7 +11,6 @@ data class BridgeInfo(
     val version: String = "",
     val api: Int = 1,
     val host: String = "",
-    val demo: Boolean = false,
     val bms: BmsStatus = BmsStatus(),
     val tacview: TacviewStatus = TacviewStatus(),
     val briefing: BriefingStatus = BriefingStatus(),
@@ -342,3 +341,67 @@ data class BoardConfig(
 data class BoardSlot(val n: Int = 1, val kind: String = "map", val options: Map<String, String> = emptyMap())
 
 @Serializable data class DiscoveryReply(val service: String = "", val name: String = "", val port: Int = 47474, val version: String = "", val api: Int = 1)
+
+/**
+ * What the Taxi page is showing, so a VR board can show the same thing.
+ *
+ * The page and the board are different programs — the board is a browser tab the PC serves — so the choice travels
+ * through the PC as a small piece of state rather than being shared in memory.
+ */
+@Serializable
+data class TaxiSelection(
+    val airportId: Int = 0,
+    val runway: String = "",
+    val outbound: Boolean = true,
+    val spot: Int? = null,
+    val at: Long = 0,
+)
+
+/**
+ * Falcon BMS's own config files, as the Config page sees them.
+ *
+ * BMS keeps its settings in `User/Config`: `Falcon BMS User.cfg` for a flat screen, `Falcon BMS VR.cfg` when it
+ * starts in a headset. Editing them is the one thing BMS Companion writes into the BMS folder, so nothing is
+ * offered until the pilot has pressed the button that takes a copy — [userBackedUp] is what that button leaves
+ * behind, and the page stays locked until it is true.
+ */
+@Serializable
+data class CfgState(
+    /** False when no BMS install is known, which is the only reason the page cannot work at all. */
+    val available: Boolean = false,
+    val configDir: String? = null,
+    val backupDir: String? = null,
+    /** The copy of the file as it was before any of this: the way back, taken once and never replaced. */
+    val userBackedUp: Boolean = false,
+    /** A VR config only exists once BMS has been run in a headset, so it may appear long after the first backup. */
+    val vrPresent: Boolean = false,
+    val vrBackedUp: Boolean = false,
+    val user: CfgProfiles = CfgProfiles(),
+    val vr: CfgProfiles = CfgProfiles(),
+    /**
+     * Why the last thing asked for did not happen, in words a pilot can act on — usually Windows refusing to write
+     * where Falcon BMS is installed. Nothing here ever throws: a folder that cannot be written is an answer, not a
+     * crash, and the page says so instead of going quiet.
+     */
+    val error: String? = null,
+)
+
+/** The three sets of settings a pilot switches between, and which one the live file is a copy of. */
+@Serializable data class CfgProfiles(val selected: Int = 1, val profiles: List<Boolean> = emptyList())
+
+/** One profile's contents: every `set` line the file actually holds, in the order it holds them. */
+@Serializable data class CfgFile(
+    val kind: String = "user",
+    val profile: Int = 1,
+    val lines: List<CfgLine> = emptyList(),
+    /** Why a change did not take, when it did not. See [CfgState.error]. */
+    val error: String? = null,
+)
+
+/**
+ * One line of a config file.
+ *
+ * [launcher] marks a line below "LAUNCHER OVERRIDES BEGIN HERE", which the BMS launcher writes and owns. Those are
+ * shown but never touched: they are carried across unchanged when a profile is applied.
+ */
+@Serializable data class CfgLine(val key: String = "", val value: String = "", val launcher: Boolean = false)

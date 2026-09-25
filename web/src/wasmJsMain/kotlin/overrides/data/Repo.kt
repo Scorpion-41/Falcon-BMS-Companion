@@ -1,5 +1,7 @@
 package com.bmscompanion.app.data
 
+import com.bmscompanion.app.data.airfield.Airfield
+
 import android.graphics.Bitmap
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.toComposeImageBitmap
@@ -63,6 +65,16 @@ object Repo {
     suspend fun weapons(): List<Weapon> = load<List<Weapon>>("data/weapons.json").await().orEmpty()
     suspend fun encyclopedia(): List<EncyEntry> = load<List<EncyEntry>>("data/encyclopedia.json").await().orEmpty()
     suspend fun airportSet(id: String): AirportSet = load<AirportSet>("data/airports/$id.json").await() ?: AirportSet()
+
+    /** Which ground chart file each field uses, by campaign objective id (the airport's own id). */
+    suspend fun airfieldIndex(setId: String): Map<String, String> = load<Map<String, String>>("data/airfields/$setId.json").await().orEmpty()
+
+    /** One field's ground chart: runways, taxi networks, ramp spots. */
+    suspend fun airfield(setId: String, airportId: Int): Airfield? {
+        val file = airfieldIndex(setId)[airportId.toString()] ?: return null
+        return load<Airfield>("data/airfields/$file.json").await()
+    }
+
     suspend fun radio(id: String): List<RadioEntry> = load<List<RadioEntry>>("data/radio/$id.json").await().orEmpty()
     suspend fun charts(setId: String): Map<String, List<ChartRef>> = load<Map<String, Map<String, List<ChartRef>>>>("data/charts.json").await()?.get(setId).orEmpty()
     suspend fun hotas(id: String): HotasFile? = load<HotasFile>("data/curated/hotas_$id.json").await()
@@ -97,6 +109,9 @@ object Repo {
     suspend fun theaterNames(): Map<String, String> = index().theaters.associate { it.id to it.name }
 
     /** Map landmarks (borders, provinces, labels, places) for a map id such as "korea". */
+    /** Every Falcon BMS config option: what it does, what it defaults to, which group it belongs in. */
+    suspend fun cfgOptions(): CfgCatalog = load<CfgCatalog>("data/cfg/options.json").await() ?: CfgCatalog()
+
     suspend fun geo(mapId: String): GeoLayers? = load<GeoLayers>("data/geo/$mapId.json").await()
 
     // ---------- images ----------

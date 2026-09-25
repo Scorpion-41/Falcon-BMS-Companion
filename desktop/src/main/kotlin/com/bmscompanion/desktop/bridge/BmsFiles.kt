@@ -25,7 +25,7 @@ import kotlin.math.abs
 /**
  * Parser for <BMS>\User\Briefings\briefing.txt (the "Print" button output, text mode).
  * Every section is also exported raw (sections) so the app can still show data if a future BMS changes a layout.
- * UPDATING: compare a new briefing.txt with resources/bridge/demo_briefing.txt; section titles are matched in [titles].
+ * UPDATING: compare a new briefing.txt with resources/bridge/sample_briefing.txt; section titles are matched in [titles].
  */
 object BriefingParser {
     private val titles = listOf(

@@ -122,13 +122,13 @@ object Bridge {
     val shots = ScreenshotStore()
     val acmi = AcmiStore()
     val kneeboard = ExportedKneeboard()
+    val cfg = BmsConfig(install)
     private val discovery = Discovery()
 
     private val _settings = MutableStateFlow(BridgeSettings.load())
     val settings: StateFlow<BridgeSettings> = _settings
 
     @Volatile var running = false; private set
-    @Volatile private var demo: DemoSource? = null
 
     /** Changes whenever the status shown on screen may have changed (about once a second while running). */
     private val _ticks = MutableStateFlow(0L)
@@ -157,7 +157,6 @@ object Bridge {
         tickTask = null
         discovery.stop()
         tacview.stop()
-        demo = null
         BridgeLog.info("Stopped reading Falcon BMS on this PC")
         _ticks.value++
     }
@@ -176,9 +175,7 @@ object Bridge {
         val s = _settings.value
         install.refresh(s.BmsDirOverride)
         if (s.EzBoardsDir.isNullOrBlank()) install.defaultEzBoardsDir()?.let { auto -> _settings.value = s.copy(EzBoardsDir = auto).also { it.save() } }
-        // env BMSC_DEMO=1 forces demo mode for this run without saving it (screenshots, development)
-        demo = if (s.DemoMode || System.getenv("BMSC_DEMO") == "1") (demo ?: DemoSource()) else null
-        if (s.TacviewEnabled && demo == null) tacview.start(s.TacviewHost, s.TacviewPort, s.TacviewPassword) else tacview.stop()
+        if (s.TacviewEnabled) tacview.start(s.TacviewHost, s.TacviewPort, s.TacviewPassword) else tacview.stop()
         synchronized(filesLock) { briefing = null; dtc = null; briefingMtime = 0; dtcMtime = 0; boardKey = 0 }
         _ticks.value++
     }
@@ -192,7 +189,7 @@ object Bridge {
             if (++tickCount % 10 == 0) install.refresh(_settings.value.BmsDirOverride)
             val printed = refreshFiles()
             val s = _settings.value
-            if (printed && s.AutoEzBoardsOnPrint && demo == null && EzBoardsRunner.isValidDir(s.EzBoardsDir)) {
+            if (printed && s.AutoEzBoardsOnPrint && EzBoardsRunner.isValidDir(s.EzBoardsDir)) {
                 BridgeLog.info("Briefing printed - running EZBoards automatically")
                 Thread({ ez.generate(s.EzBoardsDir, auto = true) }, "ezboards-auto").apply { isDaemon = true }.start()
             }
@@ -218,11 +215,11 @@ object Bridge {
     /** BMS screenshot folder (setting, shared memory, g_sPicturesDirectory, or User\Pictures). */
     /** Where BMS writes its ACMI recordings: what it reports while running, else User\Acmi in the install. */
     val acmiDir: java.io.File?
-        get() = acmi.dir(if (demo == null) snapshot().strings[StringId.BmsAcmiDirectory] else null, install)
+        get() = acmi.dir(snapshot().strings[StringId.BmsAcmiDirectory], install)
 
     val picturesDir: String?
         get() = _settings.value.PicturesDirOverride?.takeIf { it.isNotBlank() }
-            ?: install.picturesDir(if (demo == null) snapshot().strings[StringId.BmsPictureDirectory] else null)
+            ?: install.picturesDir(snapshot().strings[StringId.BmsPictureDirectory])
 
     val callsignIni: String?
         get() {
@@ -239,6 +236,9 @@ object Bridge {
     private var dtcMtime = 0L
     private var board: Board? = null
     private var boardKey = 0L
+
+    /** The field, runway and spot the Taxi page is on, for the VR boards to follow. */
+    @Volatile private var taxiSelection: com.bmscompanion.app.data.mission.TaxiSelection? = null
     private val boardLock = Any()
 
     init {
@@ -247,16 +247,6 @@ object Bridge {
 
     /** Reloads briefing.txt and <callsign>.ini when their timestamps change. Returns true when a new briefing was printed. */
     private fun refreshFiles(): Boolean = synchronized(filesLock) {
-        val d = demo
-        if (d != null) {
-            if (briefing == null) {
-                briefing = BriefingParser.parse(d.briefingText)
-                briefingMtime = d.briefingModified
-                dtc = d.dtc()
-                dtcMtime = dtc!!.modified
-            }
-            return false
-        }
         var printed = false
         val bp = briefingPath
         val bm = bp?.let(::File)?.takeIf { it.isFile }?.lastModified() ?: 0L
@@ -294,48 +284,36 @@ object Bridge {
         val key = briefingMtime xor (dtcMtime shl 1) xor (s.EzBoardsDir?.hashCode()?.toLong() ?: 0L)
         synchronized(boardLock) {
             if (boardKey == key && board != null) return board
-            val d = demo
-            var tmp: File? = null
-            val source = if (d != null) {
-                // xbrief needs CRLF line endings, like BMS writes them
-                File.createTempFile("bms-companion-demo-briefing", ".txt").also {
-                    it.writeText(d.briefingText.replace("\r\n", "\n").replace("\n", "\r\n"))
-                    tmp = it
-                }.path
-            } else briefingFile
-            board = source?.let { EzBoardsRunner.readBoard(s.EzBoardsDir, it, if (d == null) callsignIni else null) }
+            board = briefingFile?.let { EzBoardsRunner.readBoard(s.EzBoardsDir, it, callsignIni) }
             boardKey = key
-            tmp?.delete()
             return board
         }
     }
 
     fun info(): BridgeInfo {
-        val d = demo
-        val sm = if (d == null) snapshot() else null
+        val sm = snapshot()
         val s = _settings.value
         return BridgeInfo(
             app = "BMS Companion",
             version = AppInfo.version,
             api = 1,
             host = System.getenv("COMPUTERNAME") ?: "PC",
-            demo = d != null,
             bms = BmsStatus(
                 installed = install.baseDir != null,
                 baseDir = install.baseDir,
                 registryVersion = install.registryVersion,
-                version = sm?.version,
-                running = d != null || sm?.available == true,
-                flying = d != null || sm?.flying == true,
-                theater = if (d != null) "Hellas" else sm?.strings?.get(StringId.ThrName) ?: install.theater,
-                callsign = if (d != null) "Demo" else install.callsign,
-                aircraft = if (d != null) "F-16C Block 52+" else sm?.strings?.get(StringId.AcName),
+                version = sm.version,
+                running = sm.available,
+                flying = sm.flying,
+                theater = sm.strings[StringId.ThrName] ?: install.theater,
+                callsign = install.callsign,
+                aircraft = sm.strings[StringId.AcName],
             ),
             tacview = TacviewStatus(
-                enabled = s.TacviewEnabled || d != null,
-                connected = d != null || tacview.connected,
-                state = if (d != null) "demo" else tacview.state,
-                objects = if (d != null) 11 else tacview.objectCount,
+                enabled = s.TacviewEnabled,
+                connected = tacview.connected,
+                state = tacview.state,
+                objects = tacview.objectCount,
             ),
             briefing = BriefingStatus(available = briefing != null, modified = briefingMtime, generated = briefing?.generated, dtcModified = dtcMtime),
             media = shots.info(picturesDir),
@@ -367,38 +345,56 @@ object Bridge {
     /** The mission API (GET /api/info, /api/live, … ; see docs/PROTOCOL.md). */
     fun handle(req: ApiRequest): ApiResponse {
         if (!running) return ApiResponse.json("""{"error":"Falcon BMS is not read on this PC"}""", 503)
-        val d = demo
         return when (req.method to req.path.trimEnd('/')) {
             "GET" to "/api/info" -> encode(BridgeInfo.serializer(), info())
-            "GET" to "/api/live" -> {
-                if (d != null) encode(Live.serializer(), d.live())
-                else snapshot().let { sm -> encode(Live.serializer(), if (sm.available) sm.live else Live(t = System.currentTimeMillis())) }
-            }
-            "GET" to "/api/contacts" -> {
-                if (d != null) encode(com.bmscompanion.app.data.mission.Contacts.serializer(), d.contacts())
-                else snapshot().let { sm ->
+            "GET" to "/api/live" ->
+                snapshot().let { sm -> encode(Live.serializer(), if (sm.available) sm.live else Live(t = System.currentTimeMillis())) }
+            "GET" to "/api/contacts" ->
+                snapshot().let { sm ->
                     encode(com.bmscompanion.app.data.mission.Contacts.serializer(), tacview.snapshot(if (sm.flying) sm.live.x else null, if (sm.flying) sm.live.y else null))
                 }
-            }
             "GET" to "/api/mission" -> {
                 refreshFiles()
                 val b = boardNow()
-                val tracks = if (d != null) d.tracks() else supportTracks(dtc)
-                encode(MissionData.serializer(), MissionData("$briefingMtime-$dtcMtime-${b?.time ?: 0}", briefingMtime, briefing, dtc, b, tracks))
+                encode(MissionData.serializer(), MissionData("$briefingMtime-$dtcMtime-${b?.time ?: 0}", briefingMtime, briefing, dtc, b, supportTracks(dtc)))
             }
             "POST" to "/api/ezboards/generate" -> {
-                val s = _settings.value
-                when {
-                    d != null && !EzBoardsRunner.isValidDir(s.EzBoardsDir) ->
-                        encode(EzRun.serializer(), EzRun(time = System.currentTimeMillis(), ok = true, durationMs = 800, message = "Demo mode: kneeboards would be generated now."))
-                    d != null ->
-                        encode(EzRun.serializer(), EzRun(time = System.currentTimeMillis(), ok = true, message = "Demo mode: EZBoards was not run (it would overwrite your kneeboards with demo data)."))
-                    else -> ez.generate(s.EzBoardsDir, auto = false).let { r ->
-                        ApiResponse.json(json.encodeToString(EzRun.serializer(), r), if (r.ok) 200 else 409)
-                    }
+                ez.generate(_settings.value.EzBoardsDir, auto = false).let { r ->
+                    ApiResponse.json(json.encodeToString(EzRun.serializer(), r), if (r.ok) 200 else 409)
                 }
             }
             // What each VR board shows. The boards themselves only read it; the VR board page on the PC writes it.
+            // What the Taxi page is showing. A VR board is a browser tab of its own, so it cannot see the app's
+            // state; it asks the PC, and the PC remembers whatever the page last published. Nothing is stored on
+            // disk: it means nothing once the flight is over.
+            "GET" to "/api/taxi" -> encode(
+                com.bmscompanion.app.data.mission.TaxiSelection.serializer(),
+                taxiSelection ?: com.bmscompanion.app.data.mission.TaxiSelection(),
+            )
+            /**
+             * Turn "generate the kneeboards when the briefing is printed" on or off, from wherever the pilot is.
+             *
+             * The setting lived only on the PC, and the Kneeboards page — on a tablet, in the browser — told every
+             * reader that pressing PRINT generates them by itself. With the setting off that was simply untrue, and
+             * a pilot who followed it got nothing and no reason why. Now the page can say which it is and turn it
+             * on, without walking back to the PC.
+             */
+            "POST" to "/api/ezboards/auto" -> {
+                val on = req.query["on"]?.let { it == "1" || it.equals("true", true) }
+                    ?: req.body.decodeToString().trim().let { it == "1" || it.equals("true", true) }
+                update { it.copy(AutoEzBoardsOnPrint = on) }
+                encode(EzStatus.serializer(), info().ezBoards)
+            }
+            "POST" to "/api/taxi" -> {
+                val sel = runCatching {
+                    json.decodeFromString(com.bmscompanion.app.data.mission.TaxiSelection.serializer(), req.body.decodeToString())
+                }.getOrNull()
+                if (sel == null) ApiResponse.json("""{"error":"that is not a taxi selection"}""", 400)
+                else {
+                    taxiSelection = sel
+                    encode(com.bmscompanion.app.data.mission.TaxiSelection.serializer(), sel)
+                }
+            }
             "GET" to "/api/boards" -> encode(
                 com.bmscompanion.app.data.mission.BoardConfig.serializer(),
                 _settings.value.Boards ?: defaultBoards(),
@@ -436,6 +432,42 @@ object Bridge {
                 val (gone, bytes) = acmi.clear(acmiDir)
                 ApiResponse.json("""{"deleted":$gone,"bytes":$bytes}""")
             }
+            // ---- Falcon BMS's own config files ----
+            // The one part of this program that writes into the BMS folder, and only after the pilot has pressed
+            // the button that takes a copy first. On a PC with no BMS install `available` is false and the page
+            // says so.
+            "GET" to "/api/cfg" -> encode(com.bmscompanion.app.data.mission.CfgState.serializer(), cfg.state())
+            "GET" to "/api/cfg/lines" -> encode(
+                com.bmscompanion.app.data.mission.CfgFile.serializer(),
+                cfg.read(BmsConfig.Kind.of(req.query["kind"]), req.query["profile"]?.toIntOrNull() ?: 1),
+            )
+            "POST" to "/api/cfg/backup" -> encode(com.bmscompanion.app.data.mission.CfgState.serializer(), cfg.backUp())
+            "POST" to "/api/cfg/select" -> encode(
+                com.bmscompanion.app.data.mission.CfgState.serializer(),
+                cfg.select(BmsConfig.Kind.of(req.query["kind"]), req.query["profile"]?.toIntOrNull() ?: 1),
+            )
+            // The value comes in the body, not the query: some of these are quoted strings and colours.
+            // No body at all means "clear it", which is how a setting goes back to BMS's default.
+            "POST" to "/api/cfg/set" -> {
+                val key = req.query["key"].orEmpty()
+                val value = req.body.decodeToString().takeIf { it.isNotBlank() }
+                encode(
+                    com.bmscompanion.app.data.mission.CfgFile.serializer(),
+                    cfg.set(BmsConfig.Kind.of(req.query["kind"]), req.query["profile"]?.toIntOrNull() ?: 1, key, value),
+                )
+            }
+            "POST" to "/api/cfg/copy" -> encode(
+                com.bmscompanion.app.data.mission.CfgFile.serializer(),
+                cfg.copy(
+                    BmsConfig.Kind.of(req.query["kind"]),
+                    req.query["from"]?.toIntOrNull() ?: 1,
+                    req.query["to"]?.toIntOrNull() ?: 1,
+                ),
+            )
+            "POST" to "/api/cfg/restore" -> encode(
+                com.bmscompanion.app.data.mission.CfgFile.serializer(),
+                cfg.restore(BmsConfig.Kind.of(req.query["kind"]), req.query["profile"]?.toIntOrNull() ?: 1),
+            )
             "GET" to "/api/media" -> encode(com.bmscompanion.app.data.mission.MediaList.serializer(), shots.list(picturesDir))
             "GET" to "/api/media/thumb", "GET" to "/api/media/view" -> {
                 val file = ScreenshotStore.resolve(picturesDir, req.query["name"]) ?: return ApiResponse.notFound()

@@ -52,24 +52,23 @@ One light page for a PC that serves your devices (the full app isn't loaded, so 
 | **Open the full app** | Turns the window into the full app (and back with **Server**) |
 | **Connect your devices** | The browser address with a QR code, what Android devices and laptops need, **Browser access** on/off, the firewall button, connected devices |
 | **Setup checklist** | Live ✓/✕ checks with a fix button for each step: BMS found, network, briefing export, DTC, live data, AWACS feed, EZBoards (and the .NET 8 runtime) |
-| **Falcon BMS settings** | EZBoards folder and auto-generate on PRINT, Tacview stream on/off with host, port and password, demo mode, BMS folder and screenshots folder (only if not found), network port, **Edit Falcon BMS User.cfg**, **Open screenshots folder** |
+| **Falcon BMS settings** | EZBoards folder and auto-generate on PRINT, Tacview stream on/off with host, port and password, BMS folder and screenshots folder (only if not found), network port, **Edit Falcon BMS User.cfg**, **Open screenshots folder** |
 | **Is Falcon BMS on another PC?** | Turns this PC into a client (full app with data from the BMS PC) |
 | **Activity** | Devices seen in the last two minutes, and the recent log |
 | **Start-up and closing** | Keep running in the tray when the window closes; start with Windows (in the tray) |
 
-The same settings are in **Mission → Setup** of the full app.
+The same settings are in the full app's **Setup** section.
 
 **One window, one copy:** opening BMS Companion again (Start menu, desktop icon) brings the running window to the front, also when it is hidden in the tray. The tray icon's menu has **Open BMS Companion**, **Server page**, **Full app**, **Browser access** and **Exit**.
 
 **Full screen:** in the full app press **F11** (or the full-screen button in the Mission header or at the bottom of the navigation rail) for a borderless window that fills its monitor, handy on a second screen next to the sim. **F11** or **Esc** returns to the normal window. The **pin** keeps the window on top.
 
-**Try it without BMS:** turn on **Demo mode** in the Falcon BMS settings. You get a synthetic SEAD mission in Hellas with moving traffic, a friendly CAP and a hostile pair for the AWACS page.
 
 ## 2. Android phones and tablets
 
 1. Install `BMS-Companion.apk` (allow "install unknown apps"), or `adb install -r BMS-Companion.apk`.
 2. Put the device on the **same network** as the BMS PC. Guest Wi-Fi networks usually isolate devices and will not work.
-3. In the app open **Mission → Setup → Find BMS PC**. One PC found means it connects immediately.
+3. In the app open the **Setup** section and tap **Find BMS PC**. One PC found means it connects immediately.
 4. If nothing is found (some routers block broadcasts), enter the address shown on the BMS PC's server page and port **47474**, then **Connect**.
 
 The header dot turns green (**LINKED**). The app polls only while the Mission screen is open, and the **☀ button** keeps the screen awake.
@@ -88,7 +87,7 @@ How it works: the page loads the **whole app into the browser** (WebAssembly, ab
 ## 4. Laptop or second PC as a client
 
 1. On the BMS PC, run BMS Companion (server page or full app) and allow it through the firewall ([section 1](#1-install-bms-companion-on-the-bms-pc)).
-2. On the laptop (or second PC), install BMS Companion. On its server page press **Use this PC as a client** (or open the full app and choose **On another PC** in **Mission → Setup**).
+2. On the laptop (or second PC), install BMS Companion. On its server page press **Use this PC as a client** (or open the full app and choose **On another PC** in the **Setup** section).
 3. **Find BMS PC**, or enter the BMS PC's address (shown on its server page) and port 47474 → **Connect**.
 
 The client runs the complete app (all tabs, Dashboard, AWACS, reference) in its own window, not a web page; only the mission data comes from the BMS PC. With browser access on, it also passes the app on to browsers near it.
@@ -212,6 +211,5 @@ The **Media** section (last in the navigation) shows the screenshots you take in
 | Wrong map | The app uses the theater BMS reports. Add-on theaters that reuse a base map show that map. |
 | Map too busy | **Map** menu: set Towns to **Mission** (only the mission's towns, target town highlighted), **Cities** or **Off**, or turn off provinces. The **Dark** style keeps the AWACS picture easiest to read. |
 | Satellite map shows clouds or seams | That is the sim's own ground texture, as BMS ships it. Use Relief or Chart. |
-| Demo data after testing | Turn off Demo mode in the settings. |
 | Text too small or too large on the PC | Ctrl + / Ctrl − / Ctrl 0 (remembered). |
 | Nothing happens when starting BMS Companion | It is already running: look for its tray icon (it brings the window forward; if the window stays hidden, use the tray menu). |

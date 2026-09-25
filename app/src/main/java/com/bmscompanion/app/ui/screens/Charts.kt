@@ -114,12 +114,10 @@ fun AirportChartsCard(nav: NavHostController, setId: String, airportId: Int, air
     val charts by produceState<List<ChartRef>?>(null, setId, airportId) { value = Repo.charts(setId)[airportId.toString()].orEmpty() }
     val list = charts ?: return
     if (list.isEmpty()) return
-    // the BMS ground plates, and (where the theater ships them) the instrument charts: approach, SID, STAR…
-    // anything that came out of a chart PDF is an instrument chart, even the many one-page ones; the BMS plates
-    // (ground, parking, end of runway) are the other group
-    val plates = list.filter { it.pages.isEmpty() }
+    // Instrument charts only: approach, SID, STAR — the pages that came out of a chart PDF. The pictures BMS ships
+    // in its docs folder (ground, parking, end of runway) are gone: the app draws that chart itself now, from the
+    // field's own data, at any zoom and with the jet's own position on it.
     val instrument = list.filter { it.pages.isNotEmpty() }
-    if (plates.isNotEmpty()) ChartStrip("Charts (${plates.size})", plates, nav, airportName, setId, airportId, "Tap to open · pinch to zoom")
     if (instrument.isNotEmpty()) ChartStrip("Instrument charts (${instrument.size})", instrument, nav, airportName, setId, airportId, "Approach, departure and arrival · tap to open")
 }
 

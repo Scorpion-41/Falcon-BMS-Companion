@@ -86,7 +86,7 @@ import java.util.Date
 import java.util.Locale
 
 // Cards of BMS Companion for Windows itself: status, connecting devices, the setup checklist, settings and start-up.
-// Shown on the server page and in Mission → Setup of the app mode.
+// Shown on the server page and in the app mode's Setup section.
 
 /** Live status of this PC, refreshed every 2 seconds while shown. */
 class PcStatus(
@@ -357,7 +357,7 @@ fun ConnectDevicesCard(status: PcStatus) {
             } else Text("No network connection found on this PC.", fontSize = 13.sp, color = Hud.Amber)
         }
         DeviceBlock(Icons.Default.PhoneAndroid, "Android phones and tablets", Hud.Green) {
-            Text("Install BMS-Companion.apk, then Mission → Setup → Find BMS PC.", fontSize = 13.sp, color = Hud.TextDim)
+            Text("Install BMS-Companion.apk, then open Setup and press Find BMS PC.", fontSize = 13.sp, color = Hud.TextDim)
             if (ips.isNotEmpty()) Text("Or type ${ips.joinToString(" or ")}  ·  port $port", style = LocalExtra.current.monoSmall, color = Hud.Text)
         }
         DeviceBlock(Icons.Default.ViewInAr, "VR kneeboard (OpenKneeboard)", Hud.Amber) {
@@ -368,7 +368,7 @@ fun ConnectDevicesCard(status: PcStatus) {
             )
         }
         DeviceBlock(Icons.Default.Computer, "Laptop or second PC", Hud.Amber) {
-            Text("Install BMS Companion there, open the full app, choose “On another PC” in Mission → Setup and press Find BMS PC.", fontSize = 13.sp, color = Hud.TextDim)
+            Text("Install BMS Companion there, open the full app, choose “On another PC” in Setup and press Find BMS PC.", fontSize = 13.sp, color = Hud.TextDim)
         }
         Toggle("Browser access", "Browsers on this network can open the app", PcConfig.webEnabled) { PcConfig.setWeb(it) }
         FirewallButton()
@@ -404,7 +404,6 @@ fun SetupChecklistCard(status: PcStatus) {
     val scope = rememberCoroutineScope()
     val install = Bridge.install
     val cfg = status.cfg
-    val demo = info?.demo == true
 
     data class Step(val title: String, val state: Check, val text: String, val actions: List<Pair<String, () -> Unit>> = emptyList(), val code: String? = null, val content: (@Composable () -> Unit)? = null)
     val userCfg = install.configDir?.let { File(it, "Falcon BMS User.cfg") }
@@ -428,7 +427,6 @@ fun SetupChecklistCard(status: PcStatus) {
         val html = cfg["g_bBriefHTML"]
         add(
             when {
-                demo -> Step("Export the briefing", Check.INFO, "Demo mode: using the demo briefing.")
                 html == "1" -> Step("Export the briefing", Check.PROBLEM, "HTML Briefings is ON: untick it in the Launcher (CONFIG → General).")
                 print != null && print.toIntOrNull() == 0 -> Step("Export the briefing", Check.PROBLEM, "Briefing Output to File is OFF: tick it in the Launcher (CONFIG → General).")
                 info?.briefing?.available == true -> Step("Export the briefing", Check.OK, "Briefing found (printed ${info.briefing.generated}). Press PRINT again after changing the mission.")
@@ -437,7 +435,6 @@ fun SetupChecklistCard(status: PcStatus) {
         )
         add(
             when {
-                demo -> Step("Save the DTC", Check.INFO, "Demo mode: using demo steerpoints.")
                 (info?.briefing?.dtcModified ?: 0) > 0 -> Step("Save the DTC", Check.OK, "DTC saved ${SimpleDateFormat("d MMM HH:mm", Locale.US).format(Date(info!!.briefing.dtcModified))}.")
                 install.callsign == null -> Step("Save the DTC", Check.TODO, "Pilot callsign not known yet (log into BMS once).")
                 else -> Step("Save the DTC", Check.TODO, "No DTC saved yet for “${install.callsign}”: press SAVE in the DTC page.")
@@ -445,7 +442,6 @@ fun SetupChecklistCard(status: PcStatus) {
         )
         add(
             when {
-                demo -> Step("Live flight data", Check.INFO, "Demo mode is on.")
                 info?.bms?.flying == true -> Step("Live flight data", Check.OK, "Receiving live data (${info.bms.aircraft ?: "aircraft"}, ${info.bms.theater}).")
                 info?.bms?.running == true -> Step("Live flight data", Check.INFO, "BMS is running (in the UI). Live data starts in 3D.")
                 else -> Step("Live flight data", Check.INFO, "Start Falcon BMS. Nothing to set up.")
@@ -456,7 +452,6 @@ fun SetupChecklistCard(status: PcStatus) {
         val tvActions = listOfNotNull(userCfg?.let { f -> "Edit Falcon BMS User.cfg" to { if (f.isFile) SystemTools.openInNotepad(f.path) else SystemTools.open(f.parent) } })
         add(
             when {
-                demo -> Step("AWACS picture", Check.INFO, "Demo mode: showing demo traffic.")
                 !s.TacviewEnabled -> Step("AWACS picture", Check.TODO, "Reading the Tacview stream is switched off (settings below).")
                 info?.tacview?.connected == true -> Step("AWACS picture", Check.OK, "Connected to the AWACS feed (${info.tacview.objects} objects).")
                 rt != "1" -> Step("AWACS picture", Check.TODO, "Add these lines to Falcon BMS User.cfg, then restart BMS:", tvActions, "set g_bTacviewRealTime 1\nset g_bTacviewAcmi 1")
@@ -502,7 +497,7 @@ fun SetupChecklistCard(status: PcStatus) {
 
     SectionCard(
         "Setup checklist", accent = Hud.Green,
-        trailing = { Text(if (demo) "DEMO MODE" else "$done of ${counted.size} done", fontSize = 12.sp, color = if (demo) Hud.Amber else if (done == counted.size) Hud.Green else Hud.TextDim, fontWeight = FontWeight.Bold) },
+        trailing = { Text("$done of ${counted.size} done", fontSize = 12.sp, color = if (done == counted.size) Hud.Green else Hud.TextDim, fontWeight = FontWeight.Bold) },
     ) {
         if (info == null) {
             Text("Falcon BMS is not read on this PC (it is a client). The checklist applies to the BMS PC.", fontSize = 13.sp, color = Hud.TextDim)
@@ -576,7 +571,7 @@ fun PrerequisitesCard(status: PcStatus) {
     }
 }
 
-/** Settings of the part that reads Falcon BMS: folders, AWACS feed, EZBoards, demo mode, port. */
+/** Settings of the part that reads Falcon BMS: folders, AWACS feed, EZBoards, port. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BmsSettingsCard() {
@@ -646,7 +641,6 @@ fun BmsSettingsCard() {
         AcmiRow()
 
         Overline("FOLDERS AND ADVANCED")
-        Toggle("Demo mode", "A synthetic mission with moving traffic, to try everything without BMS", s.DemoMode) { on -> Bridge.update { it.copy(DemoMode = on) } }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Field("BMS folder (only if not found)", bmsDir, { bmsDir = it }, Modifier.weight(1f))
             SmallButton("Browse…", null, primary = false) { pickFolder("Select the Falcon BMS folder", s.BmsDirOverride)?.let { p -> Bridge.update { it.copy(BmsDirOverride = p) } } }
@@ -722,7 +716,7 @@ fun PcStatusCard(status: PcStatus) {
             state is LinkState.Online,
         )
         MissionLink.info.collectAsState().value?.let { i ->
-            StatusRow("Falcon BMS", when { i.demo -> "demo mode"; i.bms.running -> "running ${i.bms.version ?: ""} · ${if (i.bms.flying) "3D" else "UI"}"; i.bms.installed -> "installed, not running"; else -> "not found" }, i.bms.running || i.demo)
+            StatusRow("Falcon BMS", when { i.bms.running -> "running ${i.bms.version ?: ""} · ${if (i.bms.flying) "3D" else "UI"}"; i.bms.installed -> "installed, not running"; else -> "not found" }, i.bms.running)
             StatusRow("Briefing", if (i.briefing.available) "printed ${i.briefing.generated ?: ""}" else "not printed yet", i.briefing.available)
             StatusRow("AWACS feed", if (i.tacview.connected) "connected · ${i.tacview.objects} objects" else i.tacview.state, i.tacview.connected)
         }

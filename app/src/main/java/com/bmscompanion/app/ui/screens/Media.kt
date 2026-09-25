@@ -197,7 +197,7 @@ fun MediaScreen(nav: NavHostController) {
         )
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
-                MissionLink.host == null -> MediaEmpty("Connect to the BMS PC", "Screenshots come from the PC running Falcon BMS. Set up the connection in Mission → Setup.", "Mission setup") { nav.go(Routes.MISSION) }
+                MissionLink.host == null -> MediaEmpty("Connect to the BMS PC", "Screenshots come from the PC running Falcon BMS. Set up the connection first.", "Go to Setup") { nav.go(Routes.SETUP) }
                 list == null && !online -> MediaEmpty("Connecting…", (state as? LinkState.Offline)?.reason ?: "Waiting for the BMS PC.")
                 list == null -> MediaEmpty("Loading…", "Reading the screenshot folder on the BMS PC.")
                 !list.available -> MediaEmpty("Screenshot folder not found", "BMS Companion looked in ${list.dir ?: "User\\Pictures"}. Take a screenshot in BMS first, or set the screenshots folder in its settings on the PC.")

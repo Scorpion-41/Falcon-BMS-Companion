@@ -42,6 +42,7 @@ import androidx.navigation.NavHostController
 import com.bmscompanion.app.data.Repo
 import com.bmscompanion.app.data.mission.LinkState
 import com.bmscompanion.app.data.mission.MissionLink
+import com.bmscompanion.app.ui.go
 import com.bmscompanion.app.ui.theme.Hud
 import com.bmscompanion.app.ui.theme.LocalExtra
 
@@ -69,7 +70,7 @@ fun MissionScreen(nav: NavHostController) {
     val onTab: (MissionTab) -> Unit = { tab = it; saveMissionTab(it) }
 
     Column(Modifier.fillMaxSize().background(Hud.Bg)) {
-        MissionHeader(state, info, live, keepOn, onKeepOn = { keepOn = !keepOn; Repo.putInt("mission_keep_on", if (keepOn) 1 else 0) }, onSetup = { onTab(MissionTab.SETUP) })
+        MissionHeader(state, info, live, keepOn, onKeepOn = { keepOn = !keepOn; Repo.putInt("mission_keep_on", if (keepOn) 1 else 0) }, onSetup = { nav.go(com.bmscompanion.app.ui.Routes.SETUP) })
         MissionTabStrip(tab, onTab)
         Box(Modifier.weight(1f).fillMaxWidth()) { MissionTabContent(tab, env, onTab) }
     }

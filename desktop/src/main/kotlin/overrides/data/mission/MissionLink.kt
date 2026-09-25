@@ -226,6 +226,27 @@ object MissionLink {
         }.getOrElse { "Could not reach the PC: ${reasonOf(it)}" }
     }
 
+    suspend fun taxiSelection(): TaxiSelection? = runCatching { get<TaxiSelection>("/api/taxi") }.getOrNull()
+
+    /**
+     * What the Taxi page is showing, so a VR board can show the same field, runway and spot.
+     *
+     * The page and the board are different programs, so the choice is kept on the PC and the board asks for it.
+     * Nothing is sent unless it has actually changed — the page publishes on every recomposition otherwise.
+     */
+    private var lastTaxi: String? = null
+
+    fun publishTaxi(airportId: Int, runway: String, outbound: Boolean, spot: Int?) {
+        val key = "$airportId/$runway/$outbound/$spot"
+        if (key == lastTaxi) return
+        lastTaxi = key
+        val body = Repo.json.encodeToString(
+            TaxiSelection.serializer(),
+            TaxiSelection(airportId, runway, outbound, spot, System.currentTimeMillis()),
+        )
+        scope.launch { withContext(Dispatchers.IO) { runCatching { request("POST", "/api/taxi", timeoutMs = 4000, body = body.encodeToByteArray()) } } }
+    }
+
     suspend fun boards(): BoardConfig? = runCatching { get<BoardConfig>("/api/boards") }.getOrNull()
 
     /** Saves it, and answers with what was stored. */
@@ -237,6 +258,19 @@ object MissionLink {
     }
 
     /** Asks the bridge to run EZBoards; the result also refreshes the board data. */
+    /**
+     * Turn "generate the kneeboards when the briefing is printed" on or off.
+     *
+     * The setting lives on the BMS PC, but the page that explains it is read on a tablet as often as on the PC, so
+     * it can be set from either.
+     */
+    fun setBoardsOnPrint(on: Boolean) {
+        scope.launch {
+            runCatching { request("POST", "/api/ezboards/auto?on=" + (if (on) "1" else "0"), timeoutMs = 8_000) }
+            runCatching { get<BridgeInfo>("/api/info") }.onSuccess { _info.value = it }
+        }
+    }
+
     fun generateBoards() {
         if (_ez.value.running) return
         _ez.value = EzUi(running = true, result = _ez.value.result)
@@ -250,6 +284,47 @@ object MissionLink {
         }
     }
 
+
+    // ---------- Falcon BMS's own config files ----------
+
+    /**
+     * The Config section, which edits Falcon BMS's settings files on the PC.
+     *
+     * Everything here is read and written on the BMS PC, so a setting can be changed from a tablet for the flight
+     * about to start. Nothing is offered until the backup button has been pressed; null means the PC could not be
+     * reached, which the page says rather than showing an empty list.
+     */
+    suspend fun cfgState(): CfgState? = runCatching { get<CfgState>("/api/cfg") }.getOrNull()
+
+    /** Every line a profile actually holds. These are the settings the page lists first. */
+    suspend fun cfgLines(kind: String, profile: Int): CfgFile? =
+        runCatching { get<CfgFile>("/api/cfg/lines?kind=$kind&profile=$profile") }.getOrNull()
+
+    /** Takes the copy that unlocks the page, and lays down the three profiles. */
+    suspend fun cfgBackUp(): CfgState? = postState("/api/cfg/backup")
+
+    /** Makes a profile the one BMS reads. */
+    suspend fun cfgSelect(kind: String, profile: Int): CfgState? = postState("/api/cfg/select?kind=$kind&profile=$profile")
+
+    /** Sets one setting, or clears it back to BMS's default with a null [value]. */
+    suspend fun cfgSet(kind: String, profile: Int, key: String, value: String?): CfgFile? =
+        postFile("/api/cfg/set?kind=$kind&profile=$profile&key=$key", value)
+
+    /** Copies one profile's settings onto another, as a starting point rather than a blank sheet. */
+    suspend fun cfgCopy(kind: String, from: Int, to: Int): CfgFile? = postFile("/api/cfg/copy?kind=$kind&from=$from&to=$to")
+
+    /** Puts a profile back to the file that was there before any of this. */
+    suspend fun cfgRestore(kind: String, profile: Int): CfgFile? = postFile("/api/cfg/restore?kind=$kind&profile=$profile")
+
+    private suspend fun postState(path: String): CfgState? = withContext(Dispatchers.IO) {
+        runCatching { Repo.json.decodeFromString<CfgState>(request("POST", path, timeoutMs = 10_000)) }.getOrNull()
+    }
+
+    private suspend fun postFile(path: String, body: String? = null): CfgFile? = withContext(Dispatchers.IO) {
+        runCatching {
+            Repo.json.decodeFromString<CfgFile>(request("POST", path, timeoutMs = 10_000, body = body?.encodeToByteArray() ?: ByteArray(0)))
+        }.getOrNull()
+    }
     // ---------- screenshots on the BMS PC ----------
 
     suspend fun mediaList(): MediaList? = withContext(Dispatchers.IO) { runCatching { get<MediaList>("/api/media") }.getOrNull() }

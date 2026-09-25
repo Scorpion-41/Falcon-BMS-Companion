@@ -1,0 +1,330 @@
+{
+  "_note": [
+    "Carrier flight decks, for the ground charts.",
+    "",
+    "BMS gives a ship no outline, no model and no feature list — only deck points, and those run far past the bow",
+    "because the same list carries the approach path (Hermes' span 1,867 ft against a real ship of 744). So the deck",
+    "is not traced from them. It is BUILT from the published dimensions of the real ship, and only the ramp",
+    "NUMBERING comes from BMS: each of its spots is matched to the nearest place a real deck parks an aircraft.",
+    "",
+    "Every figure is feet, measured from the ship's own axis (its centre line) and from amidships:",
+    "  deckFt      the flight deck, bow to stern",
+    "  stbdFt      deck edge to starboard of the axis",
+    "  portFwdFt   deck edge to port forward of the angled deck — the narrow part of the deck",
+    "  sponsonFt   deck edge to port at its widest: the angled-deck sponson on a CATOBAR ship, the deck-edge",
+    "              sponson on the others. stbdFt + sponsonFt is the published maximum width.",
+    "  kind        catobar (angled landing deck and catapults), ski (a ramp at the bow), flat (an amphibious deck)",
+    "  angleDeg    how far the landing deck is angled off the axis, to port",
+    "  stripLenFt / stripWidFt   the landing area",
+    "  skiDeg      the ski jump at the bow, where there is one",
+    "  islands     each { along, across, long, wide }: along is aft(-) / forward(+) of amidships, across is to",
+    "              starboard(+) of the axis, both to the middle of the island",
+    "  match       matched against the field's name, upper-cased, first hit wins, so put the specific first.",
+    "",
+    "Published dimensions per class; see docs/DATA-SOURCES.md for where each came from."
+  ],
+  "classes": [
+    {
+      "match": [
+        "QUEEN ELIZABETH",
+        "PRINCE OF WALES"
+      ],
+      "name": "Queen Elizabeth class",
+      "kind": "ski",
+      "deckFt": 918,
+      "stbdFt": 88,
+      "portFwdFt": 72,
+      "sponsonFt": 152,
+      "skiDeg": 13,
+      "islands": [
+        {
+          "along": 150,
+          "across": 62,
+          "long": 105,
+          "wide": 34
+        },
+        {
+          "along": -120,
+          "across": 62,
+          "long": 115,
+          "wide": 34
+        }
+      ]
+    },
+    {
+      "match": [
+        "CVN65",
+        "ENTERPRISE"
+      ],
+      "name": "Enterprise",
+      "kind": "catobar",
+      "deckFt": 1123,
+      "stbdFt": 95,
+      "portFwdFt": 80,
+      "sponsonFt": 157,
+      "angleDeg": 9,
+      "stripLenFt": 790,
+      "stripWidFt": 110,
+      "islands": [
+        {
+          "along": -40,
+          "across": 70,
+          "long": 130,
+          "wide": 40
+        }
+      ]
+    },
+    {
+      "match": [
+        "CVN70",
+        "CARL VINSON",
+        "VINSON",
+        "ROOSEVELT",
+        "NIMITZ",
+        "EISENHOWER",
+        "STENNIS",
+        "TRUMAN",
+        "WASHINGTON",
+        "LINCOLN",
+        "REAGAN",
+        "BUSH",
+        "CVN"
+      ],
+      "name": "Nimitz class",
+      "kind": "catobar",
+      "deckFt": 1092,
+      "stbdFt": 95,
+      "portFwdFt": 80,
+      "sponsonFt": 157,
+      "angleDeg": 9,
+      "stripLenFt": 781,
+      "stripWidFt": 110,
+      "islands": [
+        {
+          "along": -60,
+          "across": 70,
+          "long": 130,
+          "wide": 40
+        }
+      ]
+    },
+    {
+      "match": [
+        "SAO PAULO",
+        "FOCH",
+        "CLEMENCEAU"
+      ],
+      "name": "Clemenceau class",
+      "kind": "catobar",
+      "deckFt": 869,
+      "stbdFt": 62,
+      "portFwdFt": 52,
+      "sponsonFt": 106,
+      "angleDeg": 8,
+      "stripLenFt": 543,
+      "stripWidFt": 97,
+      "islands": [
+        {
+          "along": -20,
+          "across": 42,
+          "long": 180,
+          "wide": 34
+        }
+      ]
+    },
+    {
+      "match": [
+        "TARAWA",
+        "LHA"
+      ],
+      "name": "Tarawa class",
+      "kind": "flat",
+      "deckFt": 820,
+      "stbdFt": 44,
+      "portFwdFt": 62,
+      "sponsonFt": 88,
+      "islands": [
+        {
+          "along": -30,
+          "across": 30,
+          "long": 250,
+          "wide": 30
+        }
+      ]
+    },
+    {
+      "match": [
+        "HERMES"
+      ],
+      "name": "Hermes",
+      "kind": "ski",
+      "deckFt": 744,
+      "stbdFt": 62,
+      "portFwdFt": 54,
+      "sponsonFt": 98,
+      "skiDeg": 12,
+      "islands": [
+        {
+          "along": -10,
+          "across": 42,
+          "long": 150,
+          "wide": 32
+        }
+      ]
+    },
+    {
+      "match": [
+        "OCEAN"
+      ],
+      "name": "Ocean",
+      "kind": "flat",
+      "deckFt": 820,
+      "stbdFt": 44,
+      "portFwdFt": 62,
+      "sponsonFt": 88,
+      "islands": [
+        {
+          "along": -30,
+          "across": 30,
+          "long": 250,
+          "wide": 30
+        }
+      ],
+      "_note": "BMS flies HMS Ocean off the same deck as its Tarawa — the same 710 ft of strip and the same eighteen spots — so she is drawn at that deck rather than the real ship's shorter one."
+    },
+    {
+      "match": [
+        "25 DE MAYO",
+        "COLOSSUS"
+      ],
+      "name": "Colossus class",
+      "kind": "catobar",
+      "deckFt": 693,
+      "stbdFt": 48,
+      "portFwdFt": 40,
+      "sponsonFt": 81,
+      "angleDeg": 8.5,
+      "stripLenFt": 420,
+      "stripWidFt": 80,
+      "islands": [
+        {
+          "along": -10,
+          "across": 32,
+          "long": 150,
+          "wide": 28
+        }
+      ]
+    },
+    {
+      "match": [
+        "INVINCIBLE",
+        "ARC ROYAL",
+        "ARK ROYAL",
+        "ILLUSTRIOUS"
+      ],
+      "name": "Invincible class",
+      "kind": "ski",
+      "deckFt": 689,
+      "stbdFt": 46,
+      "portFwdFt": 40,
+      "sponsonFt": 80,
+      "skiDeg": 12,
+      "islands": [
+        {
+          "along": 20,
+          "across": 30,
+          "long": 170,
+          "wide": 28
+        }
+      ]
+    },
+    {
+      "match": [
+        "CAUSEWAY"
+      ],
+      "name": "large deck",
+      "kind": "flat",
+      "deckFt": 900,
+      "stbdFt": 80,
+      "portFwdFt": 96,
+      "sponsonFt": 140,
+      "islands": [
+        {
+          "along": -60,
+          "across": 58,
+          "long": 130,
+          "wide": 34
+        }
+      ]
+    },
+    {
+      "match": [
+        "KUZNETSOV",
+        "LIAONING",
+        "SHANDONG",
+        "VARYAG",
+        "TYPE 001"
+      ],
+      "name": "Kuznetsov class",
+      "kind": "catobar",
+      "deckFt": 1000,
+      "stbdFt": 92,
+      "portFwdFt": 74,
+      "sponsonFt": 141,
+      "angleDeg": 7,
+      "stripLenFt": 672,
+      "stripWidFt": 98,
+      "skiDeg": 12,
+      "islands": [
+        {
+          "along": -40,
+          "across": 64,
+          "long": 220,
+          "wide": 38
+        }
+      ]
+    },
+    {
+      "match": [
+        "WASP",
+        "LHD",
+        "AMERICA",
+        "MAKIN ISLAND",
+        "ESSEX",
+        "BOXER",
+        "BATAAN",
+        "KEARSARGE"
+      ],
+      "name": "Wasp class",
+      "kind": "flat",
+      "deckFt": 844,
+      "stbdFt": 48,
+      "portFwdFt": 68,
+      "sponsonFt": 104,
+      "islands": [
+        {
+          "along": -30,
+          "across": 32,
+          "long": 240,
+          "wide": 32
+        }
+      ]
+    }
+  ],
+  "default": {
+    "name": "carrier",
+    "kind": "flat",
+    "deckFt": 800,
+    "stbdFt": 60,
+    "portFwdFt": 72,
+    "sponsonFt": 100,
+    "islands": [
+      {
+        "along": -40,
+        "across": 40,
+        "long": 150,
+        "wide": 32
+      }
+    ]
+  }
+}

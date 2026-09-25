@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import com.bmscompanion.app.data.mission.LinkMode
 import com.bmscompanion.app.data.mission.MissionLink
+import com.bmscompanion.app.ui.go
 import com.bmscompanion.app.ui.theme.Hud
 import com.bmscompanion.desktop.LocalPcActions
 import com.bmscompanion.desktop.WindowControls
@@ -59,7 +60,7 @@ fun MissionScreen(nav: NavHostController) {
                 state, info, live,
                 badge = mode?.let { if (it == LinkMode.LOCAL) "THIS PC" else "LAN" },
                 idleText = "Choose where Falcon BMS runs in Setup to see live mission data",
-                onSetup = { onTab(MissionTab.SETUP) },
+                onSetup = { nav.go(com.bmscompanion.app.ui.Routes.SETUP) },
             )
             Spacer(Modifier.weight(1f))
             IconButton(onClick = { WindowControls.toggleOnTop() }) {

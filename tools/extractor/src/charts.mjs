@@ -1,7 +1,10 @@
 // Airport charts, matched to airports per airport set, written to the app assets (charts/ + data/charts.json):
-//   - the BMS ground/parking PNG plates (one image per chart), and
-//   - the instrument chart PDFs some theaters ship (KTO, Falklands: ILS/APP/SID/STAR/VISUAL…), rendered page by
-//     page with Apache PDFBox. A PDF becomes one chart entry whose "pages" are the page images.
+//   the instrument chart PDFs some theaters ship (KTO, Falklands: ILS/APP/SID/STAR/VISUAL…), rendered page by page
+//   with Apache PDFBox. A PDF becomes one chart entry whose "pages" are the page images.
+//
+// The BMS ground/parking PNG plates are NOT shipped any more: the app draws that chart itself from the field's own
+// data (see docs/DATA-SOURCES.md). They are still walked, because a folder only counts as an airport when it holds
+// one, which is what keeps national AIP volumes from attaching themselves to every airport in the country.
 // PDFBox: put pdfbox-app-3.x.jar in tools/extractor/cache/pdfbox-app.jar
 // (https://repo1.maven.org/maven2/org/apache/pdfbox/pdfbox-app/3.0.3/pdfbox-app-3.0.3.jar). Without it the PDFs are skipped.
 import fs from 'node:fs';
@@ -370,7 +373,7 @@ async function main() {
   const theaters = loadTheaters();
   const setDone = new Set();
   const chartIndex = {};
-  const jobs = new Map(); // hash -> src (single-image plates)
+  const jobs = new Map(); // hash -> src; empty now that the BMS plates are not shipped, kept for the prune below
   const pdfJobs = new Map(); // hash -> src (instrument chart PDFs, one entry per page)
   const dirCache = new Map();
   for (const th of theaters) {
@@ -405,9 +408,12 @@ async function main() {
         const st = fs.statSync(f);
         const h = crypto.createHash('sha1').update(path.basename(f) + ':' + st.size).digest('hex').slice(0, 16);
         if (/\.pdf$/i.test(f)) { pdfJobs.set(h, f); return { order: 20, title: pdfTitle(f), file: `charts/${h}-1.webp`, hash: h }; }
-        jobs.set(h, f);
-        return { ...chartTitle(f), file: `charts/${h}.webp` };
-      });
+        // A BMS plate: one of the pictures in the docs folder. Still walked, because a folder only counts as an
+        // airport when it holds one (see walkPngDirs) and that is what keeps national AIP volumes out — but no
+        // longer shipped. The app draws that chart itself now, from the field's own data, at any zoom and with the
+        // jet's own position on it. They were 1,401 pictures and 52 MB of the app.
+        return null;
+      }).filter(Boolean);
       entry[a.id] = withDistinctTitles(refs, files)
         .sort((x, y) => x.order - y.order || x.title.localeCompare(y.title, 'en', { numeric: true })).map(({ order, ...r }) => r);
     }
@@ -416,7 +422,7 @@ async function main() {
   }
   // charts.json is written at the end: the instrument chart entries only get their page lists once the PDFs are rendered
   const list = [...jobs.entries()].filter(([h]) => !fs.existsSync(path.join(OUTDIR, h + '.webp')));
-  console.log('charts to convert', list.length, 'of', jobs.size);
+  if (list.length) console.log('charts to convert', list.length, 'of', jobs.size);
   let done = 0;
   await pool(list, 6, async ([h, src]) => {
     try {

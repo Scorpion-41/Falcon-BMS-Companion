@@ -130,10 +130,18 @@ fun EzGenerateCard(onSetup: () -> Unit) {
         Spacer(Modifier.height(14.dp))
         Text("IN BMS, BEFORE THE MISSION STARTS", style = LocalExtra.current.overline, color = Hud.TextFaint)
         Spacer(Modifier.height(6.dp))
+        // Only tell the pilot that PRINT does it by itself when it actually will. The setting lived on the PC and
+        // defaults to off, so this page used to promise something that did not happen and gave no reason why.
+        val auto = ezInfo?.autoOnPrint == true
         Step(
             "1", "Print the briefing",
-            "On the briefing screen press PRINT (top right). BMS Companion sees the printed briefing and generates the " +
-                "kneeboards itself — you do not need to come back to this page.",
+            if (auto) {
+                "On the briefing screen press PRINT (top right). BMS Companion sees the printed briefing and generates " +
+                    "the kneeboards itself — you do not need to come back to this page."
+            } else {
+                "On the briefing screen press PRINT (top right). That is what writes the briefing BMS Companion reads. " +
+                    "It will not generate the kneeboards on its own until you switch that on below."
+            },
         )
         Step(
             "2", "Save the DTC",
@@ -173,6 +181,38 @@ fun EzGenerateCard(onSetup: () -> Unit) {
                 }
             }
         }
+
+        // The switch that makes step 1 true. It lives on the BMS PC, but this is the page that explains it, and a
+        // pilot reading it on a tablet had no way to turn it on from here.
+        if (link is LinkState.Online && ezInfo?.configured == true) {
+            Spacer(Modifier.height(12.dp))
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
+                    .clickable { MissionLink.setBoardsOnPrint(!auto) }
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(
+                    Modifier.size(width = 38.dp, height = 22.dp).clip(RoundedCornerShape(11.dp))
+                        .background(if (auto) Hud.Green.copy(alpha = 0.35f) else Hud.Surface2)
+                        .border(1.dp, if (auto) Hud.Green else Hud.Outline, RoundedCornerShape(11.dp)),
+                    contentAlignment = if (auto) Alignment.CenterEnd else Alignment.CenterStart,
+                ) {
+                    Box(Modifier.padding(horizontal = 3.dp).size(16.dp).clip(RoundedCornerShape(8.dp))
+                        .background(if (auto) Hud.Green else Hud.TextFaint))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Generate them the moment you press PRINT", color = Hud.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (auto) "On. Printing the briefing in BMS writes the kneeboards by itself."
+                        else "Off. Printing the briefing does nothing here until you turn this on.",
+                        color = if (auto) Hud.TextDim else Hud.Amber, fontSize = 12.sp,
+                    )
+                }
+            }
+        }
+
         last?.let { ResultBanner(it) }
     }
 }

@@ -185,10 +185,26 @@ private fun SearchInput(
     onFocused: () -> Unit = {},
 ) {
     val focus = LocalFocusManager.current
+    // A tap always takes the field, whatever state the window's focus was left in by the page before. Coming back
+    // from a screen that held the pointer used to leave this dead until the window was minimised and reopened.
+    val requester = remember { FocusRequester() }
     TextField(
         value = value,
         onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth().onFocusChanged { if (it.isFocused) onFocused() },
+        modifier = modifier.fillMaxWidth()
+            .focusRequester(requester)
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                        // only a press: a mouse merely crossing the field must not take the keyboard
+                        if (event.type == androidx.compose.ui.input.pointer.PointerEventType.Press) {
+                            runCatching { requester.requestFocus() }
+                        }
+                    }
+                }
+            }
+            .onFocusChanged { if (it.isFocused) onFocused() },
         singleLine = true,
         // one line, always: a long hint ("Name, ICAO, TACAN (75X), ILS or frequency") used to wrap in a narrow
         // column and leave that section with a search bar twice the height of the one on Home

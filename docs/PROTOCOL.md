@@ -36,6 +36,13 @@ The app sends the UDP datagram `BMSC_DISCOVER` to the broadcast address(es) on p
 | GET | `/api/media/view?name=&max=` | viewer | JPEG downscaled to `max` px (320–4096, default 2400) |
 | GET | `/api/media/file?name=` | share / download | the original file (`image/png`, `image/jpeg`) |
 | POST | `/api/media/delete` | on user confirm | body: JSON array of file names (or `?name=`); moves them to the BMS PC's Recycle Bin → `{deleted}` |
+| GET | `/api/cfg` | when the Config page opens or is refreshed | `CfgState` |
+| GET | `/api/cfg/lines?kind=&profile=` | when the file or profile changes | `CfgFile` |
+| POST | `/api/cfg/backup` | on user tap | `CfgState` — takes the one-time copy and lays down the three profiles |
+| POST | `/api/cfg/select?kind=&profile=` | on user tap | `CfgState` — copies that profile onto the file BMS reads |
+| POST | `/api/cfg/set?kind=&profile=&key=` | on each change | body: the value, **empty body clears the line** → `CfgFile` |
+| POST | `/api/cfg/copy?kind=&from=&to=` | on user tap | `CfgFile` |
+| POST | `/api/cfg/restore?kind=&profile=` | on user tap | `CfgFile` — back to the copy taken before any of this |
 
 Responses larger than 1 KB (except images) are gzip-compressed when the client sends `Accept-Encoding: gzip`, and connections are keep-alive. All responses allow any origin (CORS).
 
@@ -44,7 +51,7 @@ When the PC is a **client** of another BMS PC, `/api/...` calls it receives are 
 ### BridgeInfo
 ```json
 {
-  "app": "BMS Companion", "version": "1.3.0", "api": 1, "host": "PC-NAME", "demo": false,
+  "app": "BMS Companion", "version": "1.3.7", "api": 1, "host": "PC-NAME",
   "bms": { "installed": true, "baseDir": "D:\\Falcon BMS 4.38", "registryVersion": "Falcon BMS 4.38", "version": "4.38.1 (…)",
            "running": true, "flying": true, "theater": "Korea KTO", "callsign": "Viper", "aircraft": "F-16CM-52" },
   "tacview": { "enabled": true, "connected": true, "state": "connected", "objects": 214 },
@@ -79,6 +86,20 @@ When the PC is a **client** of another BMS PC, `/api/...` calls it receives are 
 - `dtc`: parsed `<callsign>.ini`: `steerpoints` (`target_N` → STPT N+1, `isTarget` when action = -1), `weaponTargets`, `ppts` (N = 56+idx), `lines`, `uhf`/`vhf` presets, `iff`.
 - `board`: `{time, format, tables[{title, header[], rows[{kind, cells[]}]}]}` parsed from EZBoards' `xbrief.exe --format pcstw` HTML. `kind` is the xbrief row class (`ownflight`, `ownroster`, `odd`, `even`).
 
+### CfgState / CfgFile
+```json
+{ "available": true, "configDir": "D:\\Falcon BMS 4.38\\User\\Config", "backupDir": "…\\User\\Config\\BackUp",
+  "userBackedUp": true, "vrPresent": true, "vrBackedUp": true,
+  "user": { "selected": 1, "profiles": [true, true, true] },
+  "vr":   { "selected": 1, "profiles": [true, true, true] } }
+```
+`CfgFile` is `{kind, profile, lines[{key, value, launcher}]}` — every `set` line that profile holds, in file order.
+`launcher` marks a line below `LAUNCHER OVERRIDES BEGIN HERE`, which the BMS launcher owns: those are shown, never
+written, and carried across unchanged when a profile is applied. `kind` is `user` or `vr`.
+
+A setting at its default is **absent**, not written: BMS's stock `Falcon BMS.cfg` already holds every default. Nothing
+under `/api/cfg` does anything until `/api/cfg/backup` has taken its copy.
+
 ### EzRun
 `{time, ok, durationMs, message, log[] (last 40 lines, ANSI and progress bars stripped), auto}`
 Success = exit code 0 **and** a `SUCCESS.` line from `EZBOARDS.BAT`.
@@ -99,4 +120,4 @@ With browser access off, `/` shows a short status page instead.
 
 ## Security
 
-Everything is meant for a trusted home LAN. The server provides read-only data; the actions it exposes to devices are running the configured `EZBOARDS.BAT` (no arguments from the client) and moving chosen screenshots to the Recycle Bin. Settings can only be changed in the PC program itself. The firewall rules it offers are limited to the local subnet. There is no login: anyone on the same network can open the app or the API.
+Everything is meant for a trusted home LAN. The server provides read-only data; the actions it exposes to devices are running the configured `EZBOARDS.BAT` (no arguments from the client), moving chosen screenshots to the Recycle Bin, and — once a pilot has taken the backup — editing Falcon BMS's own config files through `/api/cfg`. That last one is the only part of the program that writes into the BMS folder: it touches `User/Config` and nothing else, keys are limited to `[A-Za-z0-9_]`, values to a single line, and the original file is kept in `User/Config/BackUp`. BMS Companion's own settings can still only be changed in the PC program itself. The firewall rules it offers are limited to the local subnet. There is no login: anyone on the same network can open the app or the API.

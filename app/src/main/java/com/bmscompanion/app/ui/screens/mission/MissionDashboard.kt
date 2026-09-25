@@ -77,6 +77,7 @@ import com.bmscompanion.app.data.mission.MissionLink
 import com.bmscompanion.app.ui.components.MapState
 import com.bmscompanion.app.ui.components.SectionCard
 import com.bmscompanion.app.ui.Kneeboard
+import com.bmscompanion.app.ui.go
 import com.bmscompanion.app.ui.theme.Hud
 import com.bmscompanion.app.ui.theme.LocalExtra
 import java.util.Locale
@@ -460,7 +461,7 @@ private fun DashCardContent(item: DashItem, env: MissionEnv, d: MapData, mapStat
         }
         DashCard.COMMS -> mission?.briefing?.comms?.takeIf { it.isNotEmpty() }?.let { LadderCard(it, l?.uhfFreq ?: 0) } ?: EmptyCard(item.card, "Press PRINT on the BMS briefing screen.")
         DashCard.PRESETS -> mission?.dtc?.takeIf { it.uhf.isNotEmpty() || it.vhf.isNotEmpty() }?.let { PresetCard(it.uhf, it.vhf, l?.uhfPreset ?: 0) } ?: EmptyCard(item.card, "Save the DTC in BMS.")
-        DashCard.BOARDS -> EzGenerateCard(onSetup = { onOpenTab(MissionTab.SETUP) })
+        DashCard.BOARDS -> EzGenerateCard(onSetup = { env.nav.go(com.bmscompanion.app.ui.Routes.SETUP) })
         DashCard.SUPPORT -> SupportCard(rememberSupportAssets(env))
     }
 }

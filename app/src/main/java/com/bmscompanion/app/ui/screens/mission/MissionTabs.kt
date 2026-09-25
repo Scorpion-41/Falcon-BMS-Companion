@@ -17,12 +17,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AltRoute
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Description
@@ -52,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.collectAsState
@@ -62,6 +65,8 @@ import com.bmscompanion.app.data.Theater
 import com.bmscompanion.app.data.mission.MissionLink
 import com.bmscompanion.app.ui.components.isMedium
 import com.bmscompanion.app.ui.components.rememberMapState
+import com.bmscompanion.app.ui.Routes
+import com.bmscompanion.app.ui.go
 import com.bmscompanion.app.ui.theme.Hud
 
 // Shared by the Android and PC MissionScreen: the tab list, tab strip and what each tab shows.
@@ -75,15 +80,17 @@ import com.bmscompanion.app.ui.theme.Hud
  * **Kneeboards** is one page for everything that gets printed or pinned in the headset: the BMS kneeboards, the VR
  * boards ([vrBoardsPane], PC only) and the HTML Briefing pages, which were a tab, a tab and a card on Briefing.
  * **AWACS** is a whole page for a job most pilots never do, so it is off until [MissionTabPrefs.showAwacs] says otherwise.
+ * There is no **Setup** tab either: setting the program up is not part of a mission, and a device that cannot reach
+ * the PC used to have to open the section that was empty because of it. It is a section of its own now.
  */
 enum class MissionTab(val label: String, val icon: ImageVector) {
     DASH("Dashboard", Icons.Default.Dashboard),
     MAP("Map", Icons.Default.Map),
+    TAXI("Taxi", Icons.Default.AltRoute),
     AWACS("AWACS", Icons.Default.Radar),
     BRIEF("Briefing", Icons.Default.Description),
     COMMS("Comms", Icons.Default.Headset),
     BOARDS("Kneeboards", Icons.Default.Assignment),
-    SETUP("Setup", Icons.Default.Settings),
 }
 
 /**
@@ -101,6 +108,18 @@ object MissionTabPrefs {
     var showAwacs: Boolean
         get() = awacs == 1
         set(v) { awacs = if (v) 1 else 0; Repo.putInt(AWACS_KEY, awacs) }
+
+    private const val CONFIG_KEY = "mission_tab_config"
+    private var config by mutableStateOf(Repo.getInt(CONFIG_KEY, 0))
+
+    /**
+     * The Config section, which edits Falcon BMS's own settings files. Off until it is asked for, and deliberately
+     * so: it is the one part of this program that writes into the BMS folder, and a pilot who has not gone looking
+     * for it has no business being shown it.
+     */
+    var showConfig: Boolean
+        get() = config == 1
+        set(v) { config = if (v) 1 else 0; Repo.putInt(CONFIG_KEY, config) }
 }
 
 /** The tabs this build actually has. */
@@ -111,7 +130,7 @@ val missionTabs: List<MissionTab> get() = MissionTab.entries.filter { it != Miss
  * The tabs a VR kneeboard offers. Nobody runs a GCI picture from the cockpit, the kneeboards page is for setting up
  * before the flight, and so are the setup guides.
  */
-val kneeboardMissionTabs = listOf(MissionTab.DASH, MissionTab.MAP, MissionTab.BRIEF, MissionTab.COMMS)
+val kneeboardMissionTabs = listOf(MissionTab.DASH, MissionTab.MAP, MissionTab.TAXI, MissionTab.BRIEF, MissionTab.COMMS)
 
 /** Things every Mission pane needs: bundled theater data resolved from the BMS theater name. */
 data class MissionEnv(val nav: NavHostController, val theater: Theater?, val set: AirportSet?)
@@ -167,7 +186,7 @@ private fun PublishMapMission(env: MissionEnv) {
 fun rememberMissionTab(): MutableState<MissionTab> = rememberSaveable {
     val savedName = Repo.getString("mission_tab")
     val saved = savedName?.let { s -> MissionTab.entries.firstOrNull { it.name == s } }?.takeIf { it in missionTabs }
-    val start = if (MissionLink.host == null) MissionTab.SETUP else saved ?: MissionTab.DASH
+    val start = saved ?: MissionTab.DASH
     // a kneeboard is served by the PC it talks to, and only offers the tabs worth having in the cockpit
     mutableStateOf(if (com.bmscompanion.app.ui.Kneeboard.on && start !in kneeboardMissionTabs) MissionTab.DASH else start)
 }
@@ -218,11 +237,11 @@ fun MissionTabContent(tab: MissionTab, env: MissionEnv, onTab: (MissionTab) -> U
     when (tab) {
         MissionTab.DASH -> MissionDashboardPane(env, mapState, mapSel, { mapSel = it }, onOpenTab = onTab)
         MissionTab.MAP -> MissionMapPane(env, mapState, mapSel, { mapSel = it }, onOpenTab = onTab)
+        MissionTab.TAXI -> MissionTaxiPane(env)
         MissionTab.AWACS -> MissionAwacsPane(env, awacs, onOpenTab = onTab)
         MissionTab.BRIEF -> MissionBriefingPane(env, showOnMap)
         MissionTab.COMMS -> MissionCommsPane(env)
-        MissionTab.BOARDS -> MissionBoardsPane(env, onSetup = { onTab(MissionTab.SETUP) })
-        MissionTab.SETUP -> MissionSetupPane(onConnected = { onTab(MissionTab.DASH) })
+        MissionTab.BOARDS -> MissionBoardsPane(env, onSetup = { env.nav.go(Routes.SETUP) })
     }
 }
 
@@ -240,7 +259,7 @@ fun MissionStatus(
     val (dot, label) = when (state) {
         LinkState.Idle -> Hud.TextFaint to "NOT CONNECTED"
         LinkState.Connecting -> Hud.Amber to "CONNECTING…"
-        is LinkState.Online -> Hud.Green to (if (info?.demo == true) "DEMO" else "LINKED")
+        is LinkState.Online -> Hud.Green to "LINKED"
         is LinkState.Offline -> Hud.Red to "NO LINK"
     }
     Column(modifier) {
@@ -276,7 +295,7 @@ fun MissionStatus(
 /** Small reusable pill used on map overlays. */
 /**
  * In 3D without the AWACS feed: BMS only streams its Tacview telemetry while ACMI recording runs, which is toggled
- * with F in the cockpit (default key). Hidden in demo mode, when the stream is off in the settings, and once dismissed.
+ * with F in the cockpit (default key). Hidden when the stream is off in the settings, and once dismissed.
  */
 @Composable
 fun AcmiReminder(modifier: Modifier = Modifier) {
@@ -287,7 +306,7 @@ fun AcmiReminder(modifier: Modifier = Modifier) {
     val i = info ?: return
     // not connected, or connected but nothing streamed (in 3D with recording on there is at least your own jet)
     val streaming = (contacts?.connected == true || i.tacview.connected) && (contacts?.contacts?.isNotEmpty() == true || i.tacview.objects > 0)
-    val missing = !i.demo && i.tacview.enabled && live?.flying == true && !streaming
+    val missing = i.tacview.enabled && live?.flying == true && !streaming
     if (!missing || dismissed.value) return
     Row(
         modifier.clip(RoundedCornerShape(10.dp)).background(Hud.Bg.copy(alpha = 0.9f)).border(1.dp, Hud.Amber.copy(alpha = 0.7f), RoundedCornerShape(10.dp))
@@ -301,6 +320,43 @@ fun AcmiReminder(modifier: Modifier = Modifier) {
             Text("Press F in the cockpit to start ACMI recording; BMS streams the air picture only while it records.", color = Hud.TextDim, fontSize = 11.sp)
         }
         Text("✕", Modifier.clickable { dismissed.value = true }.padding(horizontal = 10.dp, vertical = 4.dp), color = Hud.TextDim, fontSize = 13.sp)
+    }
+}
+
+/**
+ * The same warning as [AcmiReminder], but in the middle of the map where it cannot be missed — including on a VR
+ * board, where there is no pointer to dismiss anything with. It goes as soon as the first object arrives.
+ *
+ * Only the *picture* needs the stream: the jet's own position comes from BMS's shared memory, so the Taxi page and
+ * the ownship symbol keep working whether or not the recording runs.
+ */
+@Composable
+fun AcmiCenterNotice(modifier: Modifier = Modifier) {
+    val info by MissionLink.info.collectAsState()
+    val live by MissionLink.live.collectAsState()
+    val contacts by MissionLink.contacts.collectAsState()
+    val i = info ?: return
+    val streaming = (contacts?.connected == true || i.tacview.connected) && (contacts?.contacts?.isNotEmpty() == true || i.tacview.objects > 0)
+    if (!i.tacview.enabled || live?.flying != true || streaming) return
+    Column(
+        modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Hud.Bg.copy(alpha = 0.92f))
+            .border(1.dp, Hud.Amber.copy(alpha = 0.75f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            "PRESS F",
+            Modifier.border(2.dp, Hud.Amber, RoundedCornerShape(7.dp)).padding(horizontal = 12.dp, vertical = 3.dp),
+            color = Hud.Amber, fontWeight = FontWeight.Bold, fontSize = 17.sp,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text("No live picture", color = Hud.Text, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        Text(
+            "BMS streams traffic only while ACMI is recording. Press F in the cockpit to start it.",
+            color = Hud.TextDim, fontSize = 11.5.sp, textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -334,6 +390,25 @@ fun TabsCard() {
             androidx.compose.material3.Switch(
                 checked = MissionTabPrefs.showAwacs,
                 onCheckedChange = { MissionTabPrefs.showAwacs = it },
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Hud.Outline.copy(alpha = 0.5f)))
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Show the Config section", color = Hud.Text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text(
+                    "Falcon BMS's own settings files, with what every line does and three profiles to switch between. " +
+                        "It is the one part of this program that writes into the BMS folder, and it copies your file " +
+                        "before it changes anything.",
+                    color = Hud.TextDim, fontSize = 12.sp,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            androidx.compose.material3.Switch(
+                checked = MissionTabPrefs.showConfig,
+                onCheckedChange = { MissionTabPrefs.showConfig = it },
             )
         }
     }

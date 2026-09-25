@@ -290,6 +290,68 @@ private fun BoardRow(
             )
         }
         if (tuning && kind == BoardKind.MAP) MapOptions(slot.options, onOptions)
+        if (tuning && kind == BoardKind.RUNWAYS) GroundChartOptions(slot.options, onOptions)
+        if (tuning && kind == BoardKind.LIVETAXI) LiveTaxiOptions(slot.options, onOptions)
+    }
+}
+
+/**
+ * The live taxi board has only one thing to choose: the light it is read in. It is always turned to the jet's
+ * heading, and the pages are the zoom, so there is nothing else to set.
+ */
+@Composable
+private fun LiveTaxiOptions(options: Map<String, String>, onChange: (Map<String, String>) -> Unit) {
+    fun set(key: String, value: String) = onChange(options + (key to value))
+    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("CHART", style = LocalExtra.current.overline, color = Hud.TextFaint)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("Night" to "night", "Day" to "day").forEach { (label, key) ->
+                Choice(label, (options["chart"] ?: "night") == key) { set("chart", key) }
+            }
+        }
+        Text(
+            "Always turned to your heading, so what is ahead of you is up the page. Turning a page zooms in, the "
+                + "page before zooms out — the whole field down to a couple of stands either side.",
+            fontSize = 11.sp, color = Hud.TextFaint,
+        )
+    }
+}
+
+/**
+ * What the ground chart board is told before the flight.
+ *
+ * Its pages are one per runway, so the things worth setting are how it is printed and which way up it is drawn.
+ */
+@Composable
+private fun GroundChartOptions(options: Map<String, String>, onChange: (Map<String, String>) -> Unit) {
+    fun set(key: String, value: String) = onChange(options + (key to value))
+    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("CHART", style = LocalExtra.current.overline, color = Hud.TextFaint)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("Night" to "night", "Day" to "day").forEach { (label, key) ->
+                Choice(label, (options["chart"] ?: "night") == key) { set("chart", key) }
+            }
+        }
+        Text("Night by default: a page of pale concrete is a lamp in the face in a dark cockpit.", fontSize = 11.sp, color = Hud.TextFaint)
+        Text("WHICH WAY UP", style = LocalExtra.current.overline, color = Hud.TextFaint)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("Best fit" to "fit", "Heading up" to "heading", "North up" to "north").forEach { (label, key) ->
+                Choice(label, (options["up"] ?: "fit") == key) { set("up", key) }
+            }
+        }
+        Text(
+            "Best fit turns the whole field to whatever angle fills the page — a kneeboard is far taller than it is "
+                + "wide, so a field lying east-west is drawn twice the size stood upright. Heading up turns the chart "
+                + "with the jet instead, for taxiing.",
+            fontSize = 11.sp, color = Hud.TextFaint,
+        )
+        Text("HOW CLOSE", style = LocalExtra.current.overline, color = Hud.TextFaint)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("Very close" to "1800", "Close" to "3600", "Wide" to "7000", "The ramp" to "12000").forEach { (label, key) ->
+                Choice(label, (options["span"] ?: "3600") == key) { set("span", key) }
+            }
+        }
+        Text("How much ground fits across the page while it follows you.", fontSize = 11.sp, color = Hud.TextFaint)
     }
 }
 

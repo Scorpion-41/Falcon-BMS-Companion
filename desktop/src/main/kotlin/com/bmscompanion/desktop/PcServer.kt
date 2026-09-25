@@ -151,7 +151,7 @@ object PcServer {
                     val resp = when {
                         Bridge.running -> Bridge.handle(ApiRequest(ex.requestMethod, path, query, body, remote))
                         MissionLink.mode.value == LinkMode.REMOTE && MissionLink.host != null -> proxy(ex.requestMethod, ex.requestURI.rawPath + (ex.requestURI.rawQuery?.let { "?$it" } ?: ""), body)
-                        else -> ApiResponse.json("""{"error":"BMS Companion on this PC has no mission data source: choose where Falcon BMS runs in Mission → Setup"}""", 502)
+                        else -> ApiResponse.json("""{"error":"BMS Companion on this PC has no mission data source: choose where Falcon BMS runs in the Setup section"}""", 502)
                     }
                     send(ex, resp, cache = false)
                 }

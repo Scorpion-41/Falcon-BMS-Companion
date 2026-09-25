@@ -64,6 +64,7 @@ import com.bmscompanion.app.ui.components.SectionCard
 import com.bmscompanion.app.ui.components.TheaterMap
 import com.bmscompanion.app.ui.components.safeText
 import com.bmscompanion.app.ui.screens.bearingRange
+import com.bmscompanion.app.ui.go
 import com.bmscompanion.app.ui.theme.Hud
 import com.bmscompanion.app.ui.theme.LocalExtra
 import kotlinx.coroutines.delay
@@ -83,7 +84,7 @@ private class Track(val c: Contact, val x: Double, val y: Double)
 fun MissionAwacsPane(env: MissionEnv, aw: AwacsState, onOpenTab: (MissionTab) -> Unit) {
     val th = env.theater
     if (th == null) {
-        PaneEmpty("No theater yet", "Connect to the BMS PC to load the mission theater.", "Setup") { onOpenTab(MissionTab.SETUP) }
+        PaneEmpty("No theater yet", "Connect to the BMS PC to load the mission theater.", "Setup") { env.nav.go(com.bmscompanion.app.ui.Routes.SETUP) }
         return
     }
     val contacts by MissionLink.contacts.collectAsState()
@@ -121,7 +122,7 @@ fun MissionAwacsPane(env: MissionEnv, aw: AwacsState, onOpenTab: (MissionTab) ->
             "No AWACS feed",
             "The AWACS page needs BMS's Tacview real-time stream: set g_bTacviewRealTime 1 in Falcon BMS User.cfg and start ACMI recording in 3D (Setup has the steps).",
             "Setup",
-        ) { onOpenTab(MissionTab.SETUP) }
+        ) { env.nav.go(com.bmscompanion.app.ui.Routes.SETUP) }
         return
     }
 

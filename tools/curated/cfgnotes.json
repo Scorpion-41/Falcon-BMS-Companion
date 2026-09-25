@@ -1,0 +1,484 @@
+{
+  "_note": [
+    "What Falcon BMS.cfg does not say about its own options. The list of options, their defaults and most of the",
+    "descriptions are read from the BMS version's own stock file by tools/extractor/src/cfgcatalog.mjs — this file",
+    "only adds what that file leaves out: which group a line belongs in, a description for the lines BMS does not",
+    "comment, the named choices for the few that take one of a set, and the options that are real in 4.38 but are",
+    "not written into the stock file at all (BMS reads them; they simply are not listed).",
+    "",
+    "Groups are matched against the option name in the order they appear here, first hit wins."
+  ],
+  "bms": "4.38",
+  "groups": {
+    "VR": [
+      "VR",
+      "HMD",
+      "MixedReality",
+      "FFR"
+    ],
+    "Terrain": [
+      "NewTerrain|Terrain"
+    ],
+    "Graphics": [
+      "Hdr|Shadow|EnvironmentMapping|EnvMap|Irradiance|HeatHaze|Rain|Parallax|Texture|LOD|Anisotropic|SmartScaling|HiResTextures|DrawDistance|ResolutionMultiplier|ReducePSFires|Tracer|JetHeat|PsTracers|Mip"
+    ],
+    "Cockpit & avionics": [
+      "MFD|RWR|HUD|hud|DED|HMCS|Clickable|Mouse|Knob|Radar|HSD|HAD|Mav|RTT|Bump|Avionics|Canopy|NVG|Calibration|AOA|RPM"
+    ],
+    "Views & camera": [
+      "FOV|Fov|View|Padlock|Camera|Cam|TrackIR|Displacement|Zoom"
+    ],
+    "Sound & comms": [
+      "Ivc|Radio|Sound|Voice|Subtitle|SubTitle|TTS|Comms|CommsMenu|BRAA|WinAmp|Entertainment|Dogfight|Message"
+    ],
+    "Multiplayer": [
+      "MP|Bw|Bandwidth|P2p|RemoteControl|FogOfWar|OnlinePlayers|TeamUiFreq"
+    ],
+    "Campaign & AI": [
+      "AI|Ai|Camp|Taxi|Reag|Deag|Respawn|aircraft|Scramble|Barcap|Waypoint|Failure|MTBF|Gtraining|Label|Combat|Ramp"
+    ],
+    "Files & folders": [
+      "Directory|LogsDir|Acmi|Pictures|Briefing|Patches|PeriodicSave|PrintToFile|Screenshot|Jpeg|Png|SaveLegacy|ObjectiveData"
+    ],
+    "Map & UI": [
+      "ThreatCircle|PPT|Intro|Ui|UI|FrameRate|Preventscreensaver|PreventScreensaver"
+    ],
+    "Debug & development": [
+      "Debug|Dev|Profile|ActivateDebug|Fake3d|CpuPerf|PriorityFixes|CompatibleChanges|Hitbox|LogInput"
+    ]
+  },
+  "options": {
+    "g_fCursorSpeed": {
+      "text": "How fast the mouse cursor moves in the 3D cockpit.",
+      "group": "Cockpit & avionics"
+    },
+    "g_bMFDHighContrast": {
+      "text": "Draws the MFD pages in higher contrast, which reads more easily on some monitors."
+    },
+    "g_fRadarScale": {
+      "text": "Size of the radar symbology on the MFD."
+    },
+    "g_bHSD_HAD_FCR_Font": {
+      "text": "Uses the sharper font for the HSD, HAD and FCR pages."
+    },
+    "g_fHADSymbolSize": {
+      "text": "Size of the symbols drawn on the HAD page."
+    },
+    "g_fHSDSymbolSize": {
+      "text": "Size of the symbols drawn on the HSD page."
+    },
+    "g_bBarcapNoBarcap": {
+      "text": "Stops the campaign tasking BARCAP flights against BARCAPs."
+    },
+    "g_bNoDTCForRampStart": {
+      "text": "Does not load the DTC automatically on a ramp start, so you load it yourself from the cockpit."
+    },
+    "g_nPrintToFile": {
+      "text": "Where PRINT on the briefing screen sends the briefing: 0 printer, 1 a text file, 2 both."
+    },
+    "g_bAppendToBriefingFile": {
+      "text": "Adds each printed briefing to the end of the file instead of replacing it."
+    },
+    "g_bBriefHTML": {
+      "text": "Prints the briefing as HTML as well as text."
+    },
+    "g_bLogEvents": {
+      "text": "Writes the mission event log."
+    },
+    "g_bEnableDisplacementCam": {
+      "text": "Lets the cockpit view shift with g-force and airframe movement."
+    },
+    "g_b3DClickableCursorAnchored": {
+      "text": "Keeps the clickable-cockpit cursor anchored rather than free-moving."
+    },
+    "g_fDefaultFOV": {
+      "text": "The field of view the 3D cockpit opens at, in degrees."
+    },
+    "g_bFullScreenNVG": {
+      "text": "Night vision fills the whole screen instead of only the goggle circles."
+    },
+    "g_bNoPadlockBoxes": {
+      "text": "Stops drawing the box around a padlocked target."
+    },
+    "g_bPngScreenshots": {
+      "text": "Saves screenshots as PNG rather than JPEG."
+    },
+    "g_nPadlockBoxSize": {
+      "text": "Size of the padlock box."
+    },
+    "g_bPlayIntroMovie": {
+      "text": "Plays the intro movie when BMS starts."
+    },
+    "g_bRampTaxiStart": {
+      "text": "Starts you at the ramp ready to taxi rather than cold and dark."
+    },
+    "g_bCalibrationHg": {
+      "text": "Altimeter calibration in inches of mercury rather than hectopascals."
+    },
+    "g_nFairCloudRestriction": {
+      "text": "Restricts missions flown in fair-weather cloud conditions."
+    },
+    "g_nPoorInclCloudRestriction": {
+      "text": "Restricts missions flown in poor or inclement cloud conditions."
+    },
+    "g_bHotasDgftSelfCancel": {
+      "text": "The dogfight switch cancels itself when moved back, rather than latching."
+    },
+    "g_bUseVirtualRudder": {
+      "text": "Gives you a virtual rudder when no rudder axis is bound."
+    },
+    "g_bHiResTextures": {
+      "text": "Loads the high resolution texture set."
+    },
+    "g_bUseAnalogIdleCutoff": {
+      "text": "Treats the throttle idle cutoff as an analogue position rather than a button."
+    },
+    "g_bReducePSFires": {
+      "text": "Draws fewer particles for fires, which costs less performance."
+    },
+    "g_bEnvironmentMapping": {
+      "text": "Reflections on aircraft and cockpit surfaces."
+    },
+    "g_bHdrLighting": {
+      "text": "High dynamic range lighting."
+    },
+    "g_bHdrLightingStar": {
+      "text": "The star-shaped glare HDR puts around bright lights."
+    },
+    "g_bUseHeatHazeShader": {
+      "text": "The shimmer behind jet exhaust."
+    },
+    "g_bShowFarRain": {
+      "text": "Draws rain in the distance as well as close in."
+    },
+    "g_bShowRainDrops": {
+      "text": "Raindrops on the canopy."
+    },
+    "g_bShowRainRings": {
+      "text": "Rings where rain strikes water."
+    },
+    "g_bShadowMapping": {
+      "text": "Shadows cast by aircraft and objects."
+    },
+    "g_bShadowOnSmoke": {
+      "text": "Lets shadows fall across smoke, which is costly."
+    },
+    "g_bWaterEnvironmentMapping": {
+      "text": "Reflections on water."
+    },
+    "g_bEnvMapRenderClouds": {
+      "text": "Includes clouds in the reflections."
+    },
+    "g_bEnvMapRenderFocusObject": {
+      "text": "Includes your own aircraft in the reflections."
+    },
+    "g_bExternalTrackIR": {
+      "text": "Lets TrackIR drive the external views as well as the cockpit."
+    },
+    "g_bInvertExternalTrackIR": {
+      "text": "Inverts TrackIR in the external views."
+    },
+    "g_bAllowMP_Freeze": {
+      "text": "Host: allows players to use the freeze function."
+    },
+    "g_bAllowMP_NVG": {
+      "text": "Host: allows night vision goggles."
+    },
+    "g_bAllowMP_NVGFullscreen": {
+      "text": "Host: allows full-screen night vision."
+    },
+    "g_bRequireSameAcdataMP": {
+      "text": "Host: every client must have identical aircraft data."
+    },
+    "g_bRequireSameTileSetMP": {
+      "text": "Host: every client must have the same terrain tile set."
+    },
+    "g_bAllowMP_Smoke": {
+      "text": "Host: allows smoke winders."
+    },
+    "g_nMPStartRestricted": {
+      "text": "Host: restricts which start types players may choose."
+    },
+    "g_sTexturesLODPreset": {
+      "text": "Texture detail preset the game loads at.",
+      "kind": "choice"
+    },
+    "g_bUseTracerColors": {
+      "group": "Graphics"
+    },
+    "g_nJetHeatShaderMaxSpeed": {
+      "group": "Graphics"
+    },
+    "g_nAnisotropicValue": {
+      "kind": "choice"
+    },
+    "g_nVRHMD": {
+      "kind": "choice"
+    },
+    "g_nVRExternalRenderingMode": {
+      "kind": "choice"
+    },
+    "g_nVRHMCSEYE": {
+      "kind": "choice"
+    },
+    "g_nPrintToFile2": {}
+  },
+  "choices": {
+    "g_nPrintToFile": [
+      {
+        "v": "0",
+        "t": "To a printer"
+      },
+      {
+        "v": "1",
+        "t": "To a text file"
+      },
+      {
+        "v": "2",
+        "t": "To both"
+      }
+    ],
+    "g_nAnisotropicValue": [
+      {
+        "v": "0",
+        "t": "Maximum available"
+      },
+      {
+        "v": "2",
+        "t": "2x"
+      },
+      {
+        "v": "4",
+        "t": "4x"
+      },
+      {
+        "v": "8",
+        "t": "8x"
+      },
+      {
+        "v": "16",
+        "t": "16x"
+      }
+    ],
+    "g_nVRHMD": [
+      {
+        "v": "0",
+        "t": "No VR"
+      },
+      {
+        "v": "1",
+        "t": "SteamVR"
+      },
+      {
+        "v": "2",
+        "t": "OpenXR"
+      }
+    ],
+    "g_nVRExternalRenderingMode": [
+      {
+        "v": "0",
+        "t": "Mixed — stereo low, mono high"
+      },
+      {
+        "v": "1",
+        "t": "Always mono"
+      },
+      {
+        "v": "2",
+        "t": "Always stereo"
+      }
+    ],
+    "g_nVRHMCSEYE": [
+      {
+        "v": "-1",
+        "t": "Both eyes"
+      },
+      {
+        "v": "0",
+        "t": "Right eye"
+      },
+      {
+        "v": "1",
+        "t": "Left eye"
+      }
+    ],
+    "g_nNewTerrainHiresTilesDistKM": [
+      {
+        "v": "0",
+        "t": "Off"
+      },
+      {
+        "v": "16",
+        "t": "16 km"
+      },
+      {
+        "v": "32",
+        "t": "32 km"
+      },
+      {
+        "v": "48",
+        "t": "48 km"
+      }
+    ],
+    "g_sTexturesLODPreset": [
+      {
+        "v": "\"Low\"",
+        "t": "Low"
+      },
+      {
+        "v": "\"Medium\"",
+        "t": "Medium"
+      },
+      {
+        "v": "\"High\"",
+        "t": "High"
+      }
+    ],
+    "g_nMFDRenderTargetSize": [
+      {
+        "v": "512",
+        "t": "512 — cheapest"
+      },
+      {
+        "v": "1024",
+        "t": "1024"
+      },
+      {
+        "v": "2048",
+        "t": "2048 — sharpest"
+      }
+    ]
+  },
+  "extra": [
+    {
+      "k": "g_bDiffuseIrradiance",
+      "d": "0",
+      "g": "Graphics",
+      "t": "Ambient light bounced onto surfaces. Costly, and one of the biggest visual differences."
+    },
+    {
+      "k": "g_bSpecularIrradiance",
+      "d": "0",
+      "g": "Graphics",
+      "t": "Ambient highlights on shiny surfaces."
+    },
+    {
+      "k": "g_bRenderNewTerrainToENVMap",
+      "d": "0",
+      "g": "Graphics",
+      "t": "Includes the terrain in reflections."
+    },
+    {
+      "k": "g_bEnableParallaxMapping",
+      "d": "0",
+      "g": "Graphics",
+      "t": "Gives runways and tarmac real depth rather than a flat texture."
+    },
+    {
+      "k": "g_nDrawDistanceScale",
+      "d": "1",
+      "g": "Graphics",
+      "t": "Pushes the distance at which objects drop to a simpler model. Higher costs more.",
+      "kind": "choice"
+    },
+    {
+      "k": "g_fTerrainAndObjectsResolutionMultiplier",
+      "d": "1.0",
+      "g": "Graphics",
+      "t": "Renders terrain and objects above or below screen resolution. Above 1.0 is supersampling."
+    },
+    {
+      "k": "g_nMFDRenderTargetSize",
+      "d": "1024",
+      "g": "Cockpit & avionics",
+      "t": "How large the MFD pages are drawn before being put on the screen. Larger is sharper and costs more.",
+      "kind": "choice"
+    },
+    {
+      "k": "g_bNewTerrainEnableDynamicLights",
+      "d": "0",
+      "g": "Terrain",
+      "t": "Lets lights on the ground cast onto the terrain at night."
+    },
+    {
+      "k": "g_fNewTerrainTessellationFactor",
+      "d": "0.35",
+      "g": "Terrain",
+      "t": "How finely the terrain mesh is divided. Higher is smoother ground and costs more."
+    },
+    {
+      "k": "g_bNewTerrainProceduralUse1024Textures",
+      "d": "0",
+      "g": "Terrain",
+      "t": "Uses the larger procedural textures on the terrain."
+    },
+    {
+      "k": "g_bNewTerrainPhotorealForce4KTiles",
+      "d": "0",
+      "g": "Terrain",
+      "t": "Forces 4K photoreal tiles instead of the 16K set where one exists."
+    },
+    {
+      "k": "g_fNewTerrainCoarseBumpMapIntensity",
+      "d": "0.625",
+      "g": "Terrain",
+      "t": "How strongly the terrain bump mapping shows, 0 to 1."
+    },
+    {
+      "k": "g_bVREnableFFR",
+      "d": "0",
+      "g": "VR",
+      "t": "Fixed foveated rendering: draws the edges of the VR image at lower detail to save performance.",
+      "vr": 1
+    },
+    {
+      "k": "g_fVRFFRInnerRadius",
+      "d": "0.5",
+      "g": "VR",
+      "t": "How much of the middle of the VR image is kept at full detail.",
+      "vr": 1
+    },
+    {
+      "k": "g_b3DClickableCursorFixToCenter",
+      "d": "0",
+      "g": "Cockpit & avionics",
+      "t": "Keeps the clickable-cockpit cursor in the middle of the screen."
+    },
+    {
+      "k": "g_bTacviewRealTime",
+      "d": "0",
+      "g": "Files & folders",
+      "t": "Streams live telemetry that Tacview — and BMS Companion's AWACS picture and taxi traffic — read."
+    },
+    {
+      "k": "g_bTacviewAcmi",
+      "d": "1",
+      "g": "Files & folders",
+      "t": "Records the flight to an ACMI file for replay."
+    },
+    {
+      "k": "g_nHotasShiftQuickPressTimeLimit",
+      "d": "0",
+      "g": "Cockpit & avionics",
+      "t": "How long, in ms, a shifted HOTAS press counts as a quick press."
+    },
+    {
+      "k": "g_nButtonsPerDevice",
+      "d": "32",
+      "g": "Cockpit & avionics",
+      "t": "How many buttons BMS reads from each device. The launcher usually sets this."
+    },
+    {
+      "k": "g_bLabelShowTailNumber",
+      "d": "0",
+      "g": "Campaign & AI",
+      "t": "Adds the tail number to aircraft labels."
+    },
+    {
+      "k": "g_bAllowAnyMouseInput",
+      "d": "0",
+      "g": "Cockpit & avionics",
+      "t": "Accepts input from any mouse rather than the system one only."
+    }
+  ]
+}

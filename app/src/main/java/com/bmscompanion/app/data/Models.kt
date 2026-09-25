@@ -26,6 +26,8 @@ data class Theater(
     val mapId: String? = null,
     val airportSet: String = "",
     val radioSet: String = "",
+    /** ground charts for this theater's fields (data/airfields), null where none were authored */
+    val airfieldSet: String? = null,
     val airportCount: Int = 0,
     val aircraftCount: Int = 0,
     /** true for theaters that ship their own terrain (KTO, Balkans, Hellas, Israel, Falklands) */
@@ -435,3 +437,35 @@ data class Term(val term: String = "", val meaning: String = "")
 
 @Serializable
 data class ChartRef(val title: String = "", val file: String = "", val pages: List<String> = emptyList())
+
+/**
+ * The catalogue of Falcon BMS config options: what exists, what it does, and what it defaults to.
+ *
+ * Built by `tools/extractor/src/cfgcatalog.mjs` out of the stock `User/Config/Falcon BMS.cfg` the version ships —
+ * that file lists every option at its default and most lines carry BMS's own explanation — so a new BMS version is
+ * a re-run rather than an editing job. `tools/curated/cfgnotes.json` adds only what BMS does not say: the grouping,
+ * a description for the few silent lines, and the named choices for the ones that take one of a set of values.
+ */
+@Serializable
+data class CfgCatalog(val version: String = "", val options: List<CfgOption> = emptyList())
+
+/**
+ * One option. [k] is the key as it appears after `set`, [d] BMS's own default, [g] the group it is filed under,
+ * [t] what it does and [vr] 1 for the ones that only matter in a headset.
+ *
+ * [kind] comes from BMS's own naming — `g_b…` a toggle, `g_n…` a whole number, `g_f…` a decimal, `g_s…` text (or a
+ * colour where the default is a hex string) — except where [c] gives named choices.
+ */
+@Serializable
+data class CfgOption(
+    val k: String = "",
+    val d: String = "",
+    val kind: String = "text",
+    val g: String = "Other",
+    val t: String = "",
+    val vr: Int = 0,
+    val c: List<CfgChoice> = emptyList(),
+)
+
+/** One named value of an option that takes a set of them: [v] as written in the file, [t] as read by a person. */
+@Serializable data class CfgChoice(val v: String = "", val t: String = "")

@@ -73,6 +73,10 @@ fun TheaterMap(
 ) {
     // map style overview + zoom-level tiles, and the landmark layers (MapBase.kt)
     val base = rememberMapBase(imagePath)
+    // Read during composition, not only inside the draw: a map that nobody touches — the little one on an
+    // airfield page — stayed black until a finger brushed it, because the tiles arrive after the first frame and
+    // nothing asked to be drawn again. Counting them here is what asks.
+    @Suppress("UNUSED_VARIABLE") val tilesReady = base.images.size
     val geo = if (landmarks) rememberGeo(imagePath, sizeFt) else null
     val landmarkText = androidx.compose.ui.text.rememberTextMeasurer(cacheSize = 192)
     val legacy by produceState<Bitmap?>(null, imagePath) { value = imagePath?.takeIf { mapIdOf(it) == null }?.let { Repo.bitmap(it) } }
@@ -88,20 +92,25 @@ fun TheaterMap(
         // On a board the map covers its box instead, and the smallest zoom becomes the fit rather than the cover, so
         // zooming out still shows the whole theater.
         val cover = if (Kneeboard.on) max(w, h) else min(w, h)
-        val minScale = if (Kneeboard.on && cover > 0f) (min(w, h) / cover).coerceIn(0.2f, 1f) else 1f
+        // A board is all map: the square never shrinks below the page, or the widest zoom step leaves a band of bare
+        // board down one side. (It used to zoom out to the whole theater, which is what put that band there.)
+        val minScale = 1f
         // Nothing but map on a board. The theater is drawn as a square, so panning towards its edge — which is where
         // a mission near the top of the map puts it — slid the square off the page and left a band of bare board
         // above it. The pan is held inside the square whenever the square is big enough to cover the page.
-        if (Kneeboard.on && w > 0f && h > 0f) {
-            val side = cover * state.scale
-            val mx = ((side - w) / 2f).coerceAtLeast(0f)
-            val my = ((side - h) / 2f).coerceAtLeast(0f)
-            if (state.panX !in -mx..mx) state.panX = state.panX.coerceIn(-mx, mx)
-            if (state.panY !in -my..my) state.panY = state.panY.coerceIn(-my, my)
-        }
+        // The pan is held inside the square so the square always covers the page. This is applied when the
+        // projection is worked out, never written back into the state during composition: following the jet moves
+        // the pan four times a second, and a clamp that writes state each time it does invalidates the composition,
+        // which then re-clamps — the map and the bare board alternated down one edge several times a second.
         fun proj(): MapProjection {
             val side = cover * state.scale
-            return MapProjection((w - side) / 2 + state.panX, (h - side) / 2 + state.panY, side, sizeFt, state.scale)
+            var px = state.panX
+            var py = state.panY
+            if (Kneeboard.on && w > 0f && h > 0f) {
+                px = px.coerceIn(-((side - w) / 2f).coerceAtLeast(0f), ((side - w) / 2f).coerceAtLeast(0f))
+                py = py.coerceIn(-((side - h) / 2f).coerceAtLeast(0f), ((side - h) / 2f).coerceAtLeast(0f))
+            }
+            return MapProjection((w - side) / 2 + px, (h - side) / 2 + py, side, sizeFt, state.scale)
         }
         if (!state.initialized && focus != null && w > 0) {
             state.scale = focusScale

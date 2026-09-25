@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -59,6 +60,24 @@ import com.bmscompanion.app.data.mission.MissionLink
 import com.bmscompanion.app.ui.Kneeboard
 import com.bmscompanion.app.ui.components.AssetImage
 import com.bmscompanion.app.ui.screens.chartPage
+import com.bmscompanion.app.data.mission.Live
+import androidx.compose.ui.geometry.Offset
+import kotlin.math.hypot
+import kotlin.math.roundToInt
+import com.bmscompanion.app.data.mission.TaxiSelection
+import com.bmscompanion.app.data.airfield.AfSpot
+import com.bmscompanion.app.data.airfield.TaxiPath
+import com.bmscompanion.app.data.airfield.TaxiClearance
+import com.bmscompanion.app.data.airfield.clearanceFor
+import com.bmscompanion.app.data.airfield.routeForPosition
+import com.bmscompanion.app.data.airfield.AfRoute
+import com.bmscompanion.app.data.airfield.Airfield
+import com.bmscompanion.app.data.airfield.TaxiNet
+import com.bmscompanion.app.data.airfield.fieldOffset
+import com.bmscompanion.app.ui.components.AirfieldChart
+import com.bmscompanion.app.ui.screens.fieldTraffic
+import com.bmscompanion.app.ui.components.ChartInks
+import com.bmscompanion.app.ui.screens.mission.AcmiCenterNotice
 import com.bmscompanion.app.ui.screens.mission.LiveMap
 import com.bmscompanion.app.ui.screens.mission.MapLayers
 import com.bmscompanion.app.ui.screens.mission.MapSel
@@ -110,7 +129,12 @@ enum class BoardKind(
     SUPPORT("support", "Tankers & AWACS", "Who is on station, with TACAN and frequencies.", 1),
     THREATS("threats", "Mission threats", "Every threat the briefing names, packed onto a sheet.", 3),
     HARM("harm", "HARM / ALIC codes", "The ALIC table, for typing into the HARM.", 1),
-    RUNWAYS("runways", "Airfield plates", "Ground and parking charts for the field you take off from.", 12),
+    RUNWAYS("runways", "Ground chart", "The field you take off from, drawn from BMS's own data: taxiways, hold shorts and every ramp spot. One page per runway, turned to fill the page.", 12, configurable = true),
+    LIVETAXI(
+        "livetaxi", "Live taxi",
+        "Where you are on the field, with what is ahead of you up the page. Turning a page zooms in and out.",
+        TAXI_SPANS.size, configurable = true,
+    ),
     PLATES("plates", "Instrument charts", "Approach, departure and arrival plates for that field.", 40),
     PICTURE("picture", "Hostile picture", "The AWACS picture: what is out there, nearest first.", 1),
 
@@ -126,6 +150,28 @@ enum class BoardKind(
         fun of(id: String) = entries.firstOrNull { it.id == id } ?: MAP
     }
 }
+
+/**
+ * How much ground a live taxi board shows, widest first.
+ *
+ * A taxi chart that follows the jet is one page, so the pages OpenKneeboard turns are put to the only use it has
+ * for them: the next-page binding zooms in, the previous-page zooms out. There is nothing in a headset to pinch
+ * with. The widest shows the field and where you are on it; the closest is a couple of stands either side, for
+ * threading a line of revetments.
+ */
+/**
+ * Below this the jet is taxiing or rolling out rather than flying.
+ *
+ * A landing rollout is still above a hundred knots when it passes the first turn-off, and a pilot wants the chart
+ * by then, so the line is drawn above that rather than at walking pace.
+ */
+private const val ON_GROUND_KTS = 150.0
+
+/** And how near a field the jet has to be to be on it: two miles covers the longest runway and its approach end. */
+private const val ON_FIELD_FT = 2 * 6076.12
+
+val TAXI_SPANS = listOf(12000.0, 6000.0, 3000.0, 1500.0, 800.0)
+val TAXI_SPAN_LABELS = listOf("whole field", "wide", "close", "closer", "stand")
 
 /**
  * The zoom steps a map board walks through, widest first.
@@ -197,7 +243,11 @@ fun VrBoardScreen(nav: NavHostController, slot: Int) {
     // previous page zooms out — the only two controls that matter on a map, and the pilot already has them bound.
     val shape = Kneeboard.shapes[Kneeboard.shape]
     val kind = board?.let { BoardKind.of(it.kind) }
-    val zoomSteps = if (kind == BoardKind.MAP) MAP_ZOOMS.size else 0
+    val zoomSteps = when (kind) {
+        BoardKind.MAP -> MAP_ZOOMS.size
+        BoardKind.LIVETAXI -> TAXI_SPANS.size
+        else -> 0
+    }
 
     // What this board is called, so a stack of tabs in OpenKneeboard reads "Kneeboard 2 (Live map)" rather than
     // five lines of "BMS Companion". The name is set again when the board's kind is changed on the PC.
@@ -306,14 +356,15 @@ fun VrBoardScreen(nav: NavHostController, slot: Int) {
 @Composable
 private fun boardPages(kind: BoardKind, slot: BoardSlot, env: MissionEnv, step: Int = -1): List<BoardPage> = when (kind) {
     BoardKind.MAP -> listOf(BoardPage("Map") { BoardMap(env, slot, step) })
-    BoardKind.BRIEFING -> briefingPages()
+    BoardKind.BRIEFING -> briefingPages(env)
     BoardKind.FLIGHT -> flightPages()
     BoardKind.COMMS -> commsPages()
     BoardKind.SUPPORT -> supportPages(env)
     BoardKind.THREATS -> threatPages()
     BoardKind.HARM -> harmPages()
-    BoardKind.RUNWAYS -> chartPages(env, instrument = false)
-    BoardKind.PLATES -> chartPages(env, instrument = true)
+    BoardKind.RUNWAYS -> groundChartPages(env, slot)
+    BoardKind.LIVETAXI -> liveTaxiPages(env, slot, step)
+    BoardKind.PLATES -> chartPages(env)
     BoardKind.PICTURE -> picturePages(env)
     BoardKind.EXPORTED -> exportedPages()
 }
@@ -497,7 +548,7 @@ private fun PackedSheet(
  * cockpit wants it in a glance and a page turn, not six presses.
  */
 @Composable
-private fun briefingPages(): List<BoardPage> {
+private fun briefingPages(env: MissionEnv): List<BoardPage> {
     val mission by MissionLink.mission.collectAsState()
     val b = mission?.briefing ?: return listOf(BoardPage("Briefing") {
         BoardNotice("No briefing yet", "Press PRINT on the BMS briefing screen and this board fills itself in.")
@@ -534,6 +585,20 @@ private fun briefingPages(): List<BoardPage> {
             },
         )
     }
+    // The fields this flight uses, so the pilot has the TACAN and the runway headings without leaving the board.
+    run {
+        val bases = airbases(null, b)
+        val dep = matchAirport(env.set, bases.departure)
+        val arr = matchAirport(env.set, bases.arrival)?.takeIf { it.id != dep?.id }
+        val alt = matchAirport(env.set, bases.alternate)?.takeIf { it.id != dep?.id && it.id != arr?.id }
+        if (dep != null || arr != null || alt != null) blocks += BoardBlock("Airfields") {
+            Head("Airfields")
+            AirfieldFacts("Departure", dep)
+            AirfieldFacts("Recovery", arr)
+            AirfieldFacts("Alternate", alt)
+        }
+    }
+
     if (b.threats.isNotEmpty()) blocks += BoardBlock("Threats") {
         Head("Threats")
         b.threats.forEach { t -> t.title?.let { Head(it) }; t.lines.forEach { Para(it) } }
@@ -549,10 +614,61 @@ private fun briefingPages(): List<BoardPage> {
     b.weather?.let { w ->
         blocks += BoardBlock("Weather") {
             Head("Weather")
-            Facts(w.rows.map { it.label to it.values.joinToString("  ") })
+            // BMS gives one figure per phase of the flight, and run together they read "Fair  Fair  Fair" with
+            // nothing to say which is which. Ruled into its own columns, each figure sits under the phase it
+            // belongs to — take-off, the target, the landing.
+            val phases = w.columns.ifEmpty { listOf("Take off", "Target", "Landing") }
+            val weights = listOf(2.2f) + phases.map { 2f }
+            Cols(listOf("" to 2.2f) + phases.map { it to 2f }, header = true)
+            w.rows.forEachIndexed { i, r ->
+                Cols(
+                    listOf(r.label to 2.2f) + phases.indices.map { (r.values.getOrNull(it) ?: "–") to 2f },
+                    row = i,
+                )
+            }
+            if (weights.isEmpty()) Unit
         }
     }
     return packedPages("Briefing", blocks, maxSheets = 2)
+}
+
+/**
+ * A field, packed: what a pilot wants about the place they are leaving from or going to.
+ *
+ * The briefing names the bases but says almost nothing about them, and in a headset there is no second screen to
+ * look them up on. Everything here is the app's own airport record — the TACAN, the tower and ground frequencies,
+ * and every runway with its real heading and its ILS.
+ */
+@Composable
+private fun ColumnScopeLike.AirfieldFacts(role: String, a: Airport?) {
+    if (a == null) return
+    // a.fullName carries whatever the theater author typed, often with the ILS order in brackets; the short name
+    // is what a pilot calls the place
+    Title(a.name.ifBlank { a.fullName }, role)
+    val bits = ArrayList<Pair<String, String>>()
+    a.icao?.let { bits += "ICAO" to it }
+    a.elevationFt?.let { bits += "Elevation" to "$it ft" }
+    a.tacan?.let { bits += "TACAN" to it.label }
+    a.freqs?.towerUhf?.let { bits += "Tower" to it }
+    a.freqs?.groundUhf?.let { bits += "Ground" to it }
+    a.freqs?.approachUhf?.let { bits += "Approach" to it }
+    a.freqs?.atisVhf?.let { bits += "ATIS" to it }
+    if (bits.isNotEmpty()) Facts(bits)
+    val ends = a.runways.flatMap { r -> r.ends.map { r to it } }
+    if (ends.isNotEmpty()) {
+        Cols(listOf("RWY" to 1.1f, "TRUE" to 1.1f, "LENGTH" to 1.4f, "ILS" to 1.6f), header = true)
+        ends.forEachIndexed { i, (r, e) ->
+            Cols(
+                listOf(
+                    e.designator to 1.1f,
+                    (((e.headingTrue.roundToInt() % 360) + 360) % 360).toString().padStart(3, '0') to 1.1f,
+                    (r.lengthFt?.let { "$it ft" } ?: "–") to 1.4f,
+                    (e.ils ?: "–") to 1.6f,
+                ),
+                row = i,
+            )
+        }
+    }
 }
 
 /** The flight plan, a row at a time, filling each sheet. */
@@ -593,12 +709,12 @@ private fun commsPages(): List<BoardPage> {
     })
     val blocks = comms.mapIndexed { r, c ->
         BoardBlock {
-            Cols(
-                listOf(
-                    c.agency to 2.5f,
-                    c.callsign.orEmpty() to 2.4f,
-                    listOfNotNull(c.uhfCh?.let { "$it" }, c.uhf).joinToString(" ") to 2.7f,
-                    listOfNotNull(c.vhfCh?.let { "$it" }, c.vhf).joinToString(" ") to 2.6f,
+            RichCols(
+                listOf<Pair<Float, @Composable RowScope.() -> Unit>>(
+                    2.5f to { Text(c.agency, color = Hud.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 2) },
+                    2.4f to { Text(c.callsign.orEmpty(), color = Hud.Text, fontSize = 12.sp, maxLines = 1) },
+                    2.7f to { Channel(c.uhfCh, c.uhf) },
+                    2.6f to { Channel(c.vhfCh, c.vhf) },
                 ),
                 row = r,
             )
@@ -718,9 +834,14 @@ private fun harmPages(): List<BoardPage> {
     }
 }
 
-/** Every page of every chart for the field this mission takes off from. */
+/**
+ * Every page of every instrument chart for the field this mission takes off from.
+ *
+ * Instrument charts only, because they are the only ones left: the pictures BMS ships in its docs folder are gone
+ * and the RUNWAYS board draws that chart from the field's own data instead.
+ */
 @Composable
-private fun chartPages(env: MissionEnv, instrument: Boolean): List<BoardPage> {
+private fun chartPages(env: MissionEnv): List<BoardPage> {
     val live by MissionLink.live.collectAsState()
     val mission by MissionLink.mission.collectAsState()
     val bases = airbases(live, mission?.briefing)
@@ -729,21 +850,264 @@ private fun chartPages(env: MissionEnv, instrument: Boolean): List<BoardPage> {
     val charts by produceState<List<ChartRef>?>(null, setId, field?.id) {
         value = if (setId == null || field == null) emptyList() else Repo.charts(setId)[field.id.toString()].orEmpty()
     }
-    val what = if (instrument) "Instrument charts" else "Airfield plates"
+    val what = "Instrument charts"
     if (field == null) return listOf(BoardPage(what) {
         BoardNotice(what, "This board follows the field you take off from. Press PRINT on the BMS briefing and it fills itself in.")
     })
     val list = charts ?: return listOf(BoardPage(what) { BoardNotice(what, "Loading ${field.name}…") })
-    val wanted = list.filter { it.pages.isNotEmpty() == instrument }
+    val wanted = list.filter { it.pages.isNotEmpty() }
     if (wanted.isEmpty()) return listOf(BoardPage(what) {
-        BoardNotice(what, "${field.name} has no ${if (instrument) "instrument charts" else "ground plates"} in this theater.")
+        BoardNotice(what, "${field.name} has no instrument charts in this theater.")
     })
     return wanted.flatMap { c ->
-        val files = if (c.pages.isEmpty()) listOf(c.file) else List(c.pages.size) { chartPage(c.pages[0], it + 1) }
+        val files = List(c.pages.size) { chartPage(c.pages[0], it + 1) }
         files.mapIndexed { i, file ->
             BoardPage(if (files.size > 1) "${c.title} ${i + 1}" else c.title) {
                 Box(Modifier.fillMaxSize().padding(PLATE_MARGIN)) { AssetImage(file, Modifier.fillMaxSize()) }
             }
+        }
+    }
+}
+
+/**
+ * The field's ground chart, which replaces the plates BMS ships in its docs folder.
+ *
+ * The first page is the one to bind a button to: it follows the jet, turned so what is ahead of the pilot is up the
+ * page — a board has no pointer, so a chart that cannot be panned is only useful if it moves itself. The rest are
+ * the whole field, one page per runway, north up, for working out where you are going before you start rolling.
+ *
+ * The taxi route it draws comes from the Taxi page when that is open — the two are different programs, so the
+ * choice travels through the PC — and otherwise from where the jet is standing, which is what a pilot wants the
+ * moment they spawn without having touched anything.
+ */
+@Composable
+private fun groundChartPages(env: MissionEnv, slot: BoardSlot): List<BoardPage> {
+    val live by MissionLink.live.collectAsState()
+    val mission by MissionLink.mission.collectAsState()
+    val setId = env.theater?.airfieldSet
+
+    // Follow the pilot: the field they are standing on, then the one the briefing departs from.
+    val index by produceState(emptyMap<String, String>(), setId) { value = setId?.let { Repo.airfieldIndex(it) }.orEmpty() }
+    val onGround = (live?.gsKts ?: 999.0) < 150
+    val nearest = remember(live?.x, live?.y, onGround, env.set, index) {
+        val jet = live?.takeIf { (it.x != 0.0 || it.y != 0.0) && onGround } ?: return@remember null
+        env.set?.airports.orEmpty()
+            .filter { index.containsKey(it.id.toString()) }
+            .minByOrNull { hypot(it.x - jet.x, it.y - jet.y) }
+            ?.takeIf { hypot(it.x - jet.x, it.y - jet.y) < 4 * 6076 }
+    }
+    val bases = airbases(live, mission?.briefing)
+    val airport = nearest ?: matchAirport(env.set, bases.departure) ?: matchAirport(env.set, bases.arrival)
+    val field by produceState<Airfield?>(null, setId, airport?.id) {
+        value = if (setId == null || airport == null) null else Repo.airfield(setId, airport.id)
+    }
+
+    val what = "Ground chart"
+    if (airport == null) return listOf(BoardPage(what) {
+        BoardNotice(what, "This board draws the field you take off from, one page per runway. Press PRINT on the BMS briefing and it fills itself in. For where you are on the field while you taxi, put a Live taxi board on another kneeboard.")
+    })
+    val f = field ?: return listOf(BoardPage(what) { BoardNotice(what, "Loading ${airport.name}…") })
+    if (f.routes.isEmpty()) return listOf(BoardPage(what) {
+        BoardNotice(what, "${f.name} has no taxiways in BMS's own data — the field is a strip.")
+    })
+
+    // A carrier is one page: it steams into wind, so the runway BMS names it and the numbers on its deck turn
+    // with the ship, and a page headed "RWY 36R" would be right for about a minute.
+    if (f.ship != null) return listOf(BoardPage(f.icao ?: f.name) { BoardGroundChart(f, null, slot, live) })
+
+    // One page per runway and nothing else. The page that followed the jet, with its route and its clearance,
+    // is the Live taxi board's whole job now, and having it here as well put a route across a chart a pilot opens
+    // to find something else.
+    return f.routes.map { route ->
+        BoardPage("${f.icao ?: f.name} RWY ${route.designator}") { BoardGroundChart(f, route, slot, live) }
+    }
+}
+
+/**
+ * The live taxi board: where the jet is on the field, with what is ahead of it up the page.
+ *
+ * The same field-finding as the ground chart board, but one page rather than one per runway, and the pages are
+ * spent on zoom instead. The chart is always turned to the jet's heading, because a pilot taxiing reads a chart
+ * the way they read the world through the canopy.
+ */
+@Composable
+private fun liveTaxiPages(env: MissionEnv, slot: BoardSlot, step: Int): List<BoardPage> {
+    val live by MissionLink.live.collectAsState()
+    val setId = env.theater?.airfieldSet
+    val index by produceState(emptyMap<String, String>(), setId) { value = setId?.let { Repo.airfieldIndex(it) }.orEmpty() }
+
+    // Which field the jet is standing on — whichever one it is. This board is not the briefing's: a pilot who
+    // diverts, or lands somewhere they were not sent, wants the chart for the place they are actually on, so the
+    // whole theater is searched and the nearest field wins.
+    val onTheGround = live != null && (live?.gsKts ?: 999.0) < ON_GROUND_KTS
+    val nearest = remember(live?.x, live?.y, onTheGround, env.set, index) {
+        val jet = live?.takeIf { (it.x != 0.0 || it.y != 0.0) && onTheGround } ?: return@remember null
+        env.set?.airports.orEmpty()
+            .filter { index.containsKey(it.id.toString()) }
+            .minByOrNull { hypot(it.x - jet.x, it.y - jet.y) }
+            ?.takeIf { hypot(it.x - jet.x, it.y - jet.y) < ON_FIELD_FT }
+    }
+
+    val what = "Live taxi"
+    if (live == null) return listOf(BoardPage(what) {
+        BoardNotice(what, "Waiting for BMS. This board draws the field you are on, as soon as there is a jet to put on it.")
+    })
+    if (nearest == null) return listOf(BoardPage(what) {
+        BoardNotice(
+            what,
+            if (onTheGround) "No airfield within two miles. The chart appears as soon as you are on one."
+            else "You are airborne. The chart appears when you land, and follows you round whichever field you are on.",
+        )
+    })
+
+    val field by produceState<Airfield?>(null, setId, nearest.id) {
+        value = if (setId == null) null else Repo.airfield(setId, nearest.id)
+    }
+
+    var chosen by remember { mutableStateOf<TaxiSelection?>(null) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            runCatching { MissionLink.taxiSelection() }.getOrNull()?.let { if (it.runway.isNotEmpty()) chosen = it }
+            delay(1500)
+        }
+    }
+
+    val f = field ?: return listOf(BoardPage(what) { BoardNotice(what, "Loading ${nearest.name}…") })
+    val pick = chosen?.takeIf { it.airportId == f.id }
+    val span = TAXI_SPANS.getOrNull(step) ?: 3000.0
+    val label = TAXI_SPAN_LABELS.getOrNull(step) ?: ""
+    return listOf(BoardPage("${f.icao ?: f.name} live") { BoardLiveTaxi(f, slot, live, pick, span, label) })
+}
+
+@Composable
+private fun BoardLiveTaxi(f: Airfield, slot: BoardSlot, live: Live?, pick: TaxiSelection?, span: Double, zoomLabel: String) {
+    val contacts by MissionLink.contacts.collectAsState()
+    val here = live?.let { fieldOffset(f, it.x, it.y) }
+    val traffic = remember(f.id, contacts) { fieldTraffic(f, contacts?.contacts.orEmpty()) }
+    val taxi = rememberBoardTaxi(f, here, pick)
+    Column(Modifier.fillMaxSize().padding(PLATE_MARGIN)) {
+        SheetTitle("${f.name} — live" + (taxi.route?.takeIf { f.ship == null }?.let { " RWY ${it.designator}" } ?: ""))
+        Text(
+            listOfNotNull(
+                taxi.clearance?.line,
+                taxi.spot?.let { "spot ${it.n}" },
+                if (here == null) "no live position" else null,
+                zoomLabel.takeIf { it.isNotEmpty() },
+            ).joinToString("  ·  "),
+            color = Hud.TextDim, fontSize = 9.sp,
+        )
+        Spacer(Modifier.height(4.dp))
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            AirfieldChart(
+                field = f,
+                route = taxi.route?.takeIf { f.ship == null },
+                inks = boardInks(slot),
+                modifier = Modifier.fillMaxSize(),
+                path = taxi.path?.nodes,
+                you = here?.let { Offset(it.first.toFloat(), it.second.toFloat()) },
+                youHeading = live?.hdgTrue,
+                traffic = traffic,
+                selectedSpot = if (taxi.outbound) taxi.spot?.n else null,
+                destinationSpot = if (taxi.outbound) null else taxi.spot?.n,
+                interactive = false,
+                labelScale = 0.8f,
+                follow = here?.let { Offset(it.first.toFloat(), it.second.toFloat()) },
+                followSpanFt = span,
+                // Always heading up: this is the board for taxiing, and what is ahead of the jet belongs up the page.
+                upHeading = live?.hdgTrue,
+            )
+            // Nothing in a headset to dismiss a corner pill with, so the same middle-of-the-page notice the live
+            // map uses, and it leaves of its own accord when the feed arrives.
+            AcmiCenterNotice(Modifier.align(Alignment.Center))
+        }
+        taxi.clearance?.let { c ->
+            Spacer(Modifier.height(4.dp))
+            c.steps.take(3).forEachIndexed { i, stp ->
+                Text(
+                    "${i + 1}.  ${stp.text}" + (stp.ft?.let { ft -> "   ${ft.toInt()} ft" } ?: ""),
+                    color = Hud.Text, fontSize = 10.sp,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The inks this board is printed in.
+ *
+ * Dark unless the pilot asks otherwise. The rest of a kneeboard is printed on paper, but a ground chart is read in
+ * a dark cockpit at night as often as by day, and a page of pale concrete in a headset is a lamp in the face. The
+ * setting is on the board's own row on the PC.
+ */
+private fun boardInks(slot: BoardSlot): ChartInks = when (slot.options["chart"]) {
+    "day" -> ChartInks.day
+    else -> ChartInks.night
+}
+
+/** Everything the board knows about the taxi: the route, the spot and the way between them. */
+private class BoardTaxi(val route: AfRoute?, val spot: AfSpot?, val outbound: Boolean, val path: TaxiPath?, val clearance: TaxiClearance?)
+
+@Composable
+private fun rememberBoardTaxi(f: Airfield, here: Pair<Double, Double>?, pick: TaxiSelection?): BoardTaxi {
+    val route = f.routes.firstOrNull { it.designator == pick?.runway }
+        ?: here?.let { routeForPosition(f, it.first, it.second) }
+        ?: f.routes.firstOrNull()
+    val net = remember(f.id, route?.designator) { route?.let { TaxiNet(f, it) } }
+    val liveSpot = here?.let { net?.nearestSpot(it.first, it.second) }?.takeIf { it.second < 220 }?.first
+    val spot = pick?.spot?.let { n -> route?.parking?.firstOrNull { it.n == n } } ?: liveSpot
+    val outbound = pick?.outbound ?: true
+    val path = remember(net, spot?.n, outbound) {
+        val n = net ?: return@remember null
+        val start = route?.start ?: return@remember null
+        val s = spot ?: return@remember null
+        if (outbound) n.path(s.k, start) else n.path(start, s.k)
+    }
+    val clearance = remember(path, outbound, spot?.n) {
+        val n = net ?: return@remember null
+        path?.let { clearanceFor(n, it, outbound, spot) }
+    }
+    return BoardTaxi(route, spot, outbound, path, clearance)
+}
+
+/** The live page: the jet in the middle, the chart turned to its heading, and the next turns under it. */
+@Composable
+private fun BoardGroundChart(f: Airfield, route: AfRoute?, slot: BoardSlot, live: Live?) {
+    val here = live?.let { fieldOffset(f, it.x, it.y) }
+    val spot = route?.let { r -> here?.let { (e, n) -> TaxiNet(f, r).nearestSpot(e, n) } }?.takeIf { it.second < 220 }?.first
+    Column(Modifier.fillMaxSize().padding(PLATE_MARGIN)) {
+        SheetTitle(if (route == null) f.name else "${f.name} — runway ${route.designator}")
+        Text(
+            listOfNotNull(
+                f.ship?.cls ?: f.runways.joinToString("  ") { "${it.name} ${it.lengthFt}×${it.widthFt} ft" },
+                f.elevationFt?.takeIf { f.ship == null }?.let { "ELEV $it ft" },
+                route?.let { "${it.parking.size} spots" },
+                spot?.let { "you are on ${it.n}" },
+            ).joinToString("  ·  "),
+            color = Hud.TextDim, fontSize = 9.sp,
+        )
+        Spacer(Modifier.height(4.dp))
+        // The chart takes the room the text above it leaves, and no more. Given fillMaxSize it measured the whole
+        // page instead, so it believed the page was a different shape than it is — and a board that turns the
+        // field to fit the page has to know the shape of the page.
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            AirfieldChart(
+                field = f,
+                route = route,
+                inks = boardInks(slot),
+                modifier = Modifier.fillMaxSize(),
+                // No route here. This board is the field itself, one page per runway, to be read before start-up
+                // or on the way in; the way to taxi is the Live taxi board's job and drawing it on both only puts
+                // a line across a chart the pilot is using to find something else.
+                you = here?.let { Offset(it.first.toFloat(), it.second.toFloat()) },
+                youHeading = live?.hdgTrue,
+                selectedSpot = spot?.n,
+                interactive = false,
+                labelScale = 0.8f,
+                // A kneeboard page is far taller than it is wide and most airfields are long and thin, so the field
+                // is turned to whatever angle fills the page unless the pilot has asked for north or heading up.
+                upHeading = if (slot.options["up"] == "heading") live?.hdgTrue else null,
+                fitRotation = (slot.options["up"] ?: "fit") == "fit",
+            )
         }
     }
 }
@@ -764,20 +1128,34 @@ private fun picturePages(env: MissionEnv): List<BoardPage> {
     val sorted = hostiles.sortedBy { c -> own?.let { rangeNm(it.first, it.second, c.x, c.y) } ?: Double.MAX_VALUE }
     val blocks = sorted.map { c ->
         BoardBlock {
-            Cols(
-                listOf(
-                    listOfNotNull(c.name, c.group).joinToString(" · ").ifBlank { "Contact" } to 3.2f,
-                    (own?.let { bra(it.first, it.second, c.x, c.y) } ?: "–") to 1.7f,
-                    (bull?.let { bra(it.first, it.second, c.x, c.y) } ?: "–") to 1.7f,
-                    flightLevel(c.altFt) to 1.1f,
-                    (if (c.gsKts > 0) "${c.gsKts.toInt()}" else "") to 1f,
+            RichCols(
+                listOf<Pair<Float, @Composable RowScope.() -> Unit>>(
+                    3.0f to {
+                        Text(
+                            listOfNotNull(c.name, c.group).joinToString(" · ").ifBlank { "Contact" },
+                            color = Hud.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 2,
+                        )
+                    },
+                    // off your own nose, in the red the threats themselves wear: this is the one to react to
+                    1.9f to { Bearing(own?.let { bra(it.first, it.second, c.x, c.y) } ?: "–", Hud.Red) },
+                    // and off the bullseye, in cyan — the call you make to everyone else, not the one you fly
+                    1.9f to { Bearing(bull?.let { bra(it.first, it.second, c.x, c.y) } ?: "–", Hud.Cyan) },
+                    1.2f to {
+                        Text(flightLevel(c.altFt), color = Hud.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    },
+                    1f to {
+                        if (c.gsKts > 0) {
+                            Text("${c.gsKts.toInt()}", color = Hud.Text, fontSize = 12.sp, maxLines = 1)
+                            Text(" kt", color = Hud.TextFaint, fontSize = 8.5.sp)
+                        }
+                    },
                 ),
                 row = sorted.indexOf(c),
             )
         }
     }
     return packedPages("Hostile picture", blocks) {
-        Cols(listOf("CONTACT" to 3.2f, "BRAA" to 1.7f, "BULLS" to 1.7f, "ALT" to 1.1f, "GS" to 1f), header = true)
+        Cols(listOf("CONTACT" to 3.0f, "BRAA off you" to 1.9f, "BULLSEYE" to 1.9f, "ALT" to 1.2f, "SPEED" to 1f), header = true)
     }
 }
 
@@ -895,6 +1273,68 @@ class ColumnScopeLike {
      * headset lens, in one glance, while flying — the band keeps the eye on the line and the bold name is what the
      * eye is looking for. Pass [row] the row's index for the banding.
      */
+    /**
+     * The same ruled, banded row as [Cols], but each cell draws itself.
+     *
+     * For the tables where a figure needs more than one weight of type to be read at a glance — a channel apart
+     * from its frequency, a bearing apart from its range.
+     */
+    @Composable
+    fun RichCols(cells: List<Pair<Float, @Composable RowScope.() -> Unit>>, row: Int = -1) {
+        Row(
+            Modifier.fillMaxWidth().height(IntrinsicSize.Min)
+                .background(if (row >= 0 && row % 2 == 1) Hud.Text.copy(alpha = 0.09f) else Color.Transparent),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            cells.forEachIndexed { i, (w, cell) ->
+                if (i > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(Hud.Outline))
+                Row(
+                    Modifier.weight(w).padding(horizontal = 3.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) { cell() }
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Hud.Outline))
+    }
+
+    /**
+     * A radio channel: the preset, boxed, then what it is tuned to.
+     *
+     * A pilot reaching for a preset is looking for the number, not the megahertz, and on a board the two used to
+     * run together as "15 345.950". The preset now sits in its own box, so the eye finds it without reading.
+     */
+    @Composable
+    fun RowScope.Channel(ch: Int?, freq: String?) {
+        if (ch != null) {
+            Text(
+                "C" + ch,
+                Modifier.clip(RoundedCornerShape(3.dp)).background(Hud.Amber.copy(alpha = 0.20f))
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
+                color = Hud.Amber, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+            )
+            Spacer(Modifier.width(4.dp))
+        }
+        Text(freq.orEmpty(), color = Hud.Text, fontSize = 12.sp, maxLines = 1)
+    }
+
+    /**
+     * A bearing and a range, told apart: the bearing in its own ink with a degree sign, the range after it.
+     *
+     * BRAA and bullseye are the same three digits and a number, and on a board they used to be two identical
+     * columns a pilot had to read the heading of to tell apart. Giving each its own colour means a glance is
+     * enough.
+     */
+    @Composable
+    fun RowScope.Bearing(text: String, ink: Color) {
+        val parts = text.split('/')
+        if (parts.size != 2) { Text(text, color = Hud.TextDim, fontSize = 12.sp, maxLines = 1); return }
+        Text(parts[0], color = ink, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        Text("°", color = ink.copy(alpha = 0.7f), fontSize = 9.sp)
+        Spacer(Modifier.width(3.dp))
+        Text(parts[1], color = Hud.Text, fontSize = 12.sp, maxLines = 1)
+        Text(" nm", color = Hud.TextFaint, fontSize = 8.5.sp)
+    }
+
     @Composable
     fun Cols(cells: List<Pair<String, Float>>, header: Boolean = false, row: Int = -1) {
         // a hairline under every row and between every column: a table on a kneeboard is ruled, and a figure is

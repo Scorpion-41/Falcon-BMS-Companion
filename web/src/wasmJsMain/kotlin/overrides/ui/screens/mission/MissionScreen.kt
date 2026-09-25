@@ -22,6 +22,7 @@ import com.bmscompanion.app.ui.Kneeboard
 import com.bmscompanion.app.ui.KneeboardMenuDivider
 import com.bmscompanion.app.ui.KneeboardMenuRow
 import com.bmscompanion.app.ui.KneeboardMenuSlot
+import com.bmscompanion.app.ui.go
 import com.bmscompanion.app.ui.theme.Hud
 
 // Browser version of app/.../ui/screens/mission/MissionScreen.kt (tabs and content are shared in MissionTabs.kt):
@@ -60,7 +61,7 @@ fun MissionScreen(nav: NavHostController) {
                 state, info, live,
                 badge = null,
                 idleText = "Connecting to BMS Companion on the PC…",
-                onSetup = { onTab(MissionTab.SETUP) },
+                onSetup = { nav.go(com.bmscompanion.app.ui.Routes.SETUP) },
             )
         }
         MissionTabStrip(tab, onTab)
