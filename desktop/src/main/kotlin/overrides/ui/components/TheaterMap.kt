@@ -23,8 +23,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import com.bmscompanion.app.data.Repo
@@ -32,9 +30,8 @@ import com.bmscompanion.app.ui.theme.Hud
 import com.bmscompanion.app.ui.Kneeboard
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.pow
 
-// PC version of app/.../ui/components/TheaterMap.kt: identical API and drawing, plus mouse-wheel zoom around the cursor.
+// PC and browser version of app/.../ui/components/TheaterMap.kt: identical API, drawing and zoom (ZoomMath).
 
 /** Maps theater coordinates (x = north ft, y = east ft) to screen space for the current pan/zoom. */
 class MapProjection(val left: Float, val top: Float, val side: Float, val sizeFt: Double, val scale: Float) {
@@ -52,6 +49,14 @@ class MapState {
     /** (xFt, yFt, scale) to centre on at the next layout */
     var pendingFocus by mutableStateOf<Triple<Double, Double, Float>?>(null)
     fun flyTo(xFt: Double, yFt: Double, scale: Float) { pendingFocus = Triple(xFt, yFt, scale) }
+    /** set by the map while it is shown: its own gliding zoom about its middle ([ZoomMath]) */
+    internal var zoomHook: ((Float) -> Unit)? = null
+    /** Zooms by [factor] about the middle of the map, gliding as its own + and − keys do (a page that draws its own keys). */
+    fun zoomBy(factor: Float) {
+        zoomHook?.let { it(factor); return }
+        val s = (scale * factor).coerceAtLeast(1f)
+        panX *= s / scale; panY *= s / scale; scale = s; initialized = true
+    }
 }
 
 @Composable
@@ -74,6 +79,17 @@ fun TheaterMap(
     onUserGesture: (() -> Unit)? = null,
     /** borders, provinces, country/region names and towns (MapLook settings) */
     landmarks: Boolean = true,
+    /** a map style for this map alone, leaving the pilot's own choice for every other map untouched */
+    style: String? = null,
+    /** false on a map that is not the mission map: no target ring, no towns picked out of a briefing */
+    mission: Boolean = true,
+    /**
+     * Cover the box rather than fit inside it: the theater square is never smaller than the widest side, so
+     * however far you zoom out the map still fills the frame. On for a dashboard card, which is wider than it
+     * is tall and showed black down both sides at the widest zoom; off for a full page, where seeing the whole
+     * theater with space round it is the point.
+     */
+    fillBox: Boolean = false,
     /** + / − buttons (bottom right, above a map's own corner button) */
     zoomButtons: Boolean = true,
     overlay: DrawScope.(MapProjection) -> Unit = {},
@@ -97,8 +113,10 @@ fun TheaterMap(
         val h = with(density) { maxHeight.toPx() }
         // A board is tall and a theater is square: fitted inside the box, a third of the board would be blank paper.
         // On a board the map covers its box instead, and the smallest zoom becomes the fit rather than the cover, so
-        // zooming out still shows the whole theater.
-        val cover = if (Kneeboard.on) max(w, h) else min(w, h)
+        // zooming out still shows the whole theater. A dashboard card asks for the same treatment: it is a wide
+        // box, and fitting a square inside it leaves a black band down each side at the widest zoom.
+        val coverBox = fillBox || Kneeboard.on
+        val cover = if (coverBox) max(w, h) else min(w, h)
         // A board is all map: the square never shrinks below the page, or the widest zoom step leaves a band of bare
         // board down one side. (It used to zoom out to the whole theater, which is what put that band there.)
         val minScale = 1f
@@ -109,26 +127,42 @@ fun TheaterMap(
         // projection is worked out, never written back into the state during composition: following the jet moves
         // the pan four times a second, and a clamp that writes state each time it does invalidates the composition,
         // which then re-clamps — the map and the bare board alternated down one edge several times a second.
-        fun proj(): MapProjection {
-            val side = cover * state.scale
+        /** the pan as it is drawn at [scale]: on a board or a card, held so the square covers the box */
+        fun drawnPan(scale: Float): Offset {
+            val side = cover * scale
             var px = state.panX
             var py = state.panY
-            if (Kneeboard.on && w > 0f && h > 0f) {
+            if (coverBox && w > 0f && h > 0f) {
                 px = px.coerceIn(-((side - w) / 2f).coerceAtLeast(0f), ((side - w) / 2f).coerceAtLeast(0f))
                 py = py.coerceIn(-((side - h) / 2f).coerceAtLeast(0f), ((side - h) / 2f).coerceAtLeast(0f))
             }
-            return MapProjection((w - side) / 2 + px, (h - side) / 2 + py, side, sizeFt, state.scale)
+            return Offset(px, py)
         }
-        /** Zooms by [factor] keeping the point under [p] (canvas pixels) in place. */
-        fun zoomAt(p: Offset, factor: Float) {
-            val newScale = (state.scale * factor).coerceIn(minScale, maxScale)
-            val c = Offset(p.x - w / 2, p.y - h / 2)
-            val f = newScale / state.scale
-            state.panX = c.x - (c.x - state.panX) * f
-            state.panY = c.y - (c.y - state.panY) * f
+        fun proj(): MapProjection {
+            val side = cover * state.scale
+            val p = drawnPan(state.scale)
+            return MapProjection((w - side) / 2 + p.x, (h - side) / 2 + p.y, side, sizeFt, state.scale)
+        }
+        /**
+         * Zooms by [factor] after moving by [by], keeping the point under [p] (canvas pixels) in place; answers the
+         * factor applied. It starts from the pan as drawn, not as stored: on a board or a card the stored pan can lie
+         * past the edge the drawing holds it to, and anchoring on that made the map jump sideways as it zoomed. (Called
+         * from gestures and the glide, never during composition, so writing the held pan back is safe here.)
+         */
+        fun zoomAt(p: Offset, factor: Float, by: Offset = Offset.Zero): Float {
+            val old = state.scale
+            val newScale = (old * factor).coerceIn(minScale, maxScale)
+            val f = newScale / old
+            val np = ZoomMath.keep(Offset(p.x - w / 2, p.y - h / 2), drawnPan(old) + by, f)
+            state.panX = np.x
+            state.panY = np.y
             state.scale = newScale
             state.initialized = true
+            return f
         }
+        val glide = rememberZoomGlide { f, at -> gestureCb.value?.invoke(); zoomAt(at, f) }
+        androidx.compose.runtime.SideEffect { state.zoomHook = { f -> glide.by(f, Offset(w / 2, h / 2)) } }
+        androidx.compose.runtime.DisposableEffect(state) { onDispose { state.zoomHook = null } }
         if (!state.initialized && focus != null && w > 0) {
             state.scale = focusScale
             val side = cover * focusScale
@@ -153,41 +187,30 @@ fun TheaterMap(
         }
         Canvas(
             Modifier.fillMaxSize()
-                .onPointerEvent(PointerEventType.Scroll) { e ->
-                    val ch = e.changes.firstOrNull() ?: return@onPointerEvent
-                    val dy = ch.scrollDelta.y
-                    if (dy != 0f) {
-                        gestureCb.value?.invoke()
-                        zoomAt(ch.position, 1.25f.pow(-dy))
-                        ch.consume()
-                    }
-                }
-                .pointerInput(sizeFt, w, h) {
+                // the wheel, a touchpad, a browser's pinch on a pad: measured and glided (ZoomMath)
+                .wheelZoom(glide)
+                .pointerInput(sizeFt, w, h, coverBox, maxScale) {
+                    // a pinch or a drag follows the fingers exactly, and takes over from a glide in flight
                     detectTransformGestures { centroid, pan, zoom, _ ->
+                        glide.stop()
                         gestureCb.value?.invoke()
-                        val newScale = (state.scale * zoom).coerceIn(minScale, maxScale)
-                        val c = Offset(centroid.x - w / 2, centroid.y - h / 2)
-                        val f = newScale / state.scale
-                        state.panX = c.x - (c.x - (state.panX + pan.x)) * f
-                        state.panY = c.y - (c.y - (state.panY + pan.y)) * f
-                        state.scale = newScale
-                        state.initialized = true
+                        zoomAt(centroid, ZoomMath.pinch(zoom), pan)
                     }
                 }
                 .pointerInput(sizeFt, w, h) {
                     detectTapGestures(
-                        onDoubleTap = { p -> zoomAt(p, 2f) },
+                        onDoubleTap = { p -> glide.by(ZoomMath.DOUBLE_TAP, p) },
                         onTap = { p -> tapCb.value?.let { cb -> val pr = proj(); val (x, y) = pr.toTheater(p); cb(x, y, pr) } },
                     )
                 },
         ) {
             val pr = proj()
-            drawMapBase(pr, base, legacy?.asImageBitmap())
-            geo?.let { drawLandmarks(pr, it, landmarkText) }
+            drawMapBase(pr, base, legacy?.asImageBitmap(), style)
+            geo?.let { drawLandmarks(pr, it, landmarkText, mission) }
             overlay(pr)
         }
         if (zoomButtons) MapZoomButtons(
-            onZoom = { factor -> gestureCb.value?.invoke(); zoomAt(Offset(w / 2, h / 2), factor) },
+            onZoom = { factor -> glide.by(factor, Offset(w / 2, h / 2)) },
             modifier = Modifier.align(Alignment.BottomEnd).padding(end = 17.dp, bottom = 70.dp),
         )
     }

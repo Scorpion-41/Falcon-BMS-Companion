@@ -1,0 +1,26 @@
+# The Pop-up page against Weapon Delivery Planner (--wdppagetest popup): where the port prints something else on purpose.
+# One fix per line: <D-number>  <values, * = any characters>  [when <fact><op><value> && ...]  [value <WDP's>><port's>]
+# Facts: ops (the row's sequence), wpbelow3 (1 when the port's box went below 3), ref.<column> (WDP's value),
+# port.<column> (the port's); a value starting with @ is another fact. Any difference no line names fails.
+# The D-numbers are the plan's; what each fixed value says instead is checked in the geometry section of the test.
+#
+# D7 (the ground under the target) changes nothing here: the harness gives both programs the same terrain, and the
+# port's own stand-in (the cartridge's target points) is not given to it. D6 is not a fix: see PopupPlan's notes.
+
+# D8  the target steerpoint may be 1 or 2 (WDP's box stopped at 3): once the port's box went there, the row plans
+#     against another steerpoint than WDP's and anything may differ.
+D8  *  when wpbelow3=1
+
+# D2  VIP_Type2 measured OA2 from OA2's north and OA1's east. With an IP and profile Type 2 the VIP OA2 line (and the
+#     print table and nav offset built from it) is measured to OA2 itself.
+D2  lblOA2brg,lblOA2rng,lblOA2nm,nav_OA2_1_*,prt_*  when port.st_blnDoVIP=1 && port.st_blnProfile=0
+
+# D64 profile Type 2 lays its VRP and pull-up point out from the ingress height above the target; WDP took the ingress
+#     altitude with the ground under the target in it (intIngressAlt / tan(climb)). With ground under the target and
+#     profile Type 2, the VRP and PUP lines, the VIP-to-PUP line laid out from the pull-up point, their nav offsets,
+#     points and print rows move; with no ground, or with Type 1, nothing does.
+D64  lblVIPbrg,lblVIPrng,lblVIPnm,lblPUPbrg,lblPUPrng,lblPUPnm,nav_VRP_*,nav_VRPPUP_*,nav_VIPPUP_*,st_dblT2_VRP*,st_dblT2_VIPPUP*,prt_*  when port.st_TargetElv!=0 && port.st_blnProfile=0
+
+# D89 DTC() handed the card the HUD check's caption ("Target visible in the HUD", cntPopUp l.7457) whatever the check
+#     said; the port hands on its answer (YES or NO), as HADB and TOSS do.
+D89  dtc_strTGTHUD

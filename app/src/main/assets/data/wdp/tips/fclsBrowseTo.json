@@ -1,0 +1,6 @@
+{
+ "btnBrowse": "Steps through the copies an earlier version kept in BMS Companion's own settings on this device, one a press.",
+ "btnCancel": "Closes the window; nothing is loaded.",
+ "txtfName": "The name of the kept copy to load. Browse steps through the copies kept on this device.",
+ "btnOk": "Loads the copy named in the box onto the card."
+}

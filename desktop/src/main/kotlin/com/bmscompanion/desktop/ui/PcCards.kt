@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -53,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bmscompanion.desktop.PcLog
 import com.bmscompanion.app.AppVersion
+import com.bmscompanion.app.data.Perf
 import com.bmscompanion.app.data.mission.BridgeInfo
 import com.bmscompanion.app.data.mission.LinkState
 import com.bmscompanion.app.data.mission.MissionLink
@@ -65,6 +68,7 @@ import com.bmscompanion.app.ui.theme.Hud
 import com.bmscompanion.app.ui.theme.LocalExtra
 import com.bmscompanion.desktop.Device
 import com.bmscompanion.desktop.PcConfig
+import com.bmscompanion.desktop.PcRenderer
 import com.bmscompanion.desktop.PcServer
 import com.bmscompanion.desktop.PcServices
 import com.bmscompanion.desktop.SystemTools
@@ -469,7 +473,7 @@ fun SetupChecklistCard(status: PcStatus) {
         add(
             when {
                 kb == null || !kb.configured -> Step("HTML Briefing kneeboard (optional)", Check.TODO,
-                    "html_brief turns the printed briefing into kneeboard pages (BMS ships it in Tools\\html_brief_win). Choose that folder and its pages show in Briefing, on your devices and as a VR board.", listOf(kbPick))
+                    "UOAF's HTML Briefing tool (a separate download; BMS Companion looks for it in Tools\\html_brief_win) turns a briefing into kneeboard pages. Choose its folder and its pages show in Briefing, on your devices and as a VR board.", listOf(kbPick))
                 !kb.available -> Step("HTML Briefing kneeboard (optional)", Check.TODO,
                     "Folder found: ${kb.path}. Nothing exported yet — export in the HTML Briefing window after printing the briefing.", listOf(kbPick))
                 kb.stale -> Step("HTML Briefing kneeboard (optional)", Check.INFO,
@@ -484,7 +488,7 @@ fun SetupChecklistCard(status: PcStatus) {
         }
         add(
             when {
-                !EzBoardsRunner.isValidDir(s.EzBoardsDir) -> Step("EZBoards kneeboards (optional)", Check.TODO, "EZBoards folder not set (BMS ships it in Tools\\EZBoards).", listOf(ezPick))
+                !EzBoardsRunner.isValidDir(s.EzBoardsDir) -> Step("EZBoards kneeboards (optional)", Check.TODO, "EZBoards folder not set (a separate download from the Falcon BMS forum).", listOf(ezPick))
                 !status.dotNet8 -> Step("EZBoards kneeboards (optional)", Check.PROBLEM, "Folder OK, but the .NET 8 runtime was not found. EZBoards will not run without it.",
                     listOf("Get .NET 8 runtime" to { SystemTools.openUrl("https://dotnet.microsoft.com/en-us/download/dotnet/8.0") }))
                 last != null && !last.ok -> Step("EZBoards kneeboards (optional)", Check.PROBLEM, "Last run failed: ${last.message}", listOf(ezPick))
@@ -629,7 +633,7 @@ fun BmsSettingsCard() {
         if (exporter.isBlank()) kb?.path?.let { Text("Found in your BMS install: $it", color = Hud.TextFaint, fontSize = 12.sp) }
         Text(
             when {
-                kb == null || !kb.configured -> "Not set. BMS ships html_brief in Tools\\html_brief_win — choose that folder and its exported pages show in Briefing, on your devices and as a VR board."
+                kb == null || !kb.configured -> "Not set. UOAF's HTML Briefing tool is a separate download; BMS Companion looks for it in Tools\\html_brief_win — choose its folder and its exported pages show in Briefing, on your devices and as a VR board."
                 !kb.available -> "Folder found: ${kb.path}. Nothing exported yet — print the briefing in BMS, then export in the HTML Briefing window."
                 kb.stale -> "${kb.pages} pages exported, but the briefing has been printed since. Export again to bring them up to date."
                 else -> "${kb.pages} pages, ready under Mission → Kneeboards → HTML Briefing kneeboard, and as a board of its own."
@@ -697,6 +701,51 @@ fun StartupCard() {
             if (exe == null) "Available in the installed or unzipped app" else "Handy when this PC serves your other devices",
             withWindows == true, enabled = exe != null && withWindows != null,
         ) { on -> scope.launch { withContext(Dispatchers.IO) { SystemTools.setStartWithWindows(on) }; withWindows = withContext(Dispatchers.IO) { SystemTools.startsWithWindows() } } }
+    }
+}
+
+/**
+ * What to do when the window is slow.
+ *
+ * Two levers, in the order worth trying them. The renderer is the one that turns a slide show back into a window on
+ * an older graphics chip, and it costs a restart because Skia builds its context with the first window. Sparing the
+ * machine costs nothing and takes effect at once, so it is offered underneath rather than instead.
+ */
+@Composable
+fun GraphicsCard() {
+    var chosen by remember { mutableStateOf(PcConfig.renderer) }
+    SectionCard("Graphics", accent = Hud.TextDim) {
+        Text(
+            "If the window is slow, jerky or a slide show, this is the setting to change — an older graphics chip " +
+                "often has no Direct3D 12 driver, and then every frame is drawn on the processor instead.",
+            fontSize = 12.sp, color = Hud.TextDim,
+        )
+        Spacer(Modifier.height(8.dp))
+        for (r in PcRenderer.entries) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
+                    .clickable { chosen = r; PcConfig.useRenderer(r) }.padding(vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                RadioButton(chosen == r, { chosen = r; PcConfig.useRenderer(r) }, colors = RadioButtonDefaults.colors(selectedColor = Hud.Amber))
+                Column(Modifier.weight(1f)) {
+                    Text(r.label, fontSize = 14.sp, color = Hud.Text)
+                    Text(r.note, fontSize = 12.sp, color = Hud.TextDim)
+                }
+            }
+        }
+        if (chosen != PcConfig.rendererInUse) {
+            Text(
+                "Close and start BMS Companion again for this to take effect.",
+                fontSize = 12.sp, color = Hud.Amber, modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Toggle(
+            "Go easy on this machine",
+            "Reads the jet once a second instead of four times. Everything still works; the map just redraws less often.",
+            Perf.easy,
+        ) { Perf.goEasy(it) }
     }
 }
 

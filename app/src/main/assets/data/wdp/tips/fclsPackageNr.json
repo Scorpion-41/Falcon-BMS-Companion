@@ -1,0 +1,6 @@
+{
+ "btnCancel": "Closes the window; nothing is saved.",
+ "btnOK": "Makes the folders on the BMS PC and opens the save window there. The name and number become the card's mission and package too.",
+ "txtPackageNr": "The package number: the folder inside the mission's. It cannot be empty; it starts as the card's package.",
+ "txtMissionName": "The mission name: the folder under DataCards on the BMS PC the file goes in (DataCards\\<mission>\\<package>\\<callsign>). It cannot be empty."
+}

@@ -2,34 +2,74 @@
   "_note": [
     "Carrier flight decks, for the ground charts.",
     "",
-    "BMS gives a ship no outline, no model and no feature list — only deck points, and those run far past the bow",
-    "because the same list carries the approach path (Hermes' span 1,867 ft against a real ship of 744). So the deck",
-    "is not traced from them. It is BUILT from the published dimensions of the real ship, and only the ramp",
-    "NUMBERING comes from BMS: each of its spots is matched to the nearest place a real deck parks an aircraft.",
+    "DECKS. Every ship BMS charts is drawn from its own BMS 3D model. A carrier objective's deck points (its ramp spots,",
+    "launch points and runway corners) are in the frame of the ship's model: across = model x, starboard +; along =",
+    "model z, forward +; origin = the model's own, which is the ship's position in the sim. So each deck below is given",
+    "in that frame, as [along, across] feet, and is laid down with no fitting at all; every BMS spot then falls on the",
+    "deck (the --deckrender check counts them) and the jet, put into the ship's frame from its live position, lands where it stands.",
+    "Each deck's _src says what was measured from the model (outline, paint) and what was placed from a published",
+    "figure or estimated, and which note under the carrier research holds the working.",
+    "  outline     the flight deck, every step and sponson",
+    "  structures  what stands below the deck edge and is seen from above: sponsons, galleries, catwalks",
+    "  lane        the landing area; lines: painted lines, k = line, ladder (landing-area edge with its boxes), dash,",
+    "              ydash (yellow), foul (red/white), foulk (red/black), faint, lights (a row of deck lights)",
+    "  wires, cats ({ track, jbd }), lifts ({ p, est }), hatches, ski ({ p, steps }), skiDeg, spots ({ p, r, t, tee }),",
+    "  islands, parts (what stands on the islands), numberAt ({ p, ft }) and number (paint the deck itself carries)",
+    "  tone        the deck's paint: 1 lighter (Kuznetsov), -1 darker (Liaoning)",
     "",
-    "Every figure is feet, measured from the ship's own axis (its centre line) and from amidships:",
+    "CLASSES. match is tested against the field's name and full name together (\"Carrier Wasp / US LHD 2 - WASP\"),",
+    "upper-cased, first hit wins, so the specific ships come first. deck names the drawing; number is the hull number",
+    "painted on it, where ships share one model (BMS draws CVN-65, 70 and 71 all with model 1844).",
+    "",
+    "The remaining fields are the older published-dimension description, kept for a class with no deck: then the deck",
+    "is BUILT from them and laid on the axis its parking spots give (ships.mjs, bestFrame). Every figure there is feet,",
+    "from the ship's axis and from amidships:",
     "  deckFt      the flight deck, bow to stern",
     "  stbdFt      deck edge to starboard of the axis",
     "  portFwdFt   deck edge to port forward of the angled deck — the narrow part of the deck",
-    "  sponsonFt   deck edge to port at its widest: the angled-deck sponson on a CATOBAR ship, the deck-edge",
-    "              sponson on the others. stbdFt + sponsonFt is the published maximum width.",
+    "  sponsonFt   deck edge to port at its widest; stbdFt + sponsonFt is the published maximum width",
     "  kind        catobar (angled landing deck and catapults), ski (a ramp at the bow), flat (an amphibious deck)",
     "  angleDeg    how far the landing deck is angled off the axis, to port",
     "  stripLenFt / stripWidFt   the landing area",
     "  skiDeg      the ski jump at the bow, where there is one",
-    "  islands     each { along, across, long, wide }: along is aft(-) / forward(+) of amidships, across is to",
-    "              starboard(+) of the axis, both to the middle of the island",
-    "  match       matched against the field's name, upper-cased, first hit wins, so put the specific first.",
+    "  islands     each { along, across, long, wide }, to the middle of the island",
     "",
-    "Published dimensions per class; see docs/DATA-SOURCES.md for where each came from."
+    "See docs/DATA-SOURCES.md for where each figure came from."
   ],
   "classes": [
     {
       "match": [
-        "QUEEN ELIZABETH",
+        "QUEEN ELIZABETH"
+      ],
+      "name": "HMS Queen Elizabeth (R08), Queen Elizabeth class",
+      "deck": "queenelizabeth",
+      "kind": "ski",
+      "deckFt": 918,
+      "stbdFt": 88,
+      "portFwdFt": 72,
+      "sponsonFt": 152,
+      "skiDeg": 13,
+      "islands": [
+        {
+          "along": 150,
+          "across": 62,
+          "long": 105,
+          "wide": 34
+        },
+        {
+          "along": -120,
+          "across": 62,
+          "long": 115,
+          "wide": 34
+        }
+      ]
+    },
+    {
+      "match": [
         "PRINCE OF WALES"
       ],
-      "name": "Queen Elizabeth class",
+      "name": "HMS Prince of Wales (R09), Queen Elizabeth class",
+      "deck": "queenelizabeth",
       "kind": "ski",
       "deckFt": 918,
       "stbdFt": 88,
@@ -54,9 +94,13 @@
     {
       "match": [
         "CVN65",
+        "CVN-65",
+        "CARRIER 65",
         "ENTERPRISE"
       ],
-      "name": "Enterprise",
+      "name": "USS Enterprise (CVN-65), on the Nimitz deck BMS gives her",
+      "deck": "nimitz",
+      "number": "65",
       "kind": "catobar",
       "deckFt": 1123,
       "stbdFt": 95,
@@ -77,20 +121,40 @@
     {
       "match": [
         "CVN70",
-        "CARL VINSON",
-        "VINSON",
-        "ROOSEVELT",
-        "NIMITZ",
-        "EISENHOWER",
-        "STENNIS",
-        "TRUMAN",
-        "WASHINGTON",
-        "LINCOLN",
-        "REAGAN",
-        "BUSH",
-        "CVN"
+        "CVN-70",
+        "CARRIER 70",
+        "VINSON"
       ],
-      "name": "Nimitz class",
+      "name": "USS Carl Vinson (CVN-70), Nimitz class",
+      "deck": "nimitz",
+      "number": "70",
+      "kind": "catobar",
+      "deckFt": 1092,
+      "stbdFt": 95,
+      "portFwdFt": 80,
+      "sponsonFt": 157,
+      "angleDeg": 9,
+      "stripLenFt": 781,
+      "stripWidFt": 110,
+      "islands": [
+        {
+          "along": -60,
+          "across": 70,
+          "long": 130,
+          "wide": 40
+        }
+      ]
+    },
+    {
+      "match": [
+        "CVN71",
+        "CVN-71",
+        "CARRIER 71",
+        "ROOSEVELT"
+      ],
+      "name": "USS Theodore Roosevelt (CVN-71), Nimitz class",
+      "deck": "nimitz",
+      "number": "71",
       "kind": "catobar",
       "deckFt": 1092,
       "stbdFt": 95,
@@ -114,7 +178,8 @@
         "FOCH",
         "CLEMENCEAU"
       ],
-      "name": "Clemenceau class",
+      "name": "Sao Paulo, Clemenceau class",
+      "deck": "saopaulo",
       "kind": "catobar",
       "deckFt": 869,
       "stbdFt": 62,
@@ -134,10 +199,42 @@
     },
     {
       "match": [
+        "NIMITZ",
+        "EISENHOWER",
+        "STENNIS",
+        "TRUMAN",
+        "WASHINGTON",
+        "LINCOLN",
+        "REAGAN",
+        "BUSH",
+        "CVN"
+      ],
+      "name": "Nimitz class",
+      "deck": "nimitz",
+      "kind": "catobar",
+      "deckFt": 1092,
+      "stbdFt": 95,
+      "portFwdFt": 80,
+      "sponsonFt": 157,
+      "angleDeg": 9,
+      "stripLenFt": 781,
+      "stripWidFt": 110,
+      "islands": [
+        {
+          "along": -60,
+          "across": 70,
+          "long": 130,
+          "wide": 40
+        }
+      ]
+    },
+    {
+      "match": [
         "TARAWA",
         "LHA"
       ],
       "name": "Tarawa class",
+      "deck": "tarawa",
       "kind": "flat",
       "deckFt": 820,
       "stbdFt": 44,
@@ -156,7 +253,8 @@
       "match": [
         "HERMES"
       ],
-      "name": "Hermes",
+      "name": "HMS Hermes (R12), 1982",
+      "deck": "hermes",
       "kind": "ski",
       "deckFt": 744,
       "stbdFt": 62,
@@ -176,7 +274,8 @@
       "match": [
         "OCEAN"
       ],
-      "name": "Ocean",
+      "name": "HMS Ocean (L12)",
+      "deck": "ocean",
       "kind": "flat",
       "deckFt": 820,
       "stbdFt": 44,
@@ -189,15 +288,15 @@
           "long": 250,
           "wide": 30
         }
-      ],
-      "_note": "BMS flies HMS Ocean off the same deck as its Tarawa — the same 710 ft of strip and the same eighteen spots — so she is drawn at that deck rather than the real ship's shorter one."
+      ]
     },
     {
       "match": [
         "25 DE MAYO",
         "COLOSSUS"
       ],
-      "name": "Colossus class",
+      "name": "ARA Veinticinco de Mayo, Colossus class",
+      "deck": "veinticinco",
       "kind": "catobar",
       "deckFt": 693,
       "stbdFt": 48,
@@ -217,12 +316,98 @@
     },
     {
       "match": [
-        "INVINCIBLE",
         "ARC ROYAL",
-        "ARK ROYAL",
+        "ARK ROYAL"
+      ],
+      "name": "HMS Ark Royal (R09), Audacious class after the 1967-70 refit",
+      "deck": "arkroyal",
+      "kind": "catobar",
+      "deckFt": 800,
+      "stbdFt": 62,
+      "portFwdFt": 56,
+      "sponsonFt": 109,
+      "angleDeg": 8.5,
+      "stripLenFt": 520,
+      "stripWidFt": 74,
+      "islands": [
+        {
+          "along": 50,
+          "across": 50,
+          "long": 197,
+          "wide": 50
+        }
+      ]
+    },
+    {
+      "match": [
+        "INVINCIBLE 1982"
+      ],
+      "name": "HMS Invincible (R05), 1982",
+      "deck": "invincible1982",
+      "kind": "ski",
+      "deckFt": 689,
+      "stbdFt": 46,
+      "portFwdFt": 40,
+      "sponsonFt": 80,
+      "skiDeg": 12,
+      "islands": [
+        {
+          "along": 20,
+          "across": 30,
+          "long": 170,
+          "wide": 28
+        }
+      ]
+    },
+    {
+      "match": [
+        "INVINCIBLE 1990"
+      ],
+      "name": "HMS Invincible (R05), 1990",
+      "deck": "invincible1990",
+      "kind": "ski",
+      "deckFt": 689,
+      "stbdFt": 46,
+      "portFwdFt": 40,
+      "sponsonFt": 80,
+      "skiDeg": 12,
+      "islands": [
+        {
+          "along": 20,
+          "across": 30,
+          "long": 170,
+          "wide": 28
+        }
+      ]
+    },
+    {
+      "match": [
+        "INVINCIBLE 2000"
+      ],
+      "name": "HMS Invincible (R05), 2000",
+      "deck": "invincible2000",
+      "kind": "ski",
+      "deckFt": 689,
+      "stbdFt": 46,
+      "portFwdFt": 40,
+      "sponsonFt": 80,
+      "skiDeg": 12,
+      "islands": [
+        {
+          "along": 20,
+          "across": 30,
+          "long": 170,
+          "wide": 28
+        }
+      ]
+    },
+    {
+      "match": [
+        "INVINCIBLE",
         "ILLUSTRIOUS"
       ],
       "name": "Invincible class",
+      "deck": "invincible1990",
       "kind": "ski",
       "deckFt": 689,
       "stbdFt": 46,
@@ -242,30 +427,29 @@
       "match": [
         "CAUSEWAY"
       ],
-      "name": "large deck",
+      "name": "HMS Causeway: the Wasp-class LHD under another name",
+      "deck": "wasp",
       "kind": "flat",
-      "deckFt": 900,
-      "stbdFt": 80,
-      "portFwdFt": 96,
-      "sponsonFt": 140,
+      "deckFt": 844,
+      "stbdFt": 48,
+      "portFwdFt": 68,
+      "sponsonFt": 104,
       "islands": [
         {
-          "along": -60,
-          "across": 58,
-          "long": 130,
-          "wide": 34
+          "along": -30,
+          "across": 32,
+          "long": 240,
+          "wide": 32
         }
       ]
     },
     {
       "match": [
         "KUZNETSOV",
-        "LIAONING",
-        "SHANDONG",
-        "VARYAG",
-        "TYPE 001"
+        "VARYAG"
       ],
-      "name": "Kuznetsov class",
+      "name": "Admiral Kuznetsov",
+      "deck": "kuznetsov",
       "kind": "catobar",
       "deckFt": 1000,
       "stbdFt": 92,
@@ -286,16 +470,87 @@
     },
     {
       "match": [
-        "WASP",
+        "LIAONING",
+        "TYPE 001",
+        "SHANDONG"
+      ],
+      "name": "Liaoning (CV-16), Kuznetsov class",
+      "deck": "liaoning",
+      "kind": "catobar",
+      "deckFt": 1000,
+      "stbdFt": 92,
+      "portFwdFt": 74,
+      "sponsonFt": 141,
+      "angleDeg": 7,
+      "stripLenFt": 672,
+      "stripWidFt": 98,
+      "skiDeg": 12,
+      "islands": [
+        {
+          "along": -40,
+          "across": 64,
+          "long": 220,
+          "wide": 38
+        }
+      ]
+    },
+    {
+      "match": [
+        "LHD-2",
+        "LHD 2",
+        "ESSEX"
+      ],
+      "name": "USS Essex (LHD-2), Wasp class",
+      "deck": "wasp",
+      "number": "2",
+      "kind": "flat",
+      "deckFt": 844,
+      "stbdFt": 48,
+      "portFwdFt": 68,
+      "sponsonFt": 104,
+      "islands": [
+        {
+          "along": -30,
+          "across": 32,
+          "long": 240,
+          "wide": 32
+        }
+      ]
+    },
+    {
+      "match": [
+        "LHD-1",
+        "LHD 1",
+        "WASP"
+      ],
+      "name": "USS Wasp (LHD-1), Wasp class",
+      "deck": "wasp",
+      "number": "1",
+      "kind": "flat",
+      "deckFt": 844,
+      "stbdFt": 48,
+      "portFwdFt": 68,
+      "sponsonFt": 104,
+      "islands": [
+        {
+          "along": -30,
+          "across": 32,
+          "long": 240,
+          "wide": 32
+        }
+      ]
+    },
+    {
+      "match": [
         "LHD",
         "AMERICA",
         "MAKIN ISLAND",
-        "ESSEX",
         "BOXER",
         "BATAAN",
         "KEARSARGE"
       ],
       "name": "Wasp class",
+      "deck": "wasp",
       "kind": "flat",
       "deckFt": 844,
       "stbdFt": 48,
@@ -326,5 +581,940 @@
         "wide": 32
       }
     ]
+  },
+  "decks": {
+    "nimitz": {
+      "_src": "BMS model 1844 (outline, landing area, foul lines, catapults, deflectors and elevators are painted in the model; measured to 2-3 ft). Wires: NAVAIR NAEC-MISC-06900 distances from the ramp, placed on the model's centre line. Published: 4 catapults, 4 wires, 4 deck-edge elevators (GlobalSecurity CVN-68 design; Wikipedia, Nimitz class). The angled deck is 10.6 deg in the model and 9 deg 3 min on the real ship: drawn at the model's, which is where the sim lands. BMS draws CVN-65, 70 and 71 all with this model and changes only the number. Research: nimitz-cvn70-cvn71.md, enterprise-cvn65.md.",
+      "model": "BMS model 1844",
+      "outline": [[538, -48], [538, 47], [517, 46], [259, 59], [181, 121], [-104, 117], [-110, 125], [-143, 125], [-143, 117], [-296, 121], [-297, 93], [-388, 93], [-388, 58], [-420, 58], [-520, 79], [-542, -60], [-465, -62], [-465, -93], [-414, -93], [-406, -109], [-401, -130], [-375, -134], [7, -138], [106, -144], [132, -131], [198, -138], [212, -70], [217, -65], [280, -68], [392, -61], [470, -51]],
+      "structures": [
+        [[288, -87], [287.1, -82.4], [284.5, -78.5], [280.6, -75.9], [276, -75], [271.4, -75.9], [267.5, -78.5], [264.9, -82.4], [264, -87], [264.9, -91.6], [267.5, -95.5], [271.4, -98.1], [276, -99], [280.6, -98.1], [284.5, -95.5], [287.1, -91.6]],
+        [[322, 71], [321.1, 75.6], [318.5, 79.5], [314.6, 82.1], [310, 83], [305.4, 82.1], [301.5, 79.5], [298.9, 75.6], [298, 71], [298.9, 66.4], [301.5, 62.5], [305.4, 59.9], [310, 59], [314.6, 59.9], [318.5, 62.5], [321.1, 66.4]],
+        [[-378, 80], [-378.9, 84.6], [-381.5, 88.5], [-385.4, 91.1], [-390, 92], [-394.6, 91.1], [-398.5, 88.5], [-401.1, 84.6], [-402, 80], [-401.1, 75.4], [-398.5, 71.5], [-394.6, 68.9], [-390, 68], [-385.4, 68.9], [-381.5, 71.5], [-378.9, 75.4]],
+        [[-416, -87], [-416.9, -82.4], [-419.5, -78.5], [-423.4, -75.9], [-428, -75], [-432.6, -75.9], [-436.5, -78.5], [-439.1, -82.4], [-440, -87], [-439.1, -91.6], [-436.5, -95.5], [-432.6, -98.1], [-428, -99], [-423.4, -98.1], [-419.5, -95.5], [-416.9, -91.6]],
+        [[55, -168], [65, -168], [65, -136], [55, -136]],
+        [[-25, -168], [-15, -168], [-15, -136], [-25, -136]],
+        [[-85, -168], [-75, -168], [-75, -134], [-85, -134]],
+        [[-375, -146], [198, -146], [198, -128], [-375, -128]],
+        [[-296, 117], [181, 117], [181, 128], [-296, 128]]
+      ],
+      "lane": [[-519.2, 68.7], [212.3, -68.2], [197.7, -145.8], [-533.8, -8.9]],
+      "lines": [
+        {
+          "k": "ladder",
+          "p": [[-519.2, 68.7], [212.3, -68.2]]
+        },
+        {
+          "k": "ladder",
+          "p": [[-533.8, -8.9], [197.7, -145.8]]
+        },
+        {
+          "k": "ydash",
+          "p": [[-526.5, 29.9], [205, -107]]
+        },
+        {
+          "k": "foul",
+          "p": [[117, -40], [-367, 60]]
+        },
+        {
+          "k": "foul",
+          "p": [[-230, -112], [-430, -67]]
+        },
+        {
+          "k": "dash",
+          "p": [[176, 4], [522, 4]]
+        }
+      ],
+      "wires": [
+        [[-350.3, 47.7], [-368.7, -50.5]],
+        [[-311, 40.4], [-329.4, -57.8]],
+        [[-271.2, 32.9], [-289.6, -65.3]],
+        [[-231.1, 25.4], [-249.5, -72.8]]
+      ],
+      "cats": [
+        {
+          "track": [[188, 40.7], [533, 40.7]],
+          "jbd": [[155, 23], [174, 23], [174, 66], [155, 66]]
+        },
+        {
+          "track": [[188, -33.3], [533, -33.3]],
+          "jbd": [[154, -55], [172, -55], [172, -13], [154, -13]]
+        },
+        {
+          "track": [[-143, -72.7], [188, -110]],
+          "jbd": [[-143.1, -51.1], [-147.9, -93.9], [-166.7, -91.7], [-161.9, -48.9]]
+        },
+        {
+          "track": [[-137, -116.7], [142, -116.7]],
+          "jbd": [[-197, -127], [-178, -127], [-178, -105], [-197, -105]]
+        }
+      ],
+      "lifts": [
+        {
+          "p": [[88, 65], [168, 65], [168, 117], [88, 117]]
+        },
+        {
+          "p": [[-65, 65], [7, 65], [7, 117], [-65, 117]]
+        },
+        {
+          "p": [[-291, 68], [-217, 68], [-217, 118], [-291, 118]]
+        },
+        {
+          "p": [[-385, -130], [-305, -130], [-305, -77], [-385, -77]]
+        }
+      ],
+      "islands": [
+        [[-184, 105], [-155, 115], [-157, 133], [-129, 133], [-113, 121], [-97, 112], [-81, 105], [-85, 95], [-99, 86], [-99, 61], [-81, 52], [-96, 42], [-114, 34], [-139, 44], [-157, 40], [-171, 45], [-176, 82]]
+      ],
+      "parts": [
+        [[-155, 58], [-111, 58], [-111, 98], [-155, 98]],
+        [[-83, 101], [-84.3, 106], [-88, 109.7], [-93, 111], [-98, 109.7], [-101.7, 106], [-103, 101], [-101.7, 96], [-98, 92.3], [-93, 91], [-88, 92.3], [-84.3, 96]],
+        [[-108, 42], [-109.1, 46], [-112, 48.9], [-116, 50], [-120, 48.9], [-122.9, 46], [-124, 42], [-122.9, 38], [-120, 35.1], [-116, 34], [-112, 35.1], [-109.1, 38]],
+        [[-148, 53], [-149.6, 59], [-154, 63.4], [-160, 65], [-166, 63.4], [-170.4, 59], [-172, 53], [-170.4, 47], [-166, 42.6], [-160, 41], [-154, 42.6], [-149.6, 47]],
+        [[-115, 78], [-116, 80.9], [-118.5, 82.8], [-121.5, 82.8], [-124, 80.9], [-125, 78], [-124, 75.1], [-121.5, 73.2], [-118.5, 73.2], [-116, 75.1]],
+        [[-115, 92], [-116, 94.9], [-118.5, 96.8], [-121.5, 96.8], [-124, 94.9], [-125, 92], [-124, 89.1], [-121.5, 87.2], [-118.5, 87.2], [-116, 89.1]]
+      ],
+      "numberAt": {
+        "p": [432, 4],
+        "ft": 58
+      }
+    },
+    "kuznetsov": {
+      "_src": "BMS model 1415 (outline, ramp and island traced from its deck-level triangles, +-5..8 ft; the landing area where BMS runway 1 and the model's paint agree, 7.9 deg). Take-off positions 1-3 are BMS's own launch points (runs of 109 m and 202 m against the published ~105 m and ~195 m). Wires: four, the first 183 ft from the ramp and then every 40 ft (a secondary measurement; low confidence). The 12 Granit launchers under the forward deck are real (Wikipedia, Kuznetsov class) but the place of their hatches is estimated. Published: two starboard lifts, fore and aft of the island; 12 deg ski jump (Naval Technology). Research: kuznetsov.md.",
+      "model": "BMS model 1415",
+      "tone": 1,
+      "outline": [[557, -45], [558, 33], [539, 40], [464, 48], [372, 50], [251, 60], [239, 80], [156, 77], [156, 97], [129, 108], [89, 102], [89, 92], [58, 101], [16, 114], [14, 106], [-221, 106], [-317, 82], [-362, 80], [-391, 83], [-425, 61], [-432, 74], [-434, -38], [-444, -60], [-322, -72], [-296, -117], [-230, -100], [-152, -90], [22, -113], [161, -132], [203, -131], [250, -71], [277, -61], [370, -56], [410, -54], [537, -46]],
+      "structures": [
+        [[-265, -135], [55, -135], [55, -112], [-265, -112]],
+        [[438, -62], [436.5, -57.3], [432.5, -54.4], [427.5, -54.4], [423.5, -57.3], [422, -62], [423.5, -66.7], [427.5, -69.6], [432.5, -69.6], [436.5, -66.7]],
+        [[448, 58], [446.5, 62.7], [442.5, 65.6], [437.5, 65.6], [433.5, 62.7], [432, 58], [433.5, 53.3], [437.5, 50.4], [442.5, 50.4], [446.5, 53.3]],
+        [[-390, -70], [-391.3, -65], [-395, -61.3], [-400, -60], [-405, -61.3], [-408.7, -65], [-410, -70], [-408.7, -75], [-405, -78.7], [-400, -80], [-395, -78.7], [-391.3, -75]],
+        [[-385, 88], [-386.3, 93], [-390, 96.7], [-395, 98], [-400, 96.7], [-403.7, 93], [-405, 88], [-403.7, 83], [-400, 79.3], [-395, 78], [-390, 79.3], [-386.3, 83]]
+      ],
+      "lane": [[-430.3, 48.1], [227.7, -43.4], [215.3, -132.6], [-442.7, -41.1]],
+      "lines": [
+        {
+          "k": "line",
+          "p": [[-430.3, 48.1], [227.7, -43.4]]
+        },
+        {
+          "k": "line",
+          "p": [[-442.7, -41.1], [215.3, -132.6]]
+        },
+        {
+          "k": "ydash",
+          "p": [[-436.5, 3.5], [221.5, -88]]
+        },
+        {
+          "k": "ydash",
+          "p": [[199, -37], [557, -10]]
+        },
+        {
+          "k": "ydash",
+          "p": [[201, 41], [557, 10]]
+        },
+        {
+          "k": "foul",
+          "p": [[-430, 55], [31, -2], [152, 30]]
+        }
+      ],
+      "wires": [
+        [[-248, 29.8], [-262.4, -73.2]],
+        [[-208.4, 24.3], [-222.8, -78.7]],
+        [[-168.8, 18.8], [-183.2, -84.2]],
+        [[-129.2, 13.3], [-143.6, -89.7]]
+      ],
+      "ski": {
+        "p": [[340, -39], [370, -56], [460, -56], [534, -46], [557, -45], [558, 33], [537, 43], [460, 49], [370, 50], [340, 22]],
+        "steps": [
+          400,
+          440,
+          480,
+          520
+        ]
+      },
+      "skiDeg": 12,
+      "cats": [
+        {
+          "jbd": [[178, -15], [178, -59], [168, -59], [168, -15]]
+        },
+        {
+          "jbd": [[180, 63], [180, 19], [170, 19], [170, 63]]
+        },
+        {
+          "jbd": [[-127, -44], [-127, -88], [-137, -88], [-137, -44]]
+        }
+      ],
+      "lifts": [
+        {
+          "p": [[89, 55], [144, 55], [144, 103], [89, 103]]
+        },
+        {
+          "p": [[-281, 53], [-225, 53], [-225, 103], [-281, 103]]
+        }
+      ],
+      "islands": [
+        [[-175, 72], [-175, 96], [-168, 101], [-152, 102], [-149, 112], [-126, 112], [-109, 102], [-79, 108], [-78, 105], [-65, 105], [-47, 108], [7, 106], [9, 112], [66, 110], [69, 104], [77, 102], [84, 91], [84, 70], [75, 57], [64, 51], [34, 52], [9, 49], [-5, 57], [-28, 51], [-60, 55], [-78, 57], [-92, 44], [-104, 57], [-120, 61], [-124, 49], [-146, 49], [-159, 51], [-165, 61], [-174, 72]]
+      ],
+      "parts": [
+        [[47, 76], [45.7, 80.1], [42.2, 82.7], [37.8, 82.7], [34.3, 80.1], [33, 76], [34.3, 71.9], [37.8, 69.3], [42.2, 69.3], [45.7, 71.9]],
+        [[-13, 76], [-14.3, 80.1], [-17.8, 82.7], [-22.2, 82.7], [-25.7, 80.1], [-27, 76], [-25.7, 71.9], [-22.2, 69.3], [-17.8, 69.3], [-14.3, 71.9]],
+        [[-53, 76], [-54.3, 80.1], [-57.8, 82.7], [-62.2, 82.7], [-65.7, 80.1], [-67, 76], [-65.7, 71.9], [-62.2, 69.3], [-57.8, 69.3], [-54.3, 71.9]],
+        [[-113, 80], [-118, 92], [-130, 97], [-142, 92], [-147, 80], [-142, 68], [-130, 63], [-118, 68]],
+        [[-172, 62], [-155, 62], [-155, 94], [-172, 94]]
+      ],
+      "spots": [
+        {
+          "p": [199, -37],
+          "r": 13,
+          "t": "1"
+        },
+        {
+          "p": [201, 41],
+          "r": 13,
+          "t": "2"
+        },
+        {
+          "p": [-106, -66],
+          "r": 13,
+          "t": "3"
+        }
+      ],
+      "hatches": [
+        [[236, -20], [248, -20], [248, -10], [236, -10]],
+        [[253, -20], [265, -20], [265, -10], [253, -10]],
+        [[270, -20], [282, -20], [282, -10], [270, -10]],
+        [[287, -20], [299, -20], [299, -10], [287, -10]],
+        [[236, -6], [248, -6], [248, 4], [236, 4]],
+        [[253, -6], [265, -6], [265, 4], [253, 4]],
+        [[270, -6], [282, -6], [282, 4], [270, 4]],
+        [[287, -6], [299, -6], [299, 4], [287, 4]],
+        [[236, 8], [248, 8], [248, 18], [236, 18]],
+        [[253, 8], [265, 8], [265, 18], [253, 18]],
+        [[270, 8], [282, 8], [282, 18], [270, 18]],
+        [[287, 8], [299, 8], [299, 18], [287, 18]]
+      ]
+    },
+    "liaoning": {
+      "_src": "BMS model 23: the Kuznetsov's hull, deck, ramp and island (identical traces and identical BMS points) in the Liaoning's own paint: a dark deck, 16 on the ski jump, yellow take-off lines, yellow-rimmed spot circles and a red/black foul line (positions read from the model's texture, +-5 ft). No Granit hatches: never fitted (Wikipedia, Chinese aircraft carrier Liaoning). Research: liaoning-type001.md.",
+      "model": "BMS model 23",
+      "tone": -1,
+      "outline": [[557, -45], [558, 33], [539, 40], [464, 48], [372, 50], [251, 60], [239, 80], [156, 77], [156, 97], [129, 108], [89, 102], [89, 92], [58, 101], [16, 114], [14, 106], [-221, 106], [-317, 82], [-362, 80], [-391, 83], [-425, 61], [-432, 74], [-434, -38], [-444, -60], [-322, -72], [-296, -117], [-230, -100], [-152, -90], [22, -113], [161, -132], [203, -131], [250, -71], [277, -61], [370, -56], [410, -54], [537, -46]],
+      "structures": [
+        [[-265, -135], [55, -135], [55, -112], [-265, -112]],
+        [[438, -62], [436.5, -57.3], [432.5, -54.4], [427.5, -54.4], [423.5, -57.3], [422, -62], [423.5, -66.7], [427.5, -69.6], [432.5, -69.6], [436.5, -66.7]],
+        [[448, 58], [446.5, 62.7], [442.5, 65.6], [437.5, 65.6], [433.5, 62.7], [432, 58], [433.5, 53.3], [437.5, 50.4], [442.5, 50.4], [446.5, 53.3]],
+        [[-390, -70], [-391.3, -65], [-395, -61.3], [-400, -60], [-405, -61.3], [-408.7, -65], [-410, -70], [-408.7, -75], [-405, -78.7], [-400, -80], [-395, -78.7], [-391.3, -75]],
+        [[-385, 88], [-386.3, 93], [-390, 96.7], [-395, 98], [-400, 96.7], [-403.7, 93], [-405, 88], [-403.7, 83], [-400, 79.3], [-395, 78], [-390, 79.3], [-386.3, 83]]
+      ],
+      "lane": [[-430.3, 48.1], [227.7, -43.4], [215.3, -132.6], [-442.7, -41.1]],
+      "lines": [
+        {
+          "k": "line",
+          "p": [[-430.3, 48.1], [227.7, -43.4]]
+        },
+        {
+          "k": "line",
+          "p": [[-442.7, -41.1], [215.3, -132.6]]
+        },
+        {
+          "k": "ydash",
+          "p": [[-436.5, 3.5], [221.5, -88]]
+        },
+        {
+          "k": "ydash",
+          "p": [[199, -37], [557, -10]]
+        },
+        {
+          "k": "ydash",
+          "p": [[201, 41], [557, 10]]
+        },
+        {
+          "k": "foulk",
+          "p": [[-430, 55], [31, -2], [152, 30]]
+        }
+      ],
+      "wires": [
+        [[-248, 29.8], [-262.4, -73.2]],
+        [[-208.4, 24.3], [-222.8, -78.7]],
+        [[-168.8, 18.8], [-183.2, -84.2]],
+        [[-129.2, 13.3], [-143.6, -89.7]]
+      ],
+      "ski": {
+        "p": [[340, -39], [370, -56], [460, -56], [534, -46], [557, -45], [558, 33], [537, 43], [460, 49], [370, 50], [340, 22]],
+        "steps": [
+          400,
+          440,
+          480,
+          520
+        ]
+      },
+      "skiDeg": 12,
+      "cats": [
+        {
+          "jbd": [[178, -15], [178, -59], [168, -59], [168, -15]]
+        },
+        {
+          "jbd": [[180, 63], [180, 19], [170, 19], [170, 63]]
+        },
+        {
+          "jbd": [[-127, -44], [-127, -88], [-137, -88], [-137, -44]]
+        }
+      ],
+      "lifts": [
+        {
+          "p": [[89, 55], [144, 55], [144, 103], [89, 103]]
+        },
+        {
+          "p": [[-281, 53], [-225, 53], [-225, 103], [-281, 103]]
+        }
+      ],
+      "islands": [
+        [[-175, 72], [-175, 96], [-168, 101], [-152, 102], [-149, 112], [-126, 112], [-109, 102], [-79, 108], [-78, 105], [-65, 105], [-47, 108], [7, 106], [9, 112], [66, 110], [69, 104], [77, 102], [84, 91], [84, 70], [75, 57], [64, 51], [34, 52], [9, 49], [-5, 57], [-28, 51], [-60, 55], [-78, 57], [-92, 44], [-104, 57], [-120, 61], [-124, 49], [-146, 49], [-159, 51], [-165, 61], [-174, 72]]
+      ],
+      "parts": [
+        [[47, 76], [45.7, 80.1], [42.2, 82.7], [37.8, 82.7], [34.3, 80.1], [33, 76], [34.3, 71.9], [37.8, 69.3], [42.2, 69.3], [45.7, 71.9]],
+        [[-13, 76], [-14.3, 80.1], [-17.8, 82.7], [-22.2, 82.7], [-25.7, 80.1], [-27, 76], [-25.7, 71.9], [-22.2, 69.3], [-17.8, 69.3], [-14.3, 71.9]],
+        [[-53, 76], [-54.3, 80.1], [-57.8, 82.7], [-62.2, 82.7], [-65.7, 80.1], [-67, 76], [-65.7, 71.9], [-62.2, 69.3], [-57.8, 69.3], [-54.3, 71.9]],
+        [[-113, 80], [-118, 92], [-130, 97], [-142, 92], [-147, 80], [-142, 68], [-130, 63], [-118, 68]],
+        [[-172, 62], [-155, 62], [-155, 94], [-172, 94]]
+      ],
+      "spots": [
+        {
+          "p": [199, -37],
+          "r": 13,
+          "t": "1"
+        },
+        {
+          "p": [201, 41],
+          "r": 13,
+          "t": "2"
+        },
+        {
+          "p": [-106, -66],
+          "r": 13,
+          "t": "3"
+        },
+        {
+          "p": [328, -30],
+          "r": 13
+        },
+        {
+          "p": [250, -35],
+          "r": 13
+        },
+        {
+          "p": [107, -94],
+          "r": 16
+        },
+        {
+          "p": [29, -73],
+          "r": 16
+        },
+        {
+          "p": [-60, -70],
+          "r": 16
+        },
+        {
+          "p": [-227, -83],
+          "r": 16
+        },
+        {
+          "p": [-318, -32],
+          "r": 18,
+          "t": "8"
+        },
+        {
+          "p": [-358, -8],
+          "r": 16
+        },
+        {
+          "p": [-397, -27],
+          "r": 16
+        }
+      ],
+      "number": "16",
+      "numberAt": {
+        "p": [508, 0],
+        "ft": 46
+      }
+    },
+    "wasp": {
+      "_src": "BMS model 1838 (outline, elevators and island, +-3 ft; the deck is not centred on the model origin, the ship's centre line is at across +16.5). Published: two deck-edge elevators, nine landing spots (Wikipedia, Wasp class; USS Kearsarge loading characteristics pamphlet via FAS). The spot marks are where the model paints its tee marks; their numbers cannot be read from the texture, so none is written. HMS Causeway in the Falklands is this ship renamed (same model, same BMS deck data). Research: wasp-lhd1-lhd2.md, causeway.md.",
+      "model": "BMS model 1838",
+      "outline": [[399, -42], [399, 77], [-144, 76], [-286, 76], [-308, 94], [-308, 117], [-358, 117], [-358, 76], [-397, 76], [-422, 58], [-422, 21], [-439, 21], [-439, 11], [-422, 11], [-421, -24], [-403, -42], [-196, -42], [-196, -85], [-146, -85], [-146, -42]],
+      "structures": [
+        [[-447, -5], [-447, 2], [-444, 2], [-444, 14], [-447, 15], [-444, 20], [-446, 56], [-439, 68], [-418, 68], [-416, 65], [-425, 62], [-421, 56], [-426, 56], [-426, 50], [-421, 49], [-426, 49], [-426, 21], [-439, 21], [-435, 17], [-421, 17], [-434, 17], [-439, 12], [-426, 12], [-426, 5], [-421, 5], [-426, 4], [-426, -8], [-421, -8], [-426, -9], [-426, -21], [-421, -21], [-418, -27], [-422, -24], [-425, -28], [-420, -32], [-415, -30], [-418, -34], [-441, -33], [-446, -23], [-446, -5]],
+        [[85, 76], [85, 81], [114, 82], [298, 82], [298, 76], [86, 76]],
+        [[69, -44], [300, -42], [294, -44], [294, -49], [287, -49], [287, -44], [283, -44], [283, -49], [276, -49], [277, -44], [272, -44], [273, -49], [266, -49], [266, -44], [255, -44], [256, -49], [249, -49], [249, -44], [244, -44], [245, -49], [238, -49], [239, -44], [215, -44], [212, -51], [205, -51], [204, -47], [201, -51], [194, -51], [193, -47], [190, -51], [183, -51], [182, -44], [115, -44], [108, -52], [94, -46], [83, -48], [70, -44]],
+        [[-147, -44], [-1, -42], [-22, -44], [-21, -47], [-29, -45], [-26, -48], [-32, -44], [-32, -49], [-36, -50], [-71, -50], [-77, -49], [-70, -48], [-71, -44], [-81, -44], [-81, -58], [-84, -58], [-84, -44], [-108, -44], [-112, -49], [-125, -49], [-128, -44], [-146, -44]],
+        [[-382, -44], [-242, -42], [-246, -58], [-252, -64], [-261, -60], [-262, -50], [-268, -48], [-268, -44], [-282, -44], [-282, -48], [-291, -48], [-291, -44], [-381, -44]],
+        [[-309, 76], [-304, 77], [-304, 81], [-278, 81], [-274, 87], [-260, 87], [-256, 81], [-204, 81], [-204, 76], [-308, 76]],
+        [[-16, 78], [-16, 91], [-10, 97], [-1, 93], [1, 76], [-15, 78]],
+        [[-353, 117], [-353, 124], [-313, 123], [-314, 117], [-321, 117], [-321, 120], [-322, 117], [-352, 117]],
+        [[-191, -90], [-191, -85], [-152, -85], [-151, -88], [-152, -91], [-190, -90]],
+        [[308, 77], [308, 81], [360, 81], [360, 77], [309, 77]],
+        [[401, -42], [401, 2], [406, 2], [406, -42], [402, -42]],
+        [[-382, 76], [-382, 80], [-379, 77], [-373, 85], [-365, 85], [-365, 81], [-358, 85], [-358, 76], [-381, 76]],
+        [[401, 48], [401, 74], [406, 74], [406, 48], [402, 48]],
+        [[303, -47], [303, -43], [329, -43], [329, -47], [304, -47]],
+        [[48, -42], [48, -46], [-107, -68], [-107, -42]]
+      ],
+      "lane": [[-420, -12], [395, -12], [395, 15], [-420, 15]],
+      "lines": [
+        {
+          "k": "dash",
+          "p": [[-415, 1.5], [390, 1.5]]
+        },
+        {
+          "k": "line",
+          "p": [[-400, -37], [395, -37]]
+        },
+        {
+          "k": "line",
+          "p": [[-395, 65], [-146, 65]]
+        },
+        {
+          "k": "line",
+          "p": [[-10, 65], [395, 65]]
+        }
+      ],
+      "lifts": [
+        {
+          "p": [[-196, -85], [-146, -85], [-146, -42], [-196, -42]]
+        },
+        {
+          "p": [[-358, 76], [-308, 76], [-308, 117], [-358, 117]]
+        }
+      ],
+      "islands": [
+        [[-188, 57], [-185, 75], [-179, 75], [-178, 69], [-107, 69], [-107, 64], [-76, 64], [-75, 69], [54, 69], [57, 74], [67, 74], [70, 69], [100, 69], [100, 48], [36, 48], [34, 37], [24, 40], [-4, 34], [-21, 37], [-43, 34], [-43, 37], [-50, 37], [-52, 33], [-57, 33], [-58, 37], [-177, 37], [-177, 34], [-185, 34], [-187, 57]]
+      ],
+      "parts": [
+        [[-206, 42], [-190, 42], [-190, 71], [-206, 71]],
+        [[43, 41], [42, 43.9], [39.5, 45.8], [36.5, 45.8], [34, 43.9], [33, 41], [34, 38.1], [36.5, 36.2], [39.5, 36.2], [42, 38.1]],
+        [[-13, 55], [-13.9, 58.5], [-16.5, 61.1], [-20, 62], [-23.5, 61.1], [-26.1, 58.5], [-27, 55], [-26.1, 51.5], [-23.5, 48.9], [-20, 48], [-16.5, 48.9], [-13.9, 51.5]],
+        [[-63, 55], [-63.9, 58.5], [-66.5, 61.1], [-70, 62], [-73.5, 61.1], [-76.1, 58.5], [-77, 55], [-76.1, 51.5], [-73.5, 48.9], [-70, 48], [-66.5, 48.9], [-63.9, 51.5]],
+        [[-180, 44], [-112, 44], [-112, 68], [-180, 68]]
+      ],
+      "spots": [
+        {
+          "p": [345, -28],
+          "r": 22,
+          "tee": 1
+        },
+        {
+          "p": [295, -28],
+          "r": 22,
+          "tee": 1
+        },
+        {
+          "p": [189, -28],
+          "r": 22,
+          "tee": 1
+        },
+        {
+          "p": [81, -28],
+          "r": 22,
+          "tee": 1
+        },
+        {
+          "p": [-40, -28],
+          "r": 22,
+          "tee": 1
+        },
+        {
+          "p": [-204, -28],
+          "r": 22,
+          "tee": 1
+        },
+        {
+          "p": [-316, -28],
+          "r": 22,
+          "tee": 1
+        },
+        {
+          "p": [337, 54],
+          "r": 18,
+          "tee": 1
+        },
+        {
+          "p": [225, 54],
+          "r": 18,
+          "tee": 1
+        },
+        {
+          "p": [-244, 48],
+          "r": 18,
+          "tee": 1
+        }
+      ],
+      "numberAt": {
+        "p": [368, 17],
+        "ft": 44
+      }
+    },
+    "hermes": {
+      "_src": "BMS model 8624 (outline, ski jump, island, port deck-edge lift and galleries: +-2 ft). Published: 12 deg ski jump fitted 1980-81; a fore deck-edge lift 54 x 35 ft on the port side and an aft centreline lift 54 x 44 ft (Naval Encyclopedia); no catapults or wires after the 1971-73 conversion (Wikipedia, HMS Hermes (R12)). The aft lift is flush in the model: its place is estimated. The model paints a pair of Harrier take-off lines and the deck-edge lines, drawn as they are. Research: hermes.md.",
+      "model": "BMS model 8624",
+      "outline": [[-362, -48], [-362, 3], [-358, 43], [-354, 45], [-346, 48], [-81, 48], [-67, 67], [205, 67], [217, 47], [312, 40], [370, 25], [372, -32], [363, -36], [312, -44], [191, -48], [143, -83], [84, -83], [-89, -61], [-93, -60], [-93, -48], [-306, -48], [-310, -58], [-355, -58], [-361, -48]],
+      "structures": [
+        [[-367, -48], [-367, 6], [-362, 42], [-346, 48], [-333, 48], [-332, 56], [-299, 56], [-297, 50], [-288, 50], [-283, 66], [-238, 63], [-231, 68], [-219, 68], [-217, 50], [-123, 50], [-123, 61], [-82, 64], [-71, 61], [-67, 67], [205, 67], [215, 50], [289, 49], [366, 29], [366, 25], [370, 25], [372, -32], [353, -39], [292, -50], [216, -50], [210, -64], [181, -64], [174, -60], [143, -83], [84, -83], [21, -74], [15, -74], [14, -81], [3, -81], [-12, -79], [-11, -70], [-14, -70], [-15, -77], [-38, -75], [-42, -66], [-45, -73], [-70, -71], [-71, -63], [-93, -60], [-93, -50], [-202, -50], [-202, -62], [-271, -62], [-274, -66], [-282, -66], [-285, -50], [-287, -57], [-355, -58], [-359, -48], [-366, -48]]
+      ],
+      "lines": [
+        {
+          "k": "line",
+          "p": [[-284, -14], [360, -14]]
+        },
+        {
+          "k": "line",
+          "p": [[-284, -21], [360, -21]]
+        },
+        {
+          "k": "line",
+          "p": [[-355, 46], [-81, 46]]
+        },
+        {
+          "k": "line",
+          "p": [[-67, 64], [205, 64]]
+        },
+        {
+          "k": "line",
+          "p": [[-321, -46], [-97, -46], [-91, -58], [84, -80]]
+        }
+      ],
+      "ski": {
+        "p": [[245, -39], [245, 6], [351, 6], [372, -4], [372, -32], [353, -39]],
+        "steps": [
+          270,
+          290,
+          310,
+          330,
+          350
+        ]
+      },
+      "skiDeg": 12,
+      "lifts": [
+        {
+          "p": [[84, -83], [143, -83], [143, -48], [84, -48]]
+        },
+        {
+          "p": [[-200, -22], [-146, -22], [-146, 22], [-200, 22]],
+          "est": 1
+        }
+      ],
+      "islands": [
+        [[-62, 32], [-62, 58], [-29, 58], [-27, 61], [22, 58], [22, 66], [28, 66], [28, 58], [66, 58], [66, 61], [94, 58], [94, 40], [81, 40], [79, 37], [66, 37], [65, 40], [55, 31], [55, 26], [49, 26], [49, 40], [48, 36], [28, 36], [28, 32], [22, 32], [19, 40], [8, 40], [8, 35], [1, 35], [1, 40], [-56, 40], [-56, 32], [-61, 32]]
+      ],
+      "parts": [
+        [[-117, 51], [-63, 51], [-63, 67], [-117, 67]],
+        [[-40, 40], [10, 40], [10, 54], [-40, 54]],
+        [[59, 36], [57.7, 40.1], [54.2, 42.7], [49.8, 42.7], [46.3, 40.1], [45, 36], [46.3, 31.9], [49.8, 29.3], [54.2, 29.3], [57.7, 31.9]]
+      ]
+    },
+    "invincible1982": {
+      "_src": "BMS model 8589 (outline, ski jump, island and the 1982 details: +-2 ft). Published: ski jump 7 deg as built (6.5 deg per Wikipedia, HMS Invincible (R05)); the Sea Dart launcher on the forecastle; two lifts 54.8 x 31.8 ft (Navypedia). BMS draws one ramp for all three variants. The lifts are flush in the model: their places are estimated. Research: invincible.md.",
+      "model": "BMS model 8589",
+      "outline": [[-305, -36], [-305, 37], [-289, 42], [-288, 47], [-142, 47], [-142, 43], [117, 43], [117, 47], [128, 47], [135, 43], [267, 43], [267, 18], [273, 25], [279, 24], [274, 14], [274, 4], [279, -5], [273, -6], [267, 1], [267, -13], [326, -13], [326, -56], [-289, -58], [-289, -55], [-303, -50], [-304, -36]],
+      "structures": [
+        [[-305, -36], [-305, 37], [-289, 42], [-288, 47], [-142, 47], [-142, 43], [117, 43], [117, 47], [128, 47], [135, 43], [267, 43], [270, 39], [303, 36], [340, 26], [378, 5], [379, -4], [357, -19], [327, -29], [326, -56], [-289, -58], [-289, -55], [-303, -50], [-304, -36]],
+        [[355, -17], [355, 16], [361, 16], [379, 4], [378, -5], [356, -17]],
+        [[267, -13], [267, 1], [276, -8], [280, -3], [274, 9], [280, 22], [275, 26], [267, 18], [267, 40], [308, 35], [355, 17], [355, -18], [327, -30], [326, -13], [268, -13]],
+        [[289, 9], [287.8, 13.5], [284.5, 16.8], [280, 18], [275.5, 16.8], [272.2, 13.5], [271, 9], [272.2, 4.5], [275.5, 1.2], [280, 0], [284.5, 1.2], [287.8, 4.5]]
+      ],
+      "lines": [
+        {
+          "k": "dash",
+          "p": [[-300, -34], [326, -34]]
+        },
+        {
+          "k": "lights",
+          "p": [[-305, -54.5], [209, -54.5]]
+        }
+      ],
+      "ski": {
+        "p": [[200, -56], [200, -13], [326, -13], [326, -56]],
+        "steps": [
+          225,
+          245,
+          265,
+          285,
+          305
+        ]
+      },
+      "skiDeg": 7,
+      "lifts": [
+        {
+          "p": [[175, -6], [230, -6], [230, 26], [175, 26]],
+          "est": 1
+        },
+        {
+          "p": [[-200, 5], [-145, 5], [-145, 37], [-200, 37]],
+          "est": 1
+        }
+      ],
+      "islands": [
+        [[-131, 10], [-131, 33], [-38, 33], [-38, 42], [3, 42], [3, 33], [117, 33], [117, 47], [135, 44], [145, 33], [172, 33], [172, 10], [145, 10], [125, 3], [115, 3], [113, 10], [-130, 10]]
+      ],
+      "parts": [
+        [[31, 34], [66, 34], [66, 43], [31, 43]],
+        [[-88, 35], [-55, 35], [-55, 42], [-88, 42]],
+        [[-10, 14], [30, 14], [30, 28], [-10, 28]],
+        [[60, 14], [95, 14], [95, 28], [60, 28]],
+        [[141, 22], [139.9, 25.5], [136.9, 27.7], [133.1, 27.7], [130.1, 25.5], [129, 22], [130.1, 18.5], [133.1, 16.3], [136.9, 16.3], [139.9, 18.5]]
+      ]
+    },
+    "invincible1990": {
+      "_src": "BMS model 8622 (outline, ski jump, island and the 1990 details: +-2 ft). Published: ski jump 12 deg after the 1986-89 refit; the Sea Dart launcher on the forecastle; Goalkeeper added 1986-89 (the aft port sponson); two lifts 54.8 x 31.8 ft (Navypedia). BMS draws one ramp for all three variants. The lifts are flush in the model: their places are estimated. Research: invincible.md.",
+      "model": "BMS model 8622",
+      "outline": [[-305, -31], [-305, 37], [-289, 42], [-288, 47], [-142, 47], [-142, 43], [117, 43], [117, 47], [128, 47], [135, 43], [267, 43], [267, 18], [273, 25], [279, 24], [274, 12], [279, -5], [273, -6], [267, 1], [267, -13], [326, -13], [326, -56], [-291, -58], [-292, -31], [-304, -31]],
+      "structures": [
+        [[-308, -45], [-305, 37], [-289, 42], [-288, 47], [-142, 47], [-142, 43], [117, 43], [117, 47], [128, 47], [135, 43], [267, 43], [270, 39], [303, 36], [340, 26], [378, 5], [379, -4], [357, -19], [327, -29], [326, -56], [-291, -58], [-292, -47], [-307, -45]],
+        [[355, -17], [355, 16], [361, 16], [379, 4], [378, -5], [356, -17]],
+        [[267, -13], [267, 1], [278, -8], [280, 0], [275, 5], [281, 1], [289, 3], [286, 4], [286, 14], [289, 15], [281, 17], [275, 14], [280, 19], [278, 26], [267, 18], [267, 40], [308, 35], [355, 17], [355, -18], [327, -30], [326, -13], [268, -13]],
+        [[289, 9], [287.8, 13.5], [284.5, 16.8], [280, 18], [275.5, 16.8], [272.2, 13.5], [271, 9], [272.2, 4.5], [275.5, 1.2], [280, 0], [284.5, 1.2], [287.8, 4.5]]
+      ],
+      "lines": [
+        {
+          "k": "dash",
+          "p": [[-300, -34], [326, -34]]
+        }
+      ],
+      "ski": {
+        "p": [[200, -56], [200, -13], [326, -13], [326, -56]],
+        "steps": [
+          225,
+          245,
+          265,
+          285,
+          305
+        ]
+      },
+      "skiDeg": 12,
+      "lifts": [
+        {
+          "p": [[175, -6], [230, -6], [230, 26], [175, 26]],
+          "est": 1
+        },
+        {
+          "p": [[-200, 5], [-145, 5], [-145, 37], [-200, 37]],
+          "est": 1
+        }
+      ],
+      "islands": [
+        [[-131, 10], [-131, 33], [-38, 33], [-38, 42], [3, 42], [3, 33], [117, 33], [117, 47], [135, 44], [145, 33], [172, 33], [172, 10], [145, 10], [125, 3], [115, 3], [113, 10], [-130, 10]]
+      ],
+      "parts": [
+        [[31, 34], [66, 34], [66, 43], [31, 43]],
+        [[-88, 35], [-55, 35], [-55, 42], [-88, 42]],
+        [[-10, 14], [30, 14], [30, 28], [-10, 28]],
+        [[60, 14], [95, 14], [95, 28], [60, 28]],
+        [[141, 22], [139.9, 25.5], [136.9, 27.7], [133.1, 27.7], [130.1, 25.5], [129, 22], [130.1, 18.5], [133.1, 16.3], [136.9, 16.3], [139.9, 18.5]]
+      ]
+    },
+    "invincible2000": {
+      "_src": "BMS model 8623 (outline, ski jump, island and the 2000 details: +-2 ft). Published: ski jump 12 deg after the 1986-89 refit; Sea Dart removed and the forecastle decked over (2000 modifications); Goalkeeper added 1986-89 (the aft port sponson); two lifts 54.8 x 31.8 ft (Navypedia). BMS draws one ramp for all three variants. The lifts are flush in the model: their places are estimated. Research: invincible.md.",
+      "model": "BMS model 8623",
+      "outline": [[-305, -31], [-305, 37], [-289, 42], [-288, 47], [-142, 47], [-142, 43], [117, 43], [117, 47], [135, 43], [326, 43], [327, 28], [361, 16], [379, 4], [379, -4], [361, -17], [326, -31], [326, -56], [-291, -58], [-292, -31], [-304, -31]],
+      "structures": [
+        [[-308, -45], [-305, 37], [-289, 42], [-288, 47], [-142, 47], [-142, 43], [117, 43], [117, 47], [135, 43], [326, 43], [327, 28], [361, 16], [379, 4], [379, -4], [361, -17], [326, -31], [326, -56], [-291, -58], [-292, -47], [-307, -45]]
+      ],
+      "lines": [
+        {
+          "k": "dash",
+          "p": [[-300, -34], [326, -34]]
+        },
+        {
+          "k": "lights",
+          "p": [[-305, -27.5], [209, -27.5]]
+        }
+      ],
+      "ski": {
+        "p": [[200, -56], [200, -13], [326, -13], [326, -56]],
+        "steps": [
+          225,
+          245,
+          265,
+          285,
+          305
+        ]
+      },
+      "skiDeg": 12,
+      "lifts": [
+        {
+          "p": [[175, -6], [230, -6], [230, 26], [175, 26]],
+          "est": 1
+        },
+        {
+          "p": [[-200, 5], [-145, 5], [-145, 37], [-200, 37]],
+          "est": 1
+        }
+      ],
+      "islands": [
+        [[-131, 10], [-131, 33], [-38, 33], [-38, 42], [3, 42], [3, 33], [117, 33], [117, 47], [135, 44], [145, 33], [172, 33], [172, 10], [145, 10], [125, 3], [115, 3], [113, 10], [-130, 10]]
+      ],
+      "parts": [
+        [[31, 34], [66, 34], [66, 43], [31, 43]],
+        [[-88, 35], [-55, 35], [-55, 42], [-88, 42]],
+        [[-10, 14], [30, 14], [30, 28], [-10, 28]],
+        [[60, 14], [95, 14], [95, 28], [60, 28]],
+        [[141, 22], [139.9, 25.5], [136.9, 27.7], [133.1, 27.7], [130.1, 25.5], [129, 22], [130.1, 18.5], [133.1, 16.3], [136.9, 16.3], [139.9, 18.5]]
+      ]
+    },
+    "arkroyal": {
+      "_src": "BMS model 8956: the Audacious-class R09 Ark Royal after her 1967-70 refit, not the Invincible-class R07 (outline, island, the three painted landing-area lines and both strop catchers from the model, +-2 ft). Published: full 8.5 deg angled deck, a bow and a waist steam catapult, four wires with No. 3 the target wire, heavy jet-blast deflectors (Wikipedia, HMS Ark Royal (R09); PhantomF4k). The catapult tracks end at the model's strop catchers and start at BMS's own launch points (the bow one 24 ft to starboard of it, on the line to its catcher); the deflectors and the wire spacing are estimated, the wires inside BMS's own arresting box. Research: ark-royal.md.",
+      "model": "BMS model 8956",
+      "outline": [[-395, -52], [-391, 47], [-379, 52], [-285, 52], [-274, 75], [-196, 75], [-196, 52], [-101, 52], [-85, 75], [219, 75], [223, 66], [233, 66], [233, 76], [239, 75], [238, 66], [288, 66], [408, 39], [408, -5], [412, -5], [412, -25], [408, -26], [408, -40], [356, -54], [227, -56], [226, -84], [221, -90], [113, -90], [-42, -73], [-50, -73], [-52, -85], [-57, -85], [-55, -72], [-246, -60], [-256, -52], [-323, -52], [-327, -79], [-374, -79], [-374, -52], [-394, -52]],
+      "structures": [
+        [[-401, -52], [-397, 44], [-379, 52], [-360, 52], [-342, 55], [-342, 58], [-324, 58], [-323, 55], [-315, 61], [-281, 61], [-274, 75], [-196, 75], [-196, 61], [-184, 61], [-183, 64], [-164, 62], [-164, 57], [-174, 55], [-99, 55], [-85, 75], [219, 75], [222, 67], [233, 66], [233, 76], [239, 75], [238, 66], [288, 66], [411, 39], [411, -5], [441, -10], [440, -18], [412, -24], [411, -39], [406, -41], [356, -54], [300, -54], [288, -69], [240, -69], [240, -77], [253, -79], [253, -85], [221, -90], [113, -90], [-42, -73], [-50, -73], [-52, -85], [-57, -85], [-55, -72], [-157, -64], [-188, -64], [-202, -68], [-209, -68], [-209, -64], [-228, -64], [-230, -74], [-246, -74], [-248, -64], [-270, -64], [-278, -77], [-299, -77], [-306, -64], [-325, -64], [-327, -79], [-374, -79], [-374, -52], [-400, -52]]
+      ],
+      "lane": [[-388, -14], [129, -86], [185, -71], [-315, 51]],
+      "lines": [
+        {
+          "k": "line",
+          "p": [[-388, -14], [129, -86]]
+        },
+        {
+          "k": "dash",
+          "p": [[-395, 25], [203, -58]]
+        },
+        {
+          "k": "foul",
+          "p": [[-315, 51], [349, -42]]
+        },
+        {
+          "k": "faint",
+          "p": [[-387, -13], [201, -22]]
+        }
+      ],
+      "wires": [
+        [[-231.3, 36.7], [-240.7, -30.7]],
+        [[-201.3, 32.7], [-210.7, -34.7]],
+        [[-171.3, 27.7], [-180.7, -39.7]],
+        [[-141.3, 23.7], [-150.7, -43.7]]
+      ],
+      "cats": [
+        {
+          "track": [[218, -14], [408, -14]],
+          "jbd": [[198, -32], [210, -32], [210, 4], [198, 4]]
+        },
+        {
+          "track": [[-16, -47.4], [225, -82]],
+          "jbd": [[-22.4, -28.3], [-27.6, -63.9], [-37.4, -62.5], [-32.2, -26.9]]
+        }
+      ],
+      "islands": [
+        [[-47, 40], [-47, 46], [-38, 51], [-37, 65], [-4, 66], [-4, 75], [106, 75], [106, 66], [145, 68], [150, 59], [145, 42], [126, 42], [119, 24], [111, 24], [111, 42], [100, 44], [-38, 44], [-41, 39], [-46, 40]]
+      ],
+      "parts": [
+        [[-75, 52], [-75, 63], [-71, 67], [-61, 67], [-56, 55], [-62, 48], [-74, 52]],
+        [[20, 48], [70, 48], [70, 64], [20, 64]],
+        [[136, 58], [134.5, 62.7], [130.5, 65.6], [125.5, 65.6], [121.5, 62.7], [120, 58], [121.5, 53.3], [125.5, 50.4], [130.5, 50.4], [134.5, 53.3]]
+      ]
+    },
+    "ocean": {
+      "_src": "BMS model 8627 (outline with its rounded bow, deck-edge sponsons and island: +-2 ft). Published: flight deck 170 x 32.6 m, two aircraft lifts, no ski jump (Naval Technology; Wikipedia, HMS Ocean (L12)). BMS gave the objective a Tarawa's deck data, so four of its spots lie off this ship. The lifts are flush in the model: their places are estimated. Research: ocean.md.",
+      "model": "BMS model 8627",
+      "outline": [[-329, 21], [-329, 36], [-322, 36], [-322, 54], [-309, 54], [-309, 58], [-296, 58], [-296, 54], [-272, 54], [-272, 38], [-239, 38], [-239, 54], [62, 56], [210, 52], [266, 41], [299, 28], [321, 11], [325, -4], [302, -27], [267, -41], [212, -51], [206, -56], [170, -56], [169, -59], [93, -59], [90, -54], [48, -54], [46, -59], [6, -59], [3, -54], [-60, -54], [-62, -59], [-104, -59], [-108, -54], [-170, -54], [-172, -59], [-271, -59], [-279, -54], [-322, -54], [-322, -37], [-325, -37], [-322, 21], [-328, 21]],
+      "structures": [
+        [[-334, -53], [-334, -29], [-325, -29], [-325, -22], [-322, -22], [-322, 21], [-329, 21], [-329, 29], [-334, 29], [-334, 53], [-309, 54], [-309, 58], [-296, 58], [-296, 54], [62, 56], [187, 52], [231, 57], [236, 46], [266, 41], [303, 26], [321, 11], [325, -4], [302, -27], [267, -41], [235, -47], [229, -64], [191, -64], [188, -56], [93, -59], [90, -54], [48, -54], [46, -59], [6, -59], [3, -54], [-60, -54], [-62, -59], [-104, -59], [-108, -54], [-170, -54], [-172, -59], [-271, -59], [-279, -54], [-333, -53]]
+      ],
+      "lines": [
+        {
+          "k": "dash",
+          "p": [[-322, -34], [262, -34]]
+        },
+        {
+          "k": "line",
+          "p": [[-322, 52], [210, 52]]
+        },
+        {
+          "k": "line",
+          "p": [[209, -50], [209, 51]]
+        }
+      ],
+      "lifts": [
+        {
+          "p": [[140, -25], [190, -25], [190, 20], [140, 20]],
+          "est": 1
+        },
+        {
+          "p": [[-200, -25], [-150, -25], [-150, 20], [-200, 20]],
+          "est": 1
+        }
+      ],
+      "islands": [
+        [[-136, 31], [-136, 55], [30, 56], [120, 55], [120, 27], [118, 24], [103, 24], [103, 18], [87, 18], [87, 31], [-135, 31]]
+      ],
+      "parts": [
+        [[-239, 37], [-223, 37], [-223, 53], [-239, 53]],
+        [[-195, 41], [-174, 41], [-174, 47], [-195, 47]],
+        [[-60, 36], [-20, 36], [-20, 50], [-60, 50]],
+        [[40, 36], [80, 36], [80, 50], [40, 50]]
+      ]
+    },
+    "queenelizabeth": {
+      "_src": "BMS models 8586 and 8955, identical (outline, galleries, both islands and the ski jump: +-2 ft). Published: two islands, the forward one the bridge and the aft one flying control; two 89 x 49 ft deck-edge lifts, each abaft an island; a 12-13 deg ski jump; pennants R08 and R09 (Wikipedia, Queen Elizabeth class; Navy Lookout; Royal Navy). The lifts are placed from their published size inside the model's starboard bulges. Research: queen-elizabeth.md.",
+      "model": "BMS models 8586 / 8955",
+      "outline": [[-456, -70], [-456, 70], [-427, 109], [-269, 109], [-269, 120], [-120, 120], [-119, 110], [-50, 109], [-22, 109], [-21, 120], [95, 120], [96, 109], [125, 109], [125, 112], [137, 112], [138, 109], [229, 109], [243, 90], [266, 90], [287, 62], [460, 48], [460, -53], [394, -53], [256, -65], [252, -82], [228, -82], [226, -109], [-427, -109], [-455, -70]],
+      "structures": [
+        [[-460, -70], [-460, 70], [-440, 96], [-441, 119], [-437, 123], [-414, 123], [-408, 116], [-397, 116], [-396, 120], [-363, 120], [-362, 116], [-300, 116], [-299, 120], [-120, 120], [-120, 116], [-51, 116], [-50, 120], [145, 120], [146, 116], [193, 116], [197, 109], [201, 109], [201, 123], [216, 123], [219, 115], [253, 115], [292, 71], [315, 72], [345, 65], [391, 64], [404, 52], [460, 48], [460, -53], [399, -53], [398, -58], [348, -63], [336, -58], [260, -65], [253, -88], [245, -88], [242, -103], [227, -103], [216, -123], [201, -123], [201, -116], [185, -116], [183, -125], [151, -125], [149, -116], [31, -116], [29, -125], [-3, -125], [-5, -116], [-84, -116], [-85, -125], [-118, -125], [-119, -116], [-213, -116], [-215, -125], [-248, -125], [-249, -116], [-324, -116], [-325, -125], [-358, -125], [-359, -116], [-393, -116], [-393, -109], [-408, -109], [-414, -123], [-437, -123], [-441, -119], [-441, -108], [-448, -108], [-459, -97], [-459, -81], [-455, -77], [-459, -70]]
+      ],
+      "lines": [
+        {
+          "k": "dash",
+          "p": [[-450, -30], [340, -30]]
+        },
+        {
+          "k": "lights",
+          "p": [[-456, -27.5], [266, -27.5]]
+        }
+      ],
+      "ski": {
+        "p": [[275, -53], [275, -7], [460, -7], [460, -53]],
+        "steps": [
+          320,
+          360,
+          400,
+          440
+        ]
+      },
+      "skiDeg": 12,
+      "lifts": [
+        {
+          "p": [[6, 71], [95, 71], [95, 120], [6, 120]]
+        },
+        {
+          "p": [[-269, 71], [-180, 71], [-180, 120], [-269, 120]]
+        }
+      ],
+      "islands": [
+        [[103, 71], [103, 98], [117, 101], [117, 107], [125, 107], [125, 112], [137, 112], [139, 107], [219, 109], [219, 60], [168, 57], [167, 60], [117, 61], [117, 67], [107, 67], [104, 71]],
+        [[-172, 96], [-172, 114], [-146, 114], [-139, 110], [-50, 110], [-50, 58], [-67, 58], [-75, 46], [-94, 46], [-102, 58], [-119, 61], [-119, 66], [-113, 65], [-113, 104], [-134, 102], [-136, 95], [-151, 92], [-151, 86], [-171, 96]]
+      ],
+      "parts": [
+        [[-153, 64], [-153, 83], [-123, 70], [-115, 70], [-120, 64]],
+        [[-150, 60], [-60, 60], [-60, 72], [-150, 72]],
+        [[-70, 85], [-71.3, 90], [-75, 93.7], [-80, 95], [-85, 93.7], [-88.7, 90], [-90, 85], [-88.7, 80], [-85, 76.3], [-80, 75], [-75, 76.3], [-71.3, 80]],
+        [[170, 85], [168.7, 90], [165, 93.7], [160, 95], [155, 93.7], [151.3, 90], [150, 85], [151.3, 80], [155, 76.3], [160, 75], [165, 76.3], [168.7, 80]]
+      ]
+    },
+    "tarawa": {
+      "_src": "BMS model 8674 (outline, deck-edge structures and island traced from the model, +-2 ft; the flight deck is the flat surface 67 ft above the model origin). Published: a port deck-edge lift and a stern lift (Wikipedia, Tarawa-class amphibious assault ship). Both lifts are placed where the model's outline has them; their sizes are estimated. BMS's strip is its runway 1, on across -34.5.",
+      "model": "BMS model 8674",
+      "outline": [[-394, -28], [-394, 30], [-371, 33], [-371, 54], [-365, 59], [-126, 59], [-120, 68], [158, 68], [164, 59], [346, 59], [347, 52], [380, 34], [437, 33], [440, -23], [436, -34], [380, -34], [346, -55], [346, -62], [-163, -62], [-163, -89], [-211, -89], [-211, -62], [-365, -62], [-371, -56], [-371, -31], [-390, -31], [-393, -28]],
+      "structures": [
+        [[-395, -53], [-395, 53], [-371, 53], [-365, 59], [-339, 59], [-339, 65], [-142, 65], [-142, 59], [-126, 59], [-119, 72], [158, 72], [163, 60], [164, 63], [346, 63], [346, 53], [403, 53], [436, 35], [440, 21], [437, -33], [403, -53], [349, -53], [346, -55], [346, -67], [-126, -67], [-126, -62], [-163, -62], [-163, -89], [-211, -89], [-211, -62], [-221, -62], [-221, -66], [-365, -66], [-371, -53], [-394, -53]]
+      ],
+      "lines": [
+        {
+          "k": "dash",
+          "p": [[-370, -34.5], [340, -34.5]]
+        },
+        {
+          "k": "line",
+          "p": [[-365, 55], [346, 55]]
+        }
+      ],
+      "lifts": [
+        {
+          "p": [[-211, -89], [-163, -89], [-163, -55], [-211, -55]],
+          "est": 1
+        },
+        {
+          "p": [[-394, -28], [-360, -28], [-360, 30], [-394, 30]],
+          "est": 1
+        }
+      ],
+      "islands": [
+        [[-136, 12], [-136, 22], [-124, 22], [-124, 40], [-120, 44], [-110, 44], [-105, 35], [-96, 35], [-96, 45], [-29, 45], [-29, 60], [-16, 60], [-16, 45], [39, 45], [39, 58], [55, 58], [55, 45], [144, 45], [144, 23], [94, 23], [72, 10], [-135, 12]]
+      ],
+      "parts": [
+        [[-120, 22], [-40, 22], [-40, 40], [-120, 40]],
+        [[20, 22], [110, 22], [110, 40], [20, 40]],
+        [[-92, 32], [-93.5, 36.7], [-97.5, 39.6], [-102.5, 39.6], [-106.5, 36.7], [-108, 32], [-106.5, 27.3], [-102.5, 24.4], [-97.5, 24.4], [-93.5, 27.3]]
+      ]
+    },
+    "saopaulo": {
+      "_src": "BMS model 8334, the Clemenceau-class Sao Paulo (ex-Foch): outline, deck-edge structures and island traced from the model (+-2 ft). The landing area is BMS's own runway 1 (10.6 deg; the real angled deck is 8 deg). Published: two BS5 steam catapults about 52 m long, one at the bow and one on the angled deck (Wikipedia, Clemenceau-class aircraft carrier): drawn from BMS's own launch points forward at that length. The deck-edge lift abaft the island is where the model's outline bulges; its size is estimated. No wires are drawn: no source found gives their number or places.",
+      "model": "BMS model 8334",
+      "outline": [[-437, -30], [-422, 69], [-323, 57], [-181, 57], [-142, 74], [-142, 82], [-89, 82], [-89, 74], [172, 75], [186, 50], [377, 50], [403, 46], [423, 37], [423, -15], [428, -15], [428, -27], [423, -27], [423, -37], [418, -41], [395, -48], [363, -51], [135, -51], [128, -85], [30, -86], [-115, -66], [-123, -85], [-135, -86], [-145, -61], [-436, -30]],
+      "structures": [
+        [[-445, -27], [-431, 69], [-350, 61], [-346, 71], [-149, 71], [-142, 74], [-142, 82], [-89, 82], [-89, 74], [94, 76], [172, 75], [174, 72], [188, 79], [245, 79], [266, 50], [377, 50], [403, 46], [423, 37], [423, -15], [441, -17], [441, -26], [423, -27], [423, -37], [407, -45], [363, -51], [239, -51], [239, -65], [132, -65], [128, -85], [30, -86], [-115, -66], [-123, -85], [-135, -86], [-145, -61], [-223, -51], [-233, -51], [-253, -74], [-334, -74], [-356, -43], [-421, -38], [-444, -27]]
+      ],
+      "lane": [[-426.9, 79.8], [140.6, -26.7], [126.4, -102.3], [-441.1, 4.2]],
+      "lines": [
+        {
+          "k": "line",
+          "p": [[-426.9, 79.8], [140.6, -26.7]]
+        },
+        {
+          "k": "line",
+          "p": [[-441.1, 4.2], [126.4, -102.3]]
+        },
+        {
+          "k": "dash",
+          "p": [[-434, 42], [133.5, -64.5]]
+        }
+      ],
+      "cats": [
+        {
+          "track": [[190, -21], [360, -21]],
+          "jbd": [[181, -3], [181, -39], [171, -39], [171, -3]]
+        },
+        {
+          "track": [[-135, -37], [32.1, -68.4]],
+          "jbd": [[-140.6, -17.6], [-147.2, -53], [-157, -51.2], [-150.4, -15.8]]
+        }
+      ],
+      "lifts": [
+        {
+          "p": [[-142, 46], [-89, 46], [-89, 82], [-142, 82]],
+          "est": 1
+        }
+      ],
+      "islands": [
+        [[-54, 41], [-54, 69], [30, 69], [30, 76], [40, 76], [40, 69], [71, 69], [71, 76], [94, 76], [100, 69], [116, 67], [113, 41], [101, 41], [93, 33], [88, 33], [86, 26], [78, 26], [78, 33], [71, 33], [71, 41], [40, 41], [40, 34], [30, 34], [30, 41], [-53, 41]]
+      ],
+      "parts": [
+        [[40, 45], [71, 45], [71, 65], [40, 65]],
+        [[-12, 55], [-13.5, 59.7], [-17.5, 62.6], [-22.5, 62.6], [-26.5, 59.7], [-28, 55], [-26.5, 50.3], [-22.5, 47.4], [-17.5, 47.4], [-13.5, 50.3]],
+        [[80, 45], [108, 45], [108, 65], [80, 65]]
+      ]
+    },
+    "veinticinco": {
+      "_src": "BMS model 8335, the Colossus-class ARA Veinticinco de Mayo: outline with its deck-level sponsons and island traced from the model (+-2 ft). The landing area is BMS's own runway 1 (9.5 deg). One steam catapult on the port bow (Wikipedia, ARA Veinticinco de Mayo): drawn from BMS's launch point forward, its length estimated. Lifts and wires are flush or absent in the model and are not drawn.",
+      "model": "BMS model 8335",
+      "outline": [[-329, -37], [-325, 47], [-295, 40], [-211, 42], [-211, 49], [-207, 52], [-164, 52], [-160, 49], [-160, 42], [-86, 42], [-84, 51], [-69, 52], [-66, 42], [-24, 42], [-6, 57], [138, 57], [142, 49], [164, 49], [166, 42], [205, 42], [210, 51], [251, 50], [257, 41], [312, 35], [342, 26], [342, -8], [368, -11], [368, -17], [345, -18], [340, -27], [312, -34], [254, -39], [252, -47], [247, -50], [212, -50], [205, -40], [198, -40], [198, -50], [142, -50], [128, -59], [15, -59], [15, -50], [12, -58], [-1, -58], [-1, -47], [-45, -40], [-163, -40], [-163, -48], [-168, -51], [-209, -51], [-214, -48], [-214, -40], [-328, -37]],
+      "structures": [],
+      "lane": [[-321.7, 48.7], [198.8, -37.8], [191.2, -83.2], [-329.3, 3.3]],
+      "lines": [
+        {
+          "k": "line",
+          "p": [[-321.7, 48.7], [198.8, -37.8]]
+        },
+        {
+          "k": "line",
+          "p": [[-329.3, 3.3], [191.2, -83.2]]
+        },
+        {
+          "k": "dash",
+          "p": [[-325.5, 26], [195, -60.5]]
+        }
+      ],
+      "cats": [
+        {
+          "track": [[140, -30], [305, -30]],
+          "jbd": [[130, -15], [130, -45], [122, -45], [122, -15]]
+        }
+      ],
+      "islands": [
+        [[-5, 43], [-5, 50], [13, 53], [135, 53], [138, 42], [134, 39], [73, 37], [66, 28], [55, 28], [49, 39], [14, 39], [-4, 43]]
+      ],
+      "parts": [
+        [[20, 40], [60, 40], [60, 50], [20, 50]],
+        [[96, 45], [94.9, 48.5], [91.9, 50.7], [88.1, 50.7], [85.1, 48.5], [84, 45], [85.1, 41.5], [88.1, 39.3], [91.9, 39.3], [94.9, 41.5]]
+      ]
+    }
   }
 }

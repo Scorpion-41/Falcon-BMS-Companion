@@ -1,0 +1,15 @@
+# The TOSS page against Weapon Delivery Planner (--wdptosstest): where the port prints something else on purpose.
+# One fix per line: <D-number>  <labels, * = any characters>  [when <fact><op><value> && ...]  [value <WDP's>><port's>]
+# Facts are the reference row's inputs (ingrCas, g, turn, angleOff, heading, ...). Any difference no line names fails.
+# The D-numbers are the plan's; what each fixed figure says instead is checked in the geometry section of the test.
+
+# D3  DEST OA1 shows OA1. WDP's FillLabelsBMS filled it with the pull-up point's figures in VRP mode, while
+#     SaveNavOffsets wrote the real OA1 into the cartridge (and its map drew OA1 there).
+D3  lblOA1brg,lblOA1rng,lblOA1nm,lblOA1elv
+
+# D4  OA1 takes atan(R/D) and cos(angle off)·R (WDP: tan(R/D) and cos(sin(angle off))·R). At 0° off both give the
+#     same point; otherwise OA1 moves, and the VRP (shown on the VIP line in VRP mode), which is laid out from it.
+D4  lblOA1brg,lblOA1rng,lblOA1nm,lblVIPbrg,lblVIPrng,lblVIPnm  when angleOff!=0
+
+# D5  a bearing is never printed "360.0": north is 0.0.
+D5  lbl*brg  value 360.0>0.0

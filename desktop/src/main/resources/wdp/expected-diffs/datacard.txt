@@ -1,0 +1,43 @@
+# The DataCard page against Weapon Delivery Planner (--wdppagetest datacard <reference.tsv>): where the port prints
+# something else on purpose. One fix per line: <D-number>  <controls, * = any characters>  [when <fact><op><value> && ...]
+# The facts are the test's (WdpDataCardTest.kt, RowFacts): each says the two values have that fix's shape, so a
+# difference of any other shape still fails. Rows WDP could not finish and the port finishes (D19: the taxi time
+# before the mission's midnight, TasToIas above ~93,195 ft, a speed past a short, a NaN bearing, a strike at
+# steerpoint 1 or 2, a fuel figure past an Int; D21: the laser box 2 check) are counted by the test and not compared.
+# The D-numbers are the plan's (WDP438-PLAN.md section D); each fix is described in DataCardPlan.kt's KDoc ("Fixed").
+
+# D20  GetTime rounds to the nearest second (WDP truncated: 03:58:13 printed 03:58:12, and minute 60 was not carried)
+D20  lblTOS*,lblCommTO*,lblCommTaxi*,lblCommPushTime*,lblCommTot*,txtTanker1_Notes,txtTanker2_Notes,txtAWACS_Notes,txtJSTAR_Notes  when times=1
+
+# D21  rows 9 and 11 printed an "m" before a hold's window
+D21  lblTOS9,lblTOS11  when mtimes=1
+
+# D21  the landing rows: every row looks at the row before (WDP's row 24 at itself), a later landing is the
+#      alternate's elevation on any row (WDP: row 9 only), an untimed row prints --- (WDP: 00:00:00 and a speed)
+D21  lblTOS*,txtKias*,lblAlt*,txtFormation*  when landing=1
+
+# D21  "Else" + VRP + nm: each offset range in its own box and unit (WDP put OA2's in OA1's and left OA2 in feet)
+D21  lblOA1rng,lblOA2rng  when in_profile=Else
+
+# D21  each flight's TACAN pairs by its own size (WDP gave the fourth flight the second flight's)
+D21  txtWing1_TCN,txtElement_TCN,txtWing4_TCN  when slot=4
+
+# D21  the TGP code's second box checks its own figure (WDP checked the first box's)
+D21  txtLaserCode2,dtc.txtLaserCode2  when laser2=1
+
+# D23  the airports' UHF and VHF columns are the tower's (WDP: Ground and Approach for BMS 4.34+); lblARR_VHF is
+#      cleared like the other five (D21)
+D23  lblDEP_UHF,lblARR_UHF,lblALTN_UHF,lblDEP_VHF,lblARR_VHF,lblALTN_VHF  when tower=1
+
+# D23  the lines under the ROE box: ATIS, Ground, Approach, Ops (WDP: ATIS, Tower, Ops, LSO — and only for BMS 4.34+)
+D23  txtExtra*  when extra=1
+
+# V1   Falcon BMS 4.38.1 only: WDP's version branches take 4.38.1's side on every row. The reference also runs older
+#      builds; on those rows WDP took the other branch.
+V1   txtLead_Lsr,txtWing1_Lsr,txtElement_lsr,txtWing4_Lsr  when laserGate=0
+V1   txtAWACS_UHF  when awacsGate=0
+V1   txtFormation*  when formationGate=0
+
+# D21  a flight of 25 waypoints: its fuel ladder starts from a cleared 25th entry (WDP cleared 24 and read the 25th
+#      as the flight planned before had left it)
+D21  txtFuel*  when wp25=1

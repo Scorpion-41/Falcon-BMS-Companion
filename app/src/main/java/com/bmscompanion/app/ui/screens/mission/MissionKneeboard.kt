@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.bmscompanion.app.data.Repo
 import com.bmscompanion.app.data.mission.MissionLink
+import com.bmscompanion.app.data.mission.MissionMode
 import com.bmscompanion.app.ui.components.Tag
 import com.bmscompanion.app.ui.go
 import com.bmscompanion.app.ui.screens.KNEEBOARD_SCHEME
@@ -61,18 +62,21 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun KneeboardPages(nav: NavHostController) {
+fun KneeboardPages(nav: NavHostController, onOpenTab: ((MissionTab) -> Unit)? = null) {
     val info by MissionLink.info.collectAsState()
     val kb = info?.kneeboard
     var note by remember { mutableStateOf<String?>(null) }
     if (kb == null) return
+    // WDP mode (1.3.8): its export writes cockpit pages 1-3 over the Planner's, so the run button is greyed out (the PC
+    // refuses it too, KneeboardInfo.runSuspended); the pages it already exported are still shown
+    val paused = kb.runSuspended || info.wdpMode
 
     // Not set up. A pilot who has never heard of html_brief cannot be expected to guess that one folder in the
     // settings is all that stands between them and these pages, so the section says it.
     if (!kb.configured) {
         Text(
-            "These are the kneeboard pages exported by BMS's HTML Briefing tool (html_brief, which BMS ships in " +
-                "Tools\\html_brief_win). It is a separate tool, run by you, that exports PDFs of its own — if you do " +
+            "These are the kneeboard pages exported by UOAF's HTML Briefing tool (a separate download; BMS Companion " +
+                "looks for it in Tools\\html_brief_win). You run it yourself and it exports PDFs of its own — if you do " +
                 "not use it, nothing in this section needs your attention. Point BMS Companion at its folder and its " +
                 "pages appear here, on every device, and as a board in VR.",
             style = MaterialTheme.typography.bodySmall, color = Hud.TextDim,
@@ -87,7 +91,7 @@ fun KneeboardPages(nav: NavHostController) {
     if (kb.stale) Box(Modifier.padding(bottom = 8.dp)) { Tag("briefing is newer", Hud.Amber) }
     if (!kb.available) {
         Text(kb.message ?: "Nothing exported yet.", style = MaterialTheme.typography.bodySmall, color = Hud.TextDim)
-        RunExporter(true) { note = it }
+        RunExporter(true, paused, onOpenTab) { note = it }
         note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Hud.Green) }
         return
     }
@@ -109,14 +113,15 @@ fun KneeboardPages(nav: NavHostController) {
         }
     }
     Text(
-        if (kb.stale) "The briefing has been printed since these were exported — export again to bring them up to date."
+        if (kb.stale && paused) "The briefing has been printed since these were exported."
+        else if (kb.stale) "The briefing has been printed since these were exported — export again to bring them up to date."
         else "Tap a page to open it. These were exported by html_brief for this mission; it is a separate tool you run " +
             "yourself, and if you do not use it nothing here needs your attention.",
         style = MaterialTheme.typography.bodySmall,
         color = if (kb.stale) Hud.Amber else Hud.TextFaint,
         modifier = Modifier.padding(top = 6.dp),
     )
-    RunExporter(kb.stale) { note = it }
+    RunExporter(kb.stale, paused, onOpenTab) { note = it }
     note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Hud.Green) }
 }
 
@@ -126,10 +131,21 @@ fun KneeboardPages(nav: NavHostController) {
  * It belongs here rather than in the settings because this is where its pages are read: exporting is part of preparing
  * a briefing, not part of setting the program up. It is only a shortcut — html_brief has no headless export, so the
  * pilot still presses its own buttons.
+ *
+ * **In WDP mode** ([paused]) it is greyed out with its reason ([MissionMode.HTML_BRIEF_SUSPENDED]) and **Open the
+ * Planner** beside it: its export writes cockpit pages 1-3, which would overwrite the Planner's Upd Kneeboard pages.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RunExporter(urgent: Boolean, onNote: (String?) -> Unit) {
+private fun RunExporter(urgent: Boolean, paused: Boolean, onOpenTab: ((MissionTab) -> Unit)?, onNote: (String?) -> Unit) {
     val scope = rememberCoroutineScope()
+    if (paused) {
+        FlowRow(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            WdpPausedBox("Run HTML Briefing", MissionMode.HTML_BRIEF_SUSPENDED)
+            if (onOpenTab != null) OpenPlannerButton(onOpenTab)
+        }
+        return
+    }
     Box(Modifier.padding(top = 8.dp)) {
         SmallButton("Run HTML Briefing", null, primary = urgent) {
             scope.launch { onNote(MissionLink.openKneeboardExporter()) }

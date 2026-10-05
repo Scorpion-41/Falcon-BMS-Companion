@@ -15,11 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.outlined.LightMode
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -57,21 +52,29 @@ fun MissionScreen(nav: NavHostController) {
     }
     val state by MissionLink.state.collectAsState()
     val info by MissionLink.info.collectAsState()
-    val live by MissionLink.live.collectAsState()
+    // (the live readings, four a second, are read by the header alone: read here they recomposed the whole section)
 
     var tab by rememberMissionTab()
-    var keepOn by rememberSaveable { mutableStateOf(Repo.getInt("mission_keep_on", 1) == 1) }
+    // the screen stays on while the Mission section is shown (it is read in flight, hands on the stick). The sun
+    // button that switched this off was taken out in 1.3.8: pilots took it for a day/night switch that did nothing.
     val view = LocalView.current
-    DisposableEffect(keepOn) {
-        view.keepScreenOn = keepOn
+    DisposableEffect(Unit) {
+        view.keepScreenOn = true
         onDispose { view.keepScreenOn = false }
     }
     val env = rememberMissionEnv(nav)
     val onTab: (MissionTab) -> Unit = { tab = it; saveMissionTab(it) }
 
+    // The Dashboard can take the whole pane (DashFocus); every other tab always keeps its chrome.
+    val focused = ((DashFocus.on || MfdFull.on) && tab == MissionTab.DASH) ||
+        (com.bmscompanion.app.ui.screens.wdp.WdpFocus.on && tab == MissionTab.PLANNER && info.wdpMode)
+    // Back leaves the MFDs' full page before it leaves the section (this file is Android's alone)
+    androidx.activity.compose.BackHandler(enabled = MfdFull.on) { MfdFull.on = false }
     Column(Modifier.fillMaxSize().background(Hud.Bg)) {
-        MissionHeader(state, info, live, keepOn, onKeepOn = { keepOn = !keepOn; Repo.putInt("mission_keep_on", if (keepOn) 1 else 0) }, onSetup = { nav.go(com.bmscompanion.app.ui.Routes.SETUP) })
-        MissionTabStrip(tab, onTab)
+        if (!focused) MissionHeader(state, info, onSetup = { nav.go(com.bmscompanion.app.ui.Routes.SETUP) })
+        // where everything below comes from, on every tab: the EZBoards | WDP switch and its line (MissionSource.kt)
+        if (!focused) MissionSourceBar(onTab)
+        if (!focused) MissionTabStrip(tab, onTab)
         Box(Modifier.weight(1f).fillMaxWidth()) { MissionTabContent(tab, env, onTab) }
     }
 }
@@ -80,19 +83,14 @@ fun MissionScreen(nav: NavHostController) {
 private fun MissionHeader(
     state: LinkState,
     info: com.bmscompanion.app.data.mission.BridgeInfo?,
-    live: com.bmscompanion.app.data.mission.Live?,
-    keepOn: Boolean,
-    onKeepOn: () -> Unit,
     onSetup: () -> Unit,
 ) {
+    val live by MissionLink.live.collectAsState()
     Row(
-        Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 2.dp),
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MissionStatus(state, info, live, badge = null, idleText = "Connect to BMS Companion on the PC to see live mission data", onSetup = onSetup)
         Spacer(Modifier.weight(1f))
-        IconButton(onClick = onKeepOn) {
-            Icon(if (keepOn) Icons.Filled.LightMode else Icons.Outlined.LightMode, "Keep screen on", tint = if (keepOn) Hud.Amber else Hud.TextDim)
-        }
     }
 }

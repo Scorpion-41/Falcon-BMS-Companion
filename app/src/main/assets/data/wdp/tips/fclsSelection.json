@@ -1,0 +1,9 @@
+{
+ "tvwSelection": "The package BMS printed the briefing for and its flights, yours marked. Tap a flight to plan it on the card; tap the package line to fold or open it.",
+ "txtPackage": "A package number to find; Enter or Find looks it up. The list holds the package BMS printed the briefing for.",
+ "btnFind": "Finds the package number typed beside it, and opens it in the list.",
+ "lblCurrTime": "Your flight's take-off time, from the briefing.",
+ "btnExpand": "Opens the package in the list, to show its flights.",
+ "btnCollapseAll": "Folds the package in the list to its one line.",
+ "btnAtoTargetList": "Closes this window and opens the ATO Target List: the targets your side's flights are tasked to attack in the save, with each flight's TOT."
+}

@@ -96,7 +96,15 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-private data class HubTile(val title: String, val subtitle: String, val icon: ImageVector, val color: Color, val route: String)
+/** [at] opens the Reference section on one of its pages; null for a section that is a page of its own. */
+private data class HubTile(
+    val title: String,
+    val subtitle: String,
+    val icon: ImageVector,
+    val color: Color,
+    val route: String,
+    val at: ReferenceTab? = null,
+)
 
 @Composable
 private fun TileGrid(tiles: List<HubTile>, nav: NavHostController, minTile: androidx.compose.ui.unit.Dp = 160.dp) {
@@ -110,7 +118,7 @@ private fun TileGrid(tiles: List<HubTile>, nav: NavHostController, minTile: andr
                             Modifier.weight(1f).height(118.dp).clip(RoundedCornerShape(16.dp))
                                 .background(Brush.linearGradient(listOf(t.color.copy(alpha = 0.16f), Hud.Surface)))
                                 .border(1.dp, t.color.copy(alpha = 0.35f), RoundedCornerShape(16.dp))
-                                .clickable { nav.go(t.route) }.padding(14.dp),
+                                .clickable { t.at?.let { a -> openAt(a) }; nav.go(t.route) }.padding(14.dp),
                         ) {
                             Icon(t.icon, null, tint = t.color, modifier = Modifier.size(28.dp))
                             Spacer(Modifier.weight(1f))
@@ -171,10 +179,11 @@ fun HomeScreen(nav: NavHostController) {
                 Text("REFERENCE", style = LocalExtra.current.overline, color = Hud.Amber)
                 TileGrid(
                     listOf(
-                        HubTile("Aircraft", "Flyable types & loadouts", Icons.Default.Flight, Hud.Amber, Routes.ARSENAL),
-                        HubTile("Threat Guide", "SAM · AAA · fighters · ships", Icons.Default.Radar, Hud.Red, Routes.THREATS),
+                        // the order of the Reference section's own pages: Airfields first
+                        HubTile("Airfields", "Runways · ILS · TACAN", Icons.Default.LocalAirport, Hud.Cyan, Routes.REFERENCE, ReferenceTab.AIRFIELDS),
+                        HubTile("Threat Guide", "SAM · AAA · fighters · ships", Icons.Default.Radar, Hud.Red, Routes.REFERENCE, ReferenceTab.THREATS),
+                        HubTile("Aircraft", "Flyable types & loadouts", Icons.Default.Flight, Hud.Amber, Routes.REFERENCE, ReferenceTab.ARSENAL),
                         HubTile("HARM & RWR", "ALIC codes · RWR symbols", Icons.Default.Warning, Hud.Green, Routes.HARM),
-                        HubTile("Airfields", "Runways · ILS · TACAN", Icons.Default.LocalAirport, Hud.Cyan, Routes.AIRPORTS),
                         HubTile("Encyclopedia", "TacRef database", Icons.Default.MenuBook, Hud.Blue, Routes.ENCY),
                         HubTile("Favorites", "Your bookmarks", Icons.Default.Star, Hud.Amber, Routes.FAVORITES),
                     ),

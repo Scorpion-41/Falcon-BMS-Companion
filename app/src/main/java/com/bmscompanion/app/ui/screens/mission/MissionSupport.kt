@@ -30,8 +30,10 @@ import com.bmscompanion.app.data.Repo
 import com.bmscompanion.app.data.mission.Briefing
 import com.bmscompanion.app.data.mission.Contact
 import com.bmscompanion.app.data.mission.Live
+import com.bmscompanion.app.data.mission.MergedMission
 import com.bmscompanion.app.data.mission.MissionLink
 import com.bmscompanion.app.data.mission.Preset
+import com.bmscompanion.app.data.mission.SupportTrack
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.geometry.Offset
@@ -72,6 +74,16 @@ data class SupportAsset(
     val yours: Boolean,
     /** every comm ladder line for this callsign (AWACS: check-in and tactical), with its preset channel */
     val radios: List<SupportRadio> = emptyList(),
+    // 1.3.8
+    /**
+     * Where the asset is planned to be before anybody is airborne: for your flight's tanker, the Refuel steerpoint of
+     * the believed route ([refuelStation]); otherwise the briefing's own sentence ("20 nm northeast of Larissa").
+     */
+    val station: SupportStation? = null,
+    /** [station] from bullseye ("045/32"), when a bullseye is known (live, or the save's before 3D) */
+    val stationLoc: String? = null,
+    /** [uhfCh] is a preset the plan sent from the Planner changed (the channel now holds this asset's frequency) */
+    val uhfChFromPlan: Boolean = false,
 )
 
 /** One radio of a support asset: "Check-In" 342.275 on preset 5. */
@@ -113,6 +125,12 @@ private val JSTARS_TYPES = Regex("E-?8|JSTAR", RegexOption.IGNORE_CASE)
 
 private fun norm(s: String?) = s.orEmpty().lowercase().filter { it.isLetterOrDigit() }
 
+/**
+ * A comm ladder callsign as a key: BMS prints the tanker's TACAN into the same cell ("Copper2 (TCN: 059Y)"), which
+ * kept the ladder row from ever matching the tanker it names.
+ */
+private fun callKey(s: String?) = norm(s?.substringBefore('('))
+
 private fun roleOf(text: String?): String? = when {
     text == null -> null
     Regex("tanker|refuel|aar", RegexOption.IGNORE_CASE).containsMatchIn(text) -> "Tanker"
@@ -139,10 +157,28 @@ private fun tieOn(tacan: String): String? {
     return "${if (ch > 63) ch - 63 else ch + 63}${m.groupValues[2]}"
 }
 
-fun supportAssets(b: Briefing?, live: Live?, contacts: List<Contact>, radio: List<RadioEntry>, bull: Pair<Double, Double>?, uhfPresets: List<Preset> = emptyList()): List<SupportAsset> {
+/**
+ * The support table. [uhfPresets] are the presets the pilot will have (the plan's, when one is applied), used to find
+ * the channel a support frequency is on; [changedUhf] the channels the plan changed, so a ladder channel that no
+ * longer holds the asset's frequency is looked up again. [stations] are the stations the briefing's sentences name
+ * ([plannedStations]); [refuel] is your flight's Refuel steerpoint, which beats the sentence for your tanker.
+ */
+fun supportAssets(
+    b: Briefing?, live: Live?, contacts: List<Contact>, radio: List<RadioEntry>, bull: Pair<Double, Double>?, uhfPresets: List<Preset> = emptyList(),
+    stations: List<SupportStation> = emptyList(), refuel: SupportStation? = null, changedUhf: Set<Int> = emptySet(),
+    tracks: List<SupportTrack> = emptyList(),
+): List<SupportAsset> {
+    fun num(s: String?) = s?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull()
     fun presetOf(freq: String?): Int? {
-        val f = freq?.filter { it.isDigit() || it == '.' }?.toDoubleOrNull() ?: return null
-        return uhfPresets.firstOrNull { p -> p.freq.filter { it.isDigit() || it == '.' }.toDoubleOrNull()?.let { kotlin.math.abs(it - f) < 0.001 } == true }?.ch
+        val f = num(freq) ?: return null
+        return uhfPresets.firstOrNull { p -> num(p.freq)?.let { kotlin.math.abs(it - f) < 0.001 } == true }?.ch
+    }
+    /** the ladder's channel, unless the plan changed that preset away from this frequency: then where it is now */
+    fun channel(ch: Int?, freq: String?): Pair<Int?, Boolean> {
+        if (ch == null || ch !in changedUhf || freq == null) return (ch ?: presetOf(freq)) to false
+        val now = num(uhfPresets.firstOrNull { it.ch == ch }?.freq)
+        val f = num(freq)
+        return if (now != null && f != null && kotlin.math.abs(now - f) < 0.001) ch to false else presetOf(freq) to true
     }
     data class Row(val role: String, val callsign: String, var aircraft: String?, var notes: String?)
     val rows = ArrayList<Row>()
@@ -158,6 +194,8 @@ fun supportAssets(b: Briefing?, live: Live?, contacts: List<Contact>, radio: Lis
         val role = roleOf(f.role) ?: roleOf(f.task) ?: supportRole(f.aircraft) ?: return@forEach
         add(role, f.callsign, f.aircraft, listOfNotNull(f.takeoff?.let { "T/O $it" }, f.push?.let { "on station $it" }).joinToString(" · ").ifBlank { null })
     }
+    // the tanker and AWACS the campaign gave your flight's package (a save's flight with no printed briefing)
+    tracks.filter { it.yours }.forEach { t -> t.callsign?.takeIf { it.isNotBlank() }?.let { add(roleOf(t.role) ?: supportRole(t.role) ?: t.role, it, null, null) } }
     live?.voice?.tanker?.takeIf { it.isNotBlank() }?.let { add("Tanker", it, null, null) }
     live?.voice?.awacs?.takeIf { it.isNotBlank() }?.let { add("AWACS", it, null, null) }
     // airborne support seen on the AWACS feed that the briefing doesn't list
@@ -168,11 +206,12 @@ fun supportAssets(b: Briefing?, live: Live?, contacts: List<Contact>, radio: Lis
     val order = listOf("Tanker", "AWACS", "JSTARS", "FAC")
     rows.sortBy { order.indexOf(it.role).let { i -> if (i < 0) 99 else i } }
     var tankerIndex = 0
+    val tankers = rows.count { it.role == "Tanker" }
     return rows.map { r ->
-        val comm = b?.comms?.firstOrNull { norm(it.callsign) == norm(r.callsign) && it.uhf != null } ?: b?.comms?.firstOrNull { norm(it.callsign) == norm(r.callsign) }
+        val comm = b?.comms?.firstOrNull { callKey(it.callsign) == norm(r.callsign) && it.uhf != null } ?: b?.comms?.firstOrNull { callKey(it.callsign) == norm(r.callsign) }
         val radioEntry = radio.firstOrNull { norm(it.agency) == norm(r.callsign) }
         val liveContact = contacts.firstOrNull { norm(it.group) == norm(r.callsign) && it.kind == "air" }
-        val explicit = listOfNotNull(r.notes, comm?.notes).firstNotNullOfOrNull { TACAN_RX.find(it)?.value?.replace(" ", "") }
+        val explicit = listOfNotNull(r.notes, comm?.notes, comm?.callsign).firstNotNullOfOrNull { TACAN_RX.find(it)?.value?.replace(" ", "") }
         var tacan = explicit
         var isDefault = false
         if (r.role == "Tanker") {
@@ -182,29 +221,135 @@ fun supportAssets(b: Briefing?, live: Live?, contacts: List<Contact>, radio: Lis
             }
             tankerIndex++
         }
+        val yours = norm(r.callsign) == norm(live?.voice?.tanker) || norm(r.callsign) == norm(live?.voice?.awacs)
+        // the campaign's own planned track for this callsign is where it will be; else your tanker is where your route
+        // refuels, which beats any sentence; the others are where the briefing says
+        val station = stations.firstOrNull { it.fromText == TRACK_STATION && norm(it.callsign) == norm(r.callsign) }
+            ?: if (r.role == "Tanker" && refuel != null && (yours || tankers == 1)) refuel.copy(callsign = r.callsign)
+            else stations.firstOrNull { norm(it.callsign) == norm(r.callsign) }
+        val (uhfCh, moved) = channel(comm?.uhfCh, comm?.uhf ?: radioEntry?.uhf1)
         SupportAsset(
             role = r.role, callsign = r.callsign, aircraft = r.aircraft ?: liveContact?.name,
             tacan = tacan, tacanDefault = isDefault, tieOn = if (r.role == "Tanker") tacan?.let(::tieOn) else null,
-            uhf = comm?.uhf ?: radioEntry?.uhf1, uhfCh = comm?.uhfCh ?: presetOf(comm?.uhf ?: radioEntry?.uhf1), vhf = comm?.vhf ?: radioEntry?.vhf,
+            uhf = comm?.uhf ?: radioEntry?.uhf1, uhfCh = uhfCh, vhf = comm?.vhf ?: radioEntry?.vhf,
             notes = r.notes, live = liveContact,
             loc = liveContact?.let { c -> bull?.let { bra(it.first, it.second, c.x, c.y) } },
-            yours = norm(r.callsign) == norm(live?.voice?.tanker) || norm(r.callsign) == norm(live?.voice?.awacs),
-            radios = b?.comms.orEmpty().filter { norm(it.callsign) == norm(r.callsign) && (it.uhf != null || it.vhf != null) }
-                .map { SupportRadio(it.agency.trimEnd(':'), it.uhf, it.uhfCh ?: presetOf(it.uhf), it.vhf) }
+            yours = yours,
+            radios = b?.comms.orEmpty().filter { callKey(it.callsign) == norm(r.callsign) && (it.uhf != null || it.vhf != null) }
+                .map { SupportRadio(it.agency.trimEnd(':'), it.uhf, channel(it.uhfCh, it.uhf).first, it.vhf) }
                 .ifEmpty { listOfNotNull(radioEntry?.takeIf { it.uhf1 != null }?.let { SupportRadio("Radio plan", it.uhf1, presetOf(it.uhf1), it.vhf) }) },
+            station = station,
+            stationLoc = station?.let { s -> bull?.let { bra(it.first, it.second, s.x, s.y) } },
+            uhfChFromPlan = moved,
         )
     }
 }
 
-/** Support assets for the current mission, refreshed with the live data. */
+/**
+ * Your flight's Refuel steerpoint (action 4), placed: where the flight meets its tanker. From the merged mission
+ * (PlanMerge: the plan, the cartridge, BMS's own mission file — which is only there once it is provably the briefed
+ * flight's), else BMS's mission file itself, else the flight the Planner opened from a save. Null when none is placed.
+ */
+fun refuelStation(merged: MergedMission): SupportStation? {
+    fun at(n: Int, x: Double, y: Double) = SupportStation("", "Tanker", x, y, "your route's Refuel steerpoint $n")
+    merged.allSteerpoints.firstOrNull { it.action == 4 && it.hasPos && it.onRoute }?.let { return at(it.n, it.x, it.y) }
+    merged.route?.steerpoints?.firstOrNull { it.action == 4 && (it.x != 0.0 || it.y != 0.0) }?.let { return at(it.n, it.x, it.y) }
+    merged.plan?.flight?.route?.firstOrNull { it.action == 4 && (it.x != 0.0 || it.y != 0.0) }?.let { return at(it.n, it.x, it.y) }
+    return null
+}
+
+/**
+ * The tanker and AWACS stations of the merged mission: your tanker at your route's Refuel steerpoint when the briefing
+ * has one tanker (the route places it exactly, and beats the sentence), every other station where the briefing's
+ * support section says ("orbiting 20 nm northeast of Larissa", [stationFromNotes]), resolved against this theater's
+ * airfields ([set]) and towns ([geo]). A sentence naming a place this theater does not have is left out.
+ */
+fun plannedStations(
+    merged: MergedMission, set: com.bmscompanion.app.data.AirportSet?, geo: com.bmscompanion.app.data.GeoLayers?,
+    tracks: List<SupportTrack> = emptyList(),
+): List<SupportStation> {
+    val fromTracks = tracks.mapNotNull(::trackStation)
+    val entries = merged.briefing?.support.orEmpty()
+    // a save's flight with no printed briefing has no support sentences: its package's own tracks are the stations
+    if (entries.isEmpty()) return fromTracks.filter { st -> tracks.any { it.yours && norm(it.callsign) == norm(st.callsign) } }
+    fun one(name: String): Pair<Double, Double>? {
+        val n = name.trim().lowercase()
+        if (n.length < 3) return null
+        set?.airports?.firstOrNull { it.name.lowercase().startsWith(n) || it.icao?.lowercase() == n }?.let { return it.x to it.y }
+        geo?.places?.firstOrNull { it.n.lowercase() == n }?.let { return it.x to it.y }
+        return geo?.places?.firstOrNull { it.n.lowercase().startsWith(n) }?.let { it.x to it.y }
+    }
+    // a briefing writes a name the way a pilot says it ("Larissa Airbase"), a map the way it is: try both
+    fun place(name: String): Pair<Double, Double>? = one(name) ?: name.trim().substringBefore(' ').takeIf { it.length >= 3 }?.let { one(it) }
+    val refuel = refuelStation(merged)
+    val tankers = entries.count { it.role?.contains("tanker", true) == true }
+    return entries.mapNotNull { e ->
+        val role = e.role ?: return@mapNotNull null
+        if (!role.contains("tanker", true) && !role.contains("awacs", true) && !role.contains("jstars", true)) return@mapNotNull null
+        fromTracks.firstOrNull { norm(it.callsign) == norm(e.callsign) }?.let { return@mapNotNull it.copy(role = role) }
+        if (refuel != null && tankers == 1 && role.contains("tanker", true)) return@mapNotNull refuel.copy(callsign = e.callsign, role = role)
+        val (at, text) = stationFromNotes(e.notes, ::place) ?: return@mapNotNull null
+        SupportStation(e.callsign, role, at.first, at.second, text)
+    }
+}
+
+/** What a station placed on the campaign's own track says it is. */
+const val TRACK_STATION = "its planned track (the campaign's)"
+
+/**
+ * A planned track's station: the middle of the legs it holds on, or null when the campaign gave it none. The place a
+ * tanker or an AWACS will actually be, which beats both the briefing's sentence and your route's Refuel steerpoint
+ * (on the 4.38.1 fixture the Refuel steerpoint sits on another tanker's track than the one the briefing names).
+ */
+fun trackStation(t: SupportTrack): SupportStation? {
+    val on = t.points.filter { it.station }
+    if (on.isEmpty() || t.callsign.isNullOrBlank()) return null
+    return SupportStation(t.callsign, t.role, on.map { it.x }.average(), on.map { it.y }.average(), TRACK_STATION)
+}
+
+/**
+ * The tanker and AWACS tracks to draw: the campaign's, as the PC read them for the briefed flight; with none (no
+ * printed briefing, so no believed route) the tracks of the package's own tanker and AWACS that the save's flight
+ * the Planner sent carries — the WDP-only path.
+ */
+fun plannedTracks(tracks: List<SupportTrack>, merged: MergedMission): List<SupportTrack> {
+    if (tracks.isNotEmpty()) return tracks
+    val plan = merged.plan ?: return emptyList()
+    val flight = plan.flight ?: return emptyList()
+    val its = merged.fromSave || merged.printed?.let { com.bmscompanion.app.data.mission.PlanMerge.sameFlight(it, plan) } == true
+    if (!its) return emptyList()
+    return flight.support.filter { it.track.size >= 2 && it.callsign.isNotBlank() }
+        .map { SupportTrack(role = it.role, callsign = it.callsign, yours = true, points = it.track) }
+}
+
+/**
+ * Support assets for the current mission, refreshed with the live data: from the merged mission (the printed
+ * briefing, or the save's flight the Planner sent; the plan's presets), with each station placed before 3D.
+ */
 @Composable
 fun rememberSupportAssets(env: MissionEnv): List<SupportAsset> {
-    val mission by MissionLink.mission.collectAsState()
+    val merged = rememberMerged()
     val live by MissionLink.live.collectAsState()
     val contacts by MissionLink.contacts.collectAsState()
     val radio by produceState(emptyList<RadioEntry>(), env.theater?.radioSet) { value = env.theater?.radioSet?.takeIf { it.isNotBlank() }?.let { Repo.radio(it) }.orEmpty() }
+    // the theater's towns, so "20 nm northeast of Larissa" can be turned back into a place
+    val geo by produceState<com.bmscompanion.app.data.GeoLayers?>(null, env.theater?.mapId) {
+        value = env.theater?.mapId?.let { runCatching { Repo.geo(it) }.getOrNull() }
+    }
+    val mission by MissionLink.mission.collectAsState()
     val ctcs = contacts?.contacts.orEmpty()
-    return remember(mission, live?.voice, ctcs, radio) { supportAssets(mission?.briefing, live, ctcs, radio, bullseye(live, ctcs), mission?.dtc?.uhf.orEmpty()) }
+    return remember(merged, live?.voice, ctcs, radio, geo, env.set, mission?.tracks) {
+        val tracks = plannedTracks(mission?.tracks.orEmpty(), merged)
+        val uhf = merged.presets.filter { it.band == "UHF" }.map { Preset(it.ch, it.freq, it.comment) }
+        // before 3D the save's own bullseye stands in, as on the map
+        val bull = bullseye(live, ctcs) ?: merged.saveBullseye?.takeIf { !merged.inJet }
+        supportAssets(
+            merged.briefing, live, ctcs, radio, bull, uhf,
+            stations = plannedStations(merged, env.set, geo, tracks), refuel = refuelStation(merged),
+            changedUhf = merged.presets.filter { it.band == "UHF" && it.changed }.map { it.ch }.toSet(),
+            tracks = tracks,
+        )
+    }
 }
 
 @Composable
@@ -262,15 +407,40 @@ private fun WideRow(a: SupportAsset) {
             }
             Column(Modifier.width(96.dp)) {
                 Text(a.uhf ?: "—", style = LocalExtra.current.mono, color = if (a.uhf != null) Hud.Amber else Hud.TextFaint)
-                listOfNotNull(a.uhfCh?.let { "ch $it" }, a.vhf?.let { "V $it" }).joinToString(" · ").takeIf { it.isNotBlank() }?.let { Text(it, fontSize = 10.sp, color = Hud.TextDim, maxLines = 1) }
+                listOfNotNull(a.uhfCh?.let { "ch $it" } ?: if (a.uhfChFromPlan) "no preset" else null, a.vhf?.let { "V $it" }).joinToString(" · ").takeIf { it.isNotBlank() }?.let {
+                    Text(it, fontSize = 10.sp, color = if (a.uhfChFromPlan) PlanInk else Hud.TextDim, maxLines = 1)
+                }
             }
             Column(Modifier.width(70.dp)) {
-                Text(a.loc ?: "—", style = LocalExtra.current.mono, color = if (a.loc != null) Hud.Cyan else Hud.TextFaint)
-                a.live?.let { Text(flightLevel(it.altFt), fontSize = 10.sp, color = Hud.TextDim) }
+                val loc = a.loc ?: a.stationLoc
+                Text(loc ?: "—", style = LocalExtra.current.mono, color = if (a.loc != null) Hud.Cyan else if (loc != null) Hud.Cyan.copy(alpha = 0.7f) else Hud.TextFaint)
+                a.live?.let { Text(flightLevel(it.altFt), fontSize = 10.sp, color = Hud.TextDim) } ?: a.stationLoc?.let { Text("station", fontSize = 10.sp, color = Hud.TextDim) }
             }
         }
         RadiosLine(a, Modifier.padding(start = 70.dp, top = 3.dp))
+        StationLine(a, Modifier.padding(start = 70.dp, top = 2.dp))
         a.notes?.let { Text(it, fontSize = 11.sp, color = Hud.TextDim, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 70.dp, top = 2.dp)) }
+    }
+}
+
+/**
+ * "STATION  your route's Refuel steerpoint 6" / "20 nm northeast of Larissa": where the asset is planned to be, and
+ * what that came from. The channel the plan moved is said here too, because the ladder's channel is no longer it.
+ */
+@Composable
+private fun StationLine(a: SupportAsset, modifier: Modifier = Modifier) {
+    val st = a.station
+    if (st == null && !a.uhfChFromPlan) return
+    Column(modifier) {
+        if (st != null) Row {
+            Text("STATION", Modifier.alignByBaseline(), fontSize = 9.sp, color = Hud.TextFaint, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.width(8.dp))
+            Text(st.fromText + (a.stationLoc?.let { " · bullseye $it" } ?: ""), Modifier.alignByBaseline(), fontSize = 11.sp, color = Hud.TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        if (a.uhfChFromPlan) Text(
+            "The plan changed the briefed preset for ${a.uhf ?: "this frequency"}: " + (a.uhfCh?.let { "it is on preset $it now" } ?: "no preset holds it now, dial it manually") + ".",
+            fontSize = 11.sp, color = PlanInk, maxLines = 2, overflow = TextOverflow.Ellipsis,
+        )
     }
 }
 
@@ -308,9 +478,10 @@ private fun CompactRow(a: SupportAsset) {
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             Stat("TACAN", (a.tacan ?: "—") + if (a.tacanDefault) "*" else "", a.tieOn?.let { "set $it" }, Hud.Text)
             Stat("UHF", a.uhf ?: "—", a.uhfCh?.let { "ch $it" }, Hud.Amber)
-            Stat("LOC", a.loc ?: "—", a.live?.let { flightLevel(it.altFt) }, Hud.Cyan)
+            Stat("LOC", a.loc ?: a.stationLoc ?: "—", a.live?.let { flightLevel(it.altFt) } ?: a.stationLoc?.let { "station" }, Hud.Cyan)
         }
         RadiosLine(a, Modifier.padding(top = 4.dp))
+        StationLine(a, Modifier.padding(top = 3.dp))
         a.notes?.let { Text(it, fontSize = 11.sp, color = Hud.TextDim, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 3.dp)) }
     }
 }

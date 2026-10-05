@@ -40,7 +40,7 @@ class ExportedKneeboard {
         ?.let { File(it) }
         ?.takeIf { it.isDirectory && File(it, "html_brief.exe").isFile }
 
-    /** Where BMS ships it, when the pilot has not said otherwise. */
+    /** Where it is looked for (`Tools\html_brief_win`, a separate download, not part of BMS) when the pilot has not said otherwise. */
     fun defaultDir(install: BmsInstall): String? =
         install.baseDir?.let { File(it, "Tools\\html_brief_win") }?.takeIf { File(it, "html_brief.exe").isFile }?.path
 
@@ -99,8 +99,8 @@ class ExportedKneeboard {
             // a briefing printed after the export means these pages are last flight's
             stale = exported > 0 && briefingModified > exported + 5_000,
             message = when {
-                root == null -> "No kneeboard exporter set up. BMS ships html_brief in Tools\\html_brief_win; set that " +
-                    "folder in Settings and its exported kneeboard appears here."
+                root == null -> "HTML Briefing not found. UOAF's HTML Briefing tool is a separate download; BMS Companion " +
+                    "looks for it in Tools\\html_brief_win. Set its folder in Settings and its exported kneeboard appears here."
                 pages.isEmpty() -> "The exporter is set up but has not written a kneeboard yet. Print the briefing in " +
                     "BMS, then export in the HTML Briefing window."
                 else -> null

@@ -13,7 +13,11 @@
  *   point  type 3   a taxi point; carries the taxiway letter, plus BranchIdx/RootIdx (see below)
  *   point  type 15  a point on a runway crossing, type 21 a hold short, type 2 where the route meets its runway,
  *                   type 1 the far end of that runway
- *   point  type 11  a parking spot with the size of aircraft it takes, type 12 a spot without
+ *   point  type 11  a parking spot for a **small** aircraft, type 12 a spot with no size limit — **large**. That
+ *                   is what the parking charts the theaters ship print as an encircled and a boxed number, and the
+ *                   two agree on 101 of the 103 spots those four charts carry (see charts/ and src/apcverify.mjs).
+ *                   A spot whose ParkingPointGroup is -1 is the field's **alert cell** — the red numbers on the
+ *                   same charts: all 8 of the Q spots printed across those charts carry it and nothing else does.
  *
  * **The point list is a walk of a tree, not one chain.** A side taxiway is stored as its own run; the run's first
  * point carries RootIdx back to the point it leaves, and that point carries BranchIdx to the run. Joining the list
@@ -220,6 +224,7 @@ function buildRoute(header, points) {
       w: p.maxWidth ? Math.round(p.maxWidth) : 0,
       s: p.type === TYPE.PARK_SIZED ? 1 : 0,
       group: p.group,
+      q: p.group === -1 ? 1 : 0,   // the alert cell; see the note at the top of the file
     });
   }
 
@@ -247,48 +252,26 @@ function buildRoute(header, points) {
 }
 
 /**
- * Numbers the ramp spots the way BMS does — which is **not** the order they are stored in.
+ * Numbers the ramp spots the way BMS's Ground controller says them: a plain count of the network's parking points
+ * (type 11 and 12, the alert cell included) in **storage order** from the network's first point, starting at 0.
  *
- * The route is a tree of runs (see the note at the top). Numbering walks it breadth first: the run that carries the
- * line-up point first, then the runs that branch off it, then the runs that branch off those. Among the runs that
- * leave the same parent, the order is by `ParkingPointGroup`, with -1 — BMS's "no group" — sorted last.
+ * Read from the sim's own code (Falcon BMS.pdb ships beside the exe): Ground's "park nn" (call 517) and
+ * `ATCBrain::GetParkingPtNbr` both count the parking points from the header's first point up to the spot, minus
+ * one. After landing, the count is in the **taxi-in** network — the route of the reciprocal end, whose line-up is
+ * where you roll out — which the app picks (`taxiInRoute` in TaxiRouting.kt). Every point of type 11 or 12 is
+ * counted, including one the chart cannot hang off a lane, so a number can be skipped but never shifted.
  *
- * Checked against the parking charts the theaters ship, which print a latitude and longitude per spot: Araxos
- * runway 36 (24 spots), Souda 11 (24), Tirana 17 (27) and Skopje 16 (28) all come out exactly right. Plain storage
- * order gets Araxos wrong; a breadth-first walk that ignores the groups gets Tirana and Skopje wrong. Where one of
- * those charts disagrees with the field's own data — Yenihesir's is drawn for a layout this install no longer has —
- * the data wins, because that is what the sim flies.
+ * The parking charts the theaters ship agree at Souda, Tirana and Skopje; Araxos's is a drawing numbered another
+ * way (breadth first by ParkingPointGroup, -1 last) and differs at six spots — Ground says the count.
  */
 function numberParking(nodes, parking) {
-  if (!parking.length) return;
-  const starts = new Set([0]);
-  for (const n of nodes) if (n.branch != null && n.branch > 0 && n.branch < nodes.length) starts.add(n.branch);
-  const bounds = [...starts].sort((a, b) => a - b);
-  const runs = bounds.map((from, i) => ({ from, to: (bounds[i + 1] ?? nodes.length) - 1 }));
-  const runOf = (k) => runs.findIndex((r) => k >= r.from && k <= r.to);
-  for (const r of runs) {
-    r.children = nodes.slice(r.from, r.to + 1)
-      .filter((n) => n.branch != null && n.branch > 0 && n.branch < nodes.length)
-      .map((n) => runOf(n.branch))
-      .filter((i) => i >= 0);
-    r.spots = parking.filter((s) => s.k >= r.from && s.k <= r.to);
-    const groups = r.spots.map((s) => (s.group == null ? 0 : s.group));
-    r.key = groups.length ? Math.max(...groups.map((g) => (g < 0 ? Number.MAX_SAFE_INTEGER : g))) : 0;
-  }
-  const order = [];
-  const seen = new Set();
-  const queue = [0];
-  while (queue.length) {
-    const i = queue.shift();
-    if (i == null || seen.has(i)) continue;
-    seen.add(i);
-    order.push(...runs[i].spots);
-    queue.push(...runs[i].children.filter((c) => !seen.has(c)).sort((a, b) => (runs[a].key - runs[b].key) || (a - b)));
-  }
-  for (let i = 0; i < runs.length; i++) if (!seen.has(i)) order.push(...runs[i].spots);
-  order.forEach((s, i) => { s.n = i; });
+  let count = -1;
+  const byPoint = new Map();
+  for (const p of nodes) if (PARKING_TYPES.has(p.type)) byPoint.set(p.k, ++count);
+  for (const s of parking) s.n = byPoint.get(s.k);
   parking.sort((a, b) => a.n - b.n);
-  for (const s of parking) delete s.group;   // it has done its job; it is not chart data
+  // The group has done its job and is not chart data — but -1 is, so it is kept as [q] first.
+  for (const s of parking) { if (!s.q) delete s.q; delete s.group; }
 }
 
 /**
@@ -529,8 +512,8 @@ export async function buildAirfields(th, airports, geo, db) {
       }
     }
 
-    // A ship is drawn as a ship: its real flight deck, the landing area at its published angle, the catapults and
-    // the island. No ramp — a carrier turns, and its spot numbers turn with it. See ships.mjs.
+    // A ship is drawn as a ship: its own model's flight deck, with the landing area, the catapults, the lifts and
+    // the islands where the model has them. No ramp — a carrier turns, and its spot numbers turn with it. See ships.mjs.
     let ship = null;
     if (shipLike) {
       // the parking spots sit on the deck itself; the taxi points run out along the approach
@@ -541,11 +524,14 @@ export async function buildAirfields(th, airports, geo, db) {
       const spread = onDeck.length >= 4 ? onDeck : routes.flatMap((r) => r.nodes);
       const everything = routes.flatMap((r) => r.nodes).concat(runways.flatMap((r) => r.corners));
       const deckCourse = runways.slice().sort((a2, b2) => b2.lengthFt - a2.lengthFt)[0]?.ends?.[0]?.course ?? null;
-      const shapes = spread.length ? shipShapes(airport.name, spread, everything, deckCourse) : null;
+      // the full name too: "Carrier Wasp" is LHD-2 only by its full name, "US LHD 2 - WASP"
+      const shapes = shipShapes(`${airport.name} / ${airport.fullName || ''}`, spread, everything, deckCourse);
       if (shapes) {
         ship = {
           cls: shapes.cls, hull: shapes.hull, islands: shapes.islands,
           strip: shapes.strip, stripLine: shapes.stripLine, cats: shapes.cats, ski: shapes.ski,
+          // a deck drawn from the ship's own model: see ships.mjs
+          ...(shapes.marks ? { model: shapes.model, tone: shapes.tone, skiDeg: shapes.skiDeg, marks: shapes.marks } : {}),
         };
       }
     }

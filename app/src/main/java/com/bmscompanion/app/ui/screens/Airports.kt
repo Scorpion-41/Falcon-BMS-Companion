@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -113,27 +114,52 @@ fun bearingRange(ax: Double, ay: Double, bx: Double, by: Double): Pair<Double, D
     return brg to hypot(dn, de) / FT_PER_NM
 }
 
+/**
+ * The theater the app is set to, and the menu that changes it. [prominent] is the Reference section's own: taller,
+ * outlined in the theater colour and labelled THEATER, because it sits beside the section's four pages and has to
+ * read as a control of the same weight rather than as a caption. [fill] stretches it across the width it is given.
+ */
 @Composable
-fun TheaterPicker(current: String, onPick: (String) -> Unit) {
+fun TheaterPicker(current: String, modifier: Modifier = Modifier, prominent: Boolean = false, fill: Boolean = false, onPick: (String) -> Unit) {
     val index by produceState<DataIndex?>(null) { value = Repo.index() }
     var open by remember { mutableStateOf(false) }
     val t = index?.theaters?.firstOrNull { it.id == current }
-    Box {
-        Row(
-            Modifier.clip(RoundedCornerShape(10.dp)).background(Hud.Surface2).clickable { open = true }.padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(Icons.Default.Public, null, tint = Hud.Cyan, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(t?.name ?: current, color = Hud.Cyan, style = MaterialTheme.typography.labelLarge, maxLines = 1)
-            Icon(Icons.Default.ArrowDropDown, null, tint = Hud.TextDim)
+    Box(modifier) {
+        if (prominent) {
+            val shape = RoundedCornerShape(12.dp)
+            Row(
+                Modifier.then(if (fill) Modifier.fillMaxWidth() else Modifier).heightIn(min = 46.dp).clip(shape)
+                    .background(Hud.Cyan.copy(alpha = 0.10f)).border(1.dp, Hud.Cyan.copy(alpha = 0.6f), shape)
+                    .clickable { open = true }.padding(start = 12.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.Public, null, tint = Hud.Cyan, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                // stretched across the line, the name takes the room and the count and the arrow sit at the far end
+                Column(Modifier.weight(1f, fill = fill)) {
+                    Text("THEATER", color = Hud.TextDim, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1)
+                    Text(t?.name ?: current, color = Hud.Cyan, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                t?.airportCount?.let { Text("$it airfields", color = Hud.TextDim, fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(start = 10.dp)) }
+                Icon(Icons.Default.ArrowDropDown, "Change theater", tint = Hud.Cyan)
+            }
+        } else {
+            Row(
+                Modifier.clip(RoundedCornerShape(10.dp)).background(Hud.Surface2).clickable { open = true }.padding(start = 10.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.Public, null, tint = Hud.Cyan, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(t?.name ?: current, color = Hud.Cyan, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                Icon(Icons.Default.ArrowDropDown, null, tint = Hud.TextDim)
+            }
         }
         DropdownMenu(open, { open = false }) {
             index?.theaters?.filter { it.primary }?.forEach { th ->
                 DropdownMenuItem(
                     text = {
                         Column(Modifier.widthIn(max = 320.dp)) {
-                            Text(th.name)
+                            Text(th.name, color = if (th.id == current) Hud.Cyan else Color.Unspecified)
                             Text("${th.airportCount} airfields", fontSize = 11.sp, color = Hud.TextDim)
                         }
                     },
@@ -144,81 +170,103 @@ fun TheaterPicker(current: String, onPick: (String) -> Unit) {
     }
 }
 
+/** The `airports` route: the Reference section, open on Airfields. */
 @Composable
-fun AirportsScreen(nav: NavHostController) {
+fun AirportsScreen(nav: NavHostController) = ReferenceScreen(nav, ReferenceTab.AIRFIELDS)
+
+/** The theater and its airfields, loaded together, and nothing while a new theater loads: never one theater's map with another's fields. */
+@Composable
+private fun rememberTheaterAirports(theaterId: String): Pair<Theater, AirportSet>? {
+    val data by produceState<Pair<Theater, AirportSet>?>(null, theaterId) {
+        value = null
+        val th = Repo.theater(theaterId)
+        value = th?.let { it to Repo.airportSet(it.airportSet) }
+    }
+    return data?.takeIf { it.first.id == theaterId }
+}
+
+/**
+ * The Airfields page of the Reference section: the airfield list (with the airfield itself beside it on a wide
+ * screen), and the theater's Navaids and Radio as its own two sub-pages. The map is a page of the section now
+ * ([AirfieldsMapPage]), and the theater is chosen in the section's bar.
+ */
+@Composable
+internal fun AirfieldsPage(nav: NavHostController) {
     val theaterId = Repo.selectedTheater.value
-    val theater by produceState<Theater?>(null, theaterId) { value = Repo.theater(theaterId) }
-    val set by produceState<AirportSet?>(null, theater) { value = theater?.let { Repo.airportSet(it.airportSet) } }
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    val data = rememberTheaterAirports(theaterId)
+    var saved by rememberSaveable { mutableIntStateOf(0) }
+    val tab = saved.coerceIn(0, 2)
     var selected by rememberSaveable(theaterId) { mutableStateOf<Int?>(null) }
     val wide = isWide()
     val open: (Int) -> Unit = { id -> if (wide) selected = id else nav.go(Routes.airport(theaterId, id)) }
 
     val header: @Composable () -> Unit = {
-        BmsTopBar("Airfields", theater?.desc?.takeIf { it.isNotBlank() } ?: "Runways · ILS · TACAN · Radios", actions = {
-            TheaterPicker(theaterId) { Repo.setTheater(it) }
-            Spacer(Modifier.width(8.dp))
-        })
         TabRow(
             selectedTabIndex = tab, containerColor = Hud.Bg, contentColor = Hud.Amber,
-            modifier = if (wide) Modifier.widthIn(max = 640.dp) else Modifier,
+            modifier = if (wide) Modifier.widthIn(max = 520.dp) else Modifier,
             indicator = { pos -> TabRowDefaults.SecondaryIndicator(Modifier.tabIndicatorOffset(pos[tab]), color = Hud.Amber) },
         ) {
-            listOf("Airfields", "Map", "Navaids", "Radio").forEachIndexed { i, l ->
-                Tab(tab == i, { tab = i }, text = { Text(l, maxLines = 1) }, unselectedContentColor = Hud.TextDim)
+            listOf("Airfields", "Navaids", "Radio").forEachIndexed { i, l ->
+                Tab(tab == i, { saved = i }, text = { Text(l, maxLines = 1) }, unselectedContentColor = Hud.TextDim)
             }
         }
     }
 
     if (wide) {
-        // Tablet landscape: full-width tabs; list+detail, or a full-size map with a detail side panel.
-        var mapSelected by rememberSaveable(theaterId) { mutableStateOf<Int?>(null) }
-        LaunchedEffect(set, wide) { if (selected == null) set?.airports?.firstOrNull()?.let { selected = it.id } }
+        // Tablet landscape and the PC: the list with the airfield beside it; Navaids and Radio centred.
+        LaunchedEffect(data, wide) { if (selected == null) data?.second?.airports?.firstOrNull()?.let { selected = it.id } }
         Column(Modifier.fillMaxSize()) {
             header()
-            val s = set
-            val th = theater
-            if (s == null || th == null) { LoadingBox(); return@Column }
-            val divider: @Composable () -> Unit = { Box(Modifier.width(1.dp).fillMaxHeight().background(Hud.Outline.copy(alpha = 0.5f))) }
+            val (th, s) = data ?: run { LoadingBox(); return@Column }
             when (tab) {
                 0 -> Row(Modifier.fillMaxSize()) {
                     Box(Modifier.width(400.dp).fillMaxHeight()) { AirportList(s.airports, selected) { selected = it } }
-                    divider()
+                    Box(Modifier.width(1.dp).fillMaxHeight().background(Hud.Outline.copy(alpha = 0.5f)))
                     Box(Modifier.weight(1f).fillMaxHeight()) { selected?.let { AirportDetail(nav, theaterId, it, null) } ?: EmptyState("Select an airfield") }
                 }
-                1 -> Row(Modifier.fillMaxSize()) {
-                    Box(Modifier.weight(1f).fillMaxHeight()) { AirportMap(th, s, directOpen = true, onOpen = { mapSelected = it }) }
-                    mapSelected?.let { id ->
-                        divider()
-                        Box(Modifier.width(460.dp).fillMaxHeight()) { androidx.compose.runtime.key(id) { AirportDetail(nav, theaterId, id) { mapSelected = null } } }
-                    }
-                }
-                2 -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) { Box(Modifier.widthIn(max = 900.dp)) { NavaidList(s) } }
-                3 -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) { Box(Modifier.widthIn(max = 900.dp)) { RadioList(th) } }
+                1 -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) { Box(Modifier.widthIn(max = 900.dp)) { NavaidList(s) } }
+                else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) { Box(Modifier.widthIn(max = 900.dp)) { RadioList(th) } }
             }
         }
         return
     }
 
-    ListDetail(
-        selected = false,
-        listWidth = 400.dp,
-        list = {
-            Column(Modifier.fillMaxSize()) {
-                header()
-                val s = set
-                val th = theater
-                if (s == null || th == null) { LoadingBox(); return@Column }
-                when (tab) {
-                    0 -> AirportList(s.airports, selected, open)
-                    1 -> AirportMap(th, s, onOpen = { nav.go(Routes.airport(theaterId, it)) })
-                    2 -> NavaidList(s)
-                    3 -> RadioList(th)
+    Column(Modifier.fillMaxSize()) {
+        header()
+        val (th, s) = data ?: run { LoadingBox(); return@Column }
+        when (tab) {
+            0 -> AirportList(s.airports, selected, open)
+            1 -> NavaidList(s)
+            else -> RadioList(th)
+        }
+    }
+}
+
+/**
+ * The Map page of the Reference section: the theater map with every airfield, navaid and town on it and a search
+ * over all three. On a wide screen a tapped airfield opens beside the map; on a phone it opens as its own page.
+ */
+@Composable
+internal fun AirfieldsMapPage(nav: NavHostController) {
+    val theaterId = Repo.selectedTheater.value
+    val data = rememberTheaterAirports(theaterId)
+    var mapSelected by rememberSaveable(theaterId) { mutableStateOf<Int?>(null) }
+    val wide = isWide()
+    val (th, s) = data ?: run { LoadingBox(); return }
+    // a new theater is a new map: its own view, its own search, nothing picked
+    androidx.compose.runtime.key(theaterId) {
+        if (wide) {
+            Row(Modifier.fillMaxSize()) {
+                Box(Modifier.weight(1f).fillMaxHeight()) { AirportMap(th, s, directOpen = true, onOpen = { mapSelected = it }) }
+                mapSelected?.let { id ->
+                    Box(Modifier.width(1.dp).fillMaxHeight().background(Hud.Outline.copy(alpha = 0.5f)))
+                    Box(Modifier.width(460.dp).fillMaxHeight()) { androidx.compose.runtime.key(id) { AirportDetail(nav, theaterId, id) { mapSelected = null } } }
                 }
             }
-        },
-        detail = {},
-    )
+        } else {
+            AirportMap(th, s, onOpen = { nav.go(Routes.airport(theaterId, it)) })
+        }
+    }
 }
 
 @Composable
@@ -266,8 +314,16 @@ private fun AirportList(list: List<Airport>, selected: Int?, onOpen: (Int) -> Un
     }
 }
 
+private val carrierName = Regex("(^|\\s)(CV|CVN|LHD|USS|TAKR|Carrier)", RegexOption.IGNORE_CASE)
+/** name → is a carrier: the maps ask for every field on every frame, and compiling the pattern each time was a fifth of a pan's frame */
+private val carrierNames = HashMap<String, Boolean>()
+
 fun airportKind(a: Airport): String = when {
-    Regex("(^|\\s)(CV|CVN|LHD|USS|TAKR|Carrier)", RegexOption.IGNORE_CASE).containsMatchIn(a.name) -> "Carrier"
+    synchronized(carrierNames) { carrierNames.getOrPut(a.name) { carrierName.containsMatchIn(a.name) } } -> "Carrier"
+    // a ship whose name says nothing (the Falklands type their fleet "Airbase": HMS HERMES, SAO PAULO): the extractor
+    // gives a field its ATC elevation or the ground under its runways, and a ship neither — nothing stands on its deck
+    // and no ATC record has it (`--divertcheck` holds this against every ground chart's `ship`)
+    a.elevationFt == null && a.atc == null -> "Carrier"
     a.name.contains("highway", true) -> "Highway strip"
     else -> a.type
 }
@@ -278,7 +334,9 @@ private data class MapHit(val kind: String, val title: String, val sub: String, 
 @Composable
 /** [directOpen]: tablet mode — tapping an airfield (or an airfield search result) opens it straight away in the side panel. */
 private fun AirportMap(th: Theater, set: AirportSet, directOpen: Boolean = false, onOpen: (Int) -> Unit) {
-    val tm = rememberTextMeasurer()
+    // every label on the map is measured on every frame of a pan: the default cache of 8 laid each one out afresh
+    // each frame (a quarter of a tablet's frame time); 512 holds a theater's fields and navaids
+    val tm = rememberTextMeasurer(cacheSize = 512)
     val state = rememberMapState()
     var picked by remember { mutableStateOf<Airport?>(null) }
     // label settings (persisted): field labels 0=off 1=ICAO 2=name; towns, borders and map style are the shared MapLook settings
@@ -337,14 +395,19 @@ private fun AirportMap(th: Theater, set: AirportSet, directOpen: Boolean = false
             },
         ) { pr ->
             val placed = ArrayList<androidx.compose.ui.geometry.Rect>()
+            // off the screen: nothing to record (zoomed in, most of a theater's fields are)
+            fun off(p: Offset) = p.x < -320f || p.y < -40f || p.x > size.width + 40f || p.y > size.height + 40f
+            val navRing = Stroke(2f)
             set.navaids.forEach { n ->
                 val p = pr.toScreen(n.x, n.y)
-                drawCircle(Hud.Cyan, 5f, p, style = Stroke(2f))
+                if (off(p)) return@forEach
+                drawCircle(Hud.Cyan, 5f, p, style = navRing)
                 if (navLabels) placeLabel(tm, n.name + (n.tacan?.let { " " + it.label } ?: ""), p + Offset(8f, 4f), navStyle, placed)
             }
             // airfields first so their labels win over place names
             set.airports.forEach { a ->
                 val p = pr.toScreen(a.x, a.y)
+                if (off(p)) return@forEach
                 val col = when (airportKind(a)) { "Carrier" -> Hud.Blue; "Airbase" -> Hud.Amber; else -> Hud.Green }
                 val sel = picked?.id == a.id
                 drawCircle(Color.Black.copy(alpha = 0.6f), if (sel) 13f else 9f, p)
@@ -500,29 +563,15 @@ fun AirportDetail(nav: NavHostController, theaterId: String, id: Int, onBack: ((
             AdaptiveSplit(left = {
                 TagFlow {
                     Tag(airportKind(a), Hud.Amber, filled = true)
-                    a.elevationFt?.let { Tag("ELEV $it ft", Hud.TextDim) }
                     Tag("Theater mag decl 0°", Hud.TextFaint)
                 }
-                // Big nav tiles
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    BigTile("TACAN", a.tacan?.label ?: "—", a.tacan?.let { listOfNotNull(it.station, it.rangeNm?.let { r -> "$r nm" }).joinToString(" · ") }, Hud.Green, Modifier.weight(1f))
-                    BigTile("TOWER", a.freqs?.towerUhf ?: "—", a.freqs?.towerVhf?.let { "VHF $it" }, Hud.Amber, Modifier.weight(1f))
-                    val ils = a.runways.flatMap { r -> r.ends.filter { it.ils != null } }
-                    BigTile("ILS", ils.firstOrNull()?.ils ?: "—", ils.joinToString(" ") { it.designator }.ifBlank { null }, Hud.Cyan, Modifier.weight(1f))
-                }
                 GroundChartCard(nav, theaterId, a)
+                // what a divert needs, small, right under the chart in the chart's own column: the Info box
+                // (DivertBlock.kt), coordinates then radios; it took the place of the TACAN / Tower / ILS tiles and the
+                // Radio frequencies card, and carries their figures
+                DivertBlock(th!!, a)
                 AirportChartsCard(nav, th!!.airportSet, a.id, a.name)
-                a.freqs?.let { f ->
-                    SectionCard("Radio frequencies") {
-                        StatGrid(
-                            listOf(
-                                Stat("Ground UHF", f.groundUhf), Stat("Tower UHF", f.towerUhf, color = Hud.Amber), Stat("Tower VHF", f.towerVhf),
-                                Stat("Approach / Dep UHF", f.approachUhf), Stat("ATIS VHF", f.atisVhf), Stat("Base Ops UHF", f.opsUhf), Stat("LSO UHF", f.lsoUhf),
-                            ),
-                            minCell = 140.dp,
-                        )
-                    }
-                }
+                // no frequency card here: the Info box lists every one the field has
             }, right = {
                 if (a.runways.isNotEmpty()) {
                     SectionCard("Runways", accent = Hud.Cyan) {
@@ -593,7 +642,7 @@ private fun GroundChartCard(nav: NavHostController, theaterId: String, a: Airpor
     val f = field ?: return
     val open = { nav.go(Routes.groundChart(theaterId, a.id)) }
     SectionCard(
-        "Ground chart", accent = Hud.Green,
+        "Ground chart", Modifier.airfieldProbe("chart"), accent = Hud.Green,
         trailing = {
             Text(
                 "Open",
@@ -632,15 +681,6 @@ private fun GroundChartCard(nav: NavHostController, theaterId: String, a: Airpor
             else "Taxiways, hold shorts and every ramp spot. Tap for the full chart, a spot and the way to the runway.",
             color = Hud.TextDim, fontSize = 12.sp,
         )
-    }
-}
-
-@Composable
-private fun BigTile(label: String, value: String, sub: String?, color: Color, modifier: Modifier) {
-    Column(modifier.clip(RoundedCornerShape(14.dp)).background(color.copy(alpha = 0.10f)).border(1.dp, color.copy(alpha = 0.45f), RoundedCornerShape(14.dp)).padding(12.dp)) {
-        Text(label, style = LocalExtra.current.overline, color = color)
-        Text(value, style = LocalExtra.current.mono.copy(fontSize = 20.sp), color = Hud.Text, fontWeight = FontWeight.Bold, maxLines = 1)
-        if (!sub.isNullOrBlank()) Text(sub, fontSize = 11.sp, color = Hud.TextDim, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -724,11 +764,12 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.placeLabel(
     placed: MutableList<androidx.compose.ui.geometry.Rect>,
 ): Boolean {
     if (topLeft.x > size.width || topLeft.y > size.height) return false
-    val layout = tm.measure(text, style)
-    val r = androidx.compose.ui.geometry.Rect(topLeft.x, topLeft.y, topLeft.x + layout.size.width, topLeft.y + layout.size.height)
+    // laid out once and kept, and the shadow drawn once into a bitmap (MapText): a pan draws them all every frame
+    val l = com.bmscompanion.app.ui.components.MapText.label(this, tm, text, style)
+    val r = androidx.compose.ui.geometry.Rect(topLeft.x, topLeft.y, topLeft.x + l.width, topLeft.y + l.height)
     if (r.right < 0 || r.bottom < 0) return false
-    if (placed.any { it.overlaps(r) }) return false
+    for (k in placed.indices) if (placed[k].overlaps(r)) return false
     placed += r
-    drawText(layout, topLeft = topLeft)
+    com.bmscompanion.app.ui.components.MapText.draw(this, l, topLeft)
     return true
 }

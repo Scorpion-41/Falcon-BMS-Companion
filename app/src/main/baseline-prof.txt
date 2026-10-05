@@ -1,0 +1,5 @@
+Lcom/bmscompanion/app/**;
+HSPLcom/bmscompanion/app/MainActivity;->**(**)**
+HSPLcom/bmscompanion/app/BmsApp;->**(**)**
+HSPLcom/bmscompanion/app/ui/**;->**(**)**
+HSPLcom/bmscompanion/app/data/**;->**(**)**

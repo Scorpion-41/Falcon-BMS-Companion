@@ -1,6 +1,7 @@
 package com.bmscompanion.desktop.bridge
 
 import com.bmscompanion.app.data.mission.Live
+import com.bmscompanion.app.data.mission.MfdKey
 import com.bmscompanion.app.data.mission.NavPoint
 import com.bmscompanion.app.data.mission.Pilot
 import com.bmscompanion.app.data.mission.RwrContact
@@ -67,7 +68,7 @@ private object FD {
 }
 
 /** FlightData2 field offsets (header order). */
-private object FD2 {
+internal object FD2 {
     private val l = StructLayout()
     val nozzlePos2 = l.f(); val rpm2 = l.f(); val ftit2 = l.f(); val oilPressure2 = l.f()
     val navMode = l.b()
@@ -109,6 +110,25 @@ private object FD2 {
     val desiredRttFps = l.i()
     val sideSlipdeg = l.f(); val gsMax = l.f(); val gsMin = l.f()
     val size = l.totalSize
+}
+
+/**
+ * The MFD button legends BMS publishes (`OSBData` in FlightData.h, area "FalconSharedOsbMemoryArea").
+ *
+ * This is the **bezel**, not the display. BMS puts nothing about what the MFD is drawing into shared memory — no
+ * radar video, no targeting picture, no HSD symbology — but it does publish all 20 option-select-button legends of
+ * each MFD, two lines of up to seven characters each, and which of them the sim has boxed. That is enough to say
+ * which page each MFD is on and what every button would do, which is what a pilot glancing at a kneeboard wants.
+ *
+ * `OsbLabel` is `char line1[8]; char line2[8]; bool inverted;` — all of alignment 1, so 17 bytes with no padding,
+ * and `OSBData` is `leftMFD[20]` followed by `rightMFD[20]`.
+ */
+object Osb {
+    const val AREA = "FalconSharedOsbMemoryArea"
+    const val STRING_LEN = 8
+    const val LABEL_BYTES = STRING_LEN * 2 + 1
+    const val BUTTONS = 20
+    const val SIZE = LABEL_BYTES * BUTTONS * 2
 }
 
 /** StringData identifiers (enum StringIdentifier in FlightData.h), verified against a running BMS 4.38.1 with --dumpstrings. */
@@ -238,9 +258,32 @@ object SharedMemoryReader {
             )
         }
         snap.strings[StringId.VoiceHelpers]?.let { live = live.copy(voice = parseVoice(it)) }
+        // The MFD bezels are their own area and an older BMS may not publish them at all, so a missing one simply
+        // leaves both lists empty and the page says what it is missing.
+        readOsb()?.let { (l, r) -> live = live.copy(mfdLeft = l, mfdRight = r) }
         snap.live = live.copy(navPoints = snap.navPointStrings.mapNotNull(::parseNavPoint))
         return snap
     }
+
+    /** The two MFD bezels, left then right, or null when BMS is not publishing them. See [Osb]. */
+    private fun readOsb(): Pair<List<MfdKey>, List<MfdKey>>? {
+        val b = map(Osb.AREA, Osb.SIZE) ?: return null
+        fun key(i: Int): MfdKey {
+            val at = i * Osb.LABEL_BYTES
+            return MfdKey(
+                a = latin1(b, at, Osb.STRING_LEN),
+                b = latin1(b, at + Osb.STRING_LEN, Osb.STRING_LEN),
+                inverted = b.u8(at + Osb.STRING_LEN * 2) != 0,
+            )
+        }
+        val left = (0 until Osb.BUTTONS).map { key(it) }
+        val right = (0 until Osb.BUTTONS).map { key(Osb.BUTTONS + it) }
+        // An area that exists but has never been written is 680 zero bytes: that is "no legends", not "all blank".
+        return if (left.all { it.blank } && right.all { it.blank }) null else left to right
+    }
+
+    /** [map], for the other readers in this package (the RTT textures need FlightData2's layout fields). */
+    internal fun mapArea(name: String, size: Int): ByteBuffer? = map(name, size)
 
     /** Copies a named shared memory area (at most [size] bytes; shorter areas of older BMS versions are zero-padded). */
     private fun map(name: String, size: Int): ByteBuffer? {
@@ -300,7 +343,16 @@ object SharedMemoryReader {
         }
     }
 
-    /** NP:<index>,<type>,<x>,<y>,<z>,<grnd_elev>;[O1:..;][O2:..;][PT:"name",range,declutter;] */
+    /**
+     * NP:<index>,<type>,<x>,<y>,<z>,<grnd_elev>;[O1:..;][O2:..;][PT:"name",range,declutter;]
+     *
+     * Every type is kept as BMS names it: `WP` steerpoints, `PT` pre-planned threats, `L1`-`L4` the points of lines 1-4,
+     * `CB` the campaign bullseye, and the others. A steerpoint's offset aimpoints (`O1`/`O2`: bearing, range, elevation)
+     * go into [NavPoint.oa1Brg] … [NavPoint.oa2ElevFt] as BMS sends them (FlightData.h gives no units; the cartridge's
+     * `[NAV OFFSETS]` has true degrees and feet). A PPT's range is in feet like the cartridge's; one under
+     * [DtcParser.MARKER_FT] is a marker (AWACS, tanker: `Ppt.ini` gives them 0.1 ft) and gets [NavPoint.rangeNm] 0, not a
+     * ring of 0.1 nm.
+     */
     fun parseNavPoint(s: String): NavPoint? {
         var np: NavPoint? = null
         for (part in s.split(';').filter { it.isNotEmpty() }) {
@@ -313,8 +365,12 @@ object SharedMemoryReader {
                 np = NavPoint(i = num(fields[0]).toInt(), type = fields[1].trim(), x = num(fields[2]), y = num(fields[3]), altFt = abs(num(fields[4])))
             } else if (tag == "PT" && np != null && fields.size >= 2) {
                 val r = num(fields[1])
-                // BMS stores PPT range in feet; tolerate nm just in case.
-                np = np.copy(name = fields[0].trim().trim('"'), rangeNm = if (r > 500) r / FT_PER_NM else r)
+                np = np.copy(name = fields[0].trim().trim('"'), rangeNm = if (r < DtcParser.MARKER_FT) 0.0 else r / FT_PER_NM)
+            } else if ((tag == "O1" || tag == "O2") && np != null && fields.size >= 3) {
+                val brg = num(fields[0])
+                val rng = num(fields[1])
+                val elev = num(fields[2])
+                np = if (tag == "O1") np.copy(oa1Brg = brg, oa1RngFt = rng, oa1ElevFt = elev) else np.copy(oa2Brg = brg, oa2RngFt = rng, oa2ElevFt = elev)
             }
         }
         return np
@@ -346,7 +402,8 @@ object SharedMemoryReader {
         return if (a > u) tacanLabel(auxChannel, auxBits) else tacanLabel(ufcChannel, ufcBits)
     }
 
-    private fun num(s: String) = s.trim().toDoubleOrNull() ?: 0.0
+    // a value that is not a finite number is 0: NaN or infinity could not be carried in the JSON answer
+    private fun num(s: String) = s.trim().toDoubleOrNull()?.takeIf { it.isFinite() } ?: 0.0
     private fun norm360(d: Double): Double { val r = d % 360; return if (r < 0) r + 360 else r }
 
     /** DED uses special glyphs: 0x01 = selection box/asterisk, 0x02 = degree sign. */

@@ -92,12 +92,19 @@ import com.bmscompanion.app.ui.theme.Hud
 import com.bmscompanion.app.ui.theme.LocalExtra
 import java.util.Locale
 
-fun String.norm() = lowercase(Locale.US).replace(Regex("[^a-z0-9]"), "")
+private val NOT_ALNUM = Regex("[^a-z0-9]")
+/** compiled once: lists and the map search call this for every row on every keystroke */
+fun String.norm() = lowercase(Locale.US).replace(NOT_ALNUM, "")
 
 // ======================= Arsenal (list) =======================
 
+/** The `arsenal` route: the Reference section, open on Arsenal. */
 @Composable
-fun ArsenalScreen(nav: NavHostController) {
+fun ArsenalScreen(nav: NavHostController) = ReferenceScreen(nav, ReferenceTab.ARSENAL)
+
+/** The Arsenal page of the Reference section: flyable aircraft and the stores they carry, in two lists. */
+@Composable
+internal fun ArsenalPage(nav: NavHostController) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var selectedAc by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedWp by rememberSaveable { mutableStateOf<String?>(null) }
@@ -114,7 +121,7 @@ fun ArsenalScreen(nav: NavHostController) {
         selected = selected != null,
         list = {
             Column(Modifier.fillMaxSize()) {
-                BmsTopBar("Arsenal", "Flyable aircraft & stores · all theaters")
+                // the section's own bar names the page; the two lists are its sub-pages
                 TabRow(
                     selectedTabIndex = tab,
                     containerColor = Hud.Bg,

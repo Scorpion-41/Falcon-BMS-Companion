@@ -63,17 +63,56 @@ data class AfNode(val e: Double = 0.0, val n: Double = 0.0, val t: Int = 0, val 
 /**
  * A ramp spot. [n] is its number on this route, [k] its point, [l] the lane point it stands off.
  *
- * [s] is BMS's own point type — 11, meaning the spot records what size of aircraft fits. That is true of most
- * spots at most fields and says nothing about shelter, so it is [c] that says whether the spot has a roof: the
- * extractor sets it where the field stands a hardened shelter or a hangar over the spot.
+ * [n] is BMS's own number, the one Ground says ("park zero four"): the count of this network's parking points in
+ * storage order, from 0, read from the sim's code. After landing Ground counts in the **taxi-in** network — the
+ * route of the reciprocal end ([taxiInRoute]) — so a page showing the way in shows that route's numbers.
+ *
+ * Three things about the stand itself, and they are three different questions.
+ *
+ * [s] is BMS's own point type: 11 is a stand for a **small** aircraft, 12 one with no size limit — **large**. Those
+ * are exactly the encircled and the boxed numbers on the parking charts the theaters ship, which agree with the point
+ * types on 101 of the 103 spots the four transcribed charts carry (tools/extractor/src/apcverify.mjs checks it).
+ *
+ * [q] is the field's **alert cell** — the red numbers on those same charts, where jets sit cocked for a scramble. BMS
+ * marks it by giving those points ParkingPointGroup -1 (Ground never gives one after landing); all 8 of the Q spots
+ * printed across the four charts carry it and no other spot does.
+ *
+ * [c] is whether the stand has a **roof**, which the point data does not say at all: the extractor sets it where the
+ * field stands a hardened shelter or a hangar over the spot. Size and shelter are unrelated — a small stand is
+ * usually open ramp — and reading the point type as "sheltered" once made 302 of Osan's 334 spots hardened.
  */
 @Serializable
-data class AfSpot(val n: Int = 0, val k: Int = 0, val l: Int = 0, val w: Int = 0, val s: Int = 0, val c: Int = 0) {
+data class AfSpot(
+    val n: Int = 0,
+    val k: Int = 0,
+    val l: Int = 0,
+    val w: Int = 0,
+    val s: Int = 0,
+    val c: Int = 0,
+    val q: Int = 0,
+) {
     /** under a hardened shelter or a hangar, rather than out on open ramp */
     val covered: Boolean get() = c != 0
-    /** BMS records a maximum aircraft size for this spot */
-    val sized: Boolean get() = s != 0
+    /** a stand BMS restricts to a small aircraft: an encircled number on BMS's own parking chart */
+    val small: Boolean get() = s != 0
+    /** a stand with no size limit: a boxed number on BMS's own parking chart */
+    val large: Boolean get() = s == 0
+    /** the alert cell, kept ready for a scramble: the red numbers on BMS's own parking chart */
+    val alert: Boolean get() = q != 0
+
+    /** The stand in the words a parking chart's key uses. */
+    val sizeWord: String get() = if (small) "small aircraft" else "no size limit"
+
+    /** The number as BMS's Ground controller says it: two digits, "04", three from 100. */
+    val label: String get() = spotLabel(n)
 }
+
+/**
+ * A spot number as BMS's Ground controller says it ("park zero four"): two digits with a leading zero, three from 100.
+ * [n] is BMS's own count of the network's parking points in storage order, from 0 (see numberParking in
+ * tools/extractor/src/airfields.mjs).
+ */
+fun spotLabel(n: Int): String = n.toString().padStart(2, '0')
 
 @Serializable
 data class AfRoute(
@@ -118,12 +157,18 @@ data class AfFeature(
 typealias AfRing = List<Int>
 
 /**
- * A ship, when the field is one: its flight deck, drawn from the real ship rather than traced from BMS.
+ * A ship, when the field is one: its flight deck, drawn from the ship's own BMS 3D model.
  *
- * BMS gives a carrier no feature list, no model and no outline; its deck points run far past the bow because they
- * carry the approach path, and its "runways" include that path, a catapult and, on some ships, a rectangle of no
- * width. So all of it is **built** from the published dimensions of the class, laid on the axis and centre BMS's
- * own deck gives. [cls] names the class it was drawn at.
+ * BMS gives a carrier objective no feature list, and its "runways" are the approach path, a catapult and sometimes a
+ * rectangle of no width. But the ship itself has a model like any vehicle, and the objective's deck points are in
+ * that model's frame — east is the ship's starboard, north its bow, the origin the model's own. So the deck is laid
+ * down exactly there, with no fitting: the outline with every step and sponson, what stands below the deck edge,
+ * the paint, the lifts and the islands, each measured from the model or placed from a published figure
+ * (`tools/curated/carriers.json`, `tools/extractor/src/ships.mjs`). Every spot BMS parks an aircraft on then falls on
+ * the deck, and the jet, put into the ship's frame, lands where it really is ([com.bmscompanion.app.data.airfield.deckPosition]).
+ *
+ * [cls] names the ship as drawn. [marks] is the detailed deck; a chart written before there was one has only the
+ * older, simpler fields ([hull], [strip], [stripLine], [cats], [ski], [islands]), which are still filled in.
  *
  * There is no ramp here. A carrier steams into wind, so the runway BMS names and the numbers it gives its deck
  * spots turn with the ship — a chart that drew them would be drawing a number that is right for one minute.
@@ -133,7 +178,7 @@ typealias AfRing = List<Int>
 @Serializable
 data class AfShip(
     val cls: String = "",
-    /** the flight deck: narrowing to the bow, with the angled-deck sponson out to port */
+    /** the flight deck's outline, every step and sponson of it */
     val hull: List<Int> = emptyList(),
     /** the landing area, angled off the ship's axis on a CATOBAR deck */
     val strip: List<Int> = emptyList(),
@@ -144,6 +189,42 @@ data class AfShip(
     /** the ski jump at the bow, where the class has one */
     val ski: List<Int> = emptyList(),
     val islands: List<List<Int>> = emptyList(),
+    /** which BMS model the deck was measured from */
+    val model: String = "",
+    /** the deck's paint: -1 darker than usual (the Liaoning), 1 lighter (the Kuznetsov), 0 as it comes */
+    val tone: Int = 0,
+    /** the ski jump's published angle, where there is one */
+    val skiDeg: Double? = null,
+    /** the whole deck, in drawing order: see [AfDeckMark] */
+    val marks: List<AfDeckMark> = emptyList(),
+)
+
+/**
+ * One thing on a carrier's deck. [p] is east,north pairs in field feet; for a circle, a spot or a number it is the
+ * middle, with [r] the radius or the height in feet and [t] the text.
+ *
+ * What [k] draws:
+ * - `edge` what stands below the deck edge and is seen from above — sponsons, galleries, catwalks — drawn lighter,
+ *   under the deck
+ * - `lane` the landing area, a shade darker than the rest of the deck
+ * - `lift` a lift (elevator), outlined in yellow; `lift?` one whose place is estimated, outlined dashed
+ * - `hatch` a flush hatch, outlined only
+ * - `ski` the ski jump, lighter, with `step` lines across it where it rises
+ * - `line` a white painted line, `ladder` one with the boxes of a landing-area edge, `dash` a dashed white centre
+ *   line, `ydash` a dashed yellow one, `foul` a red and white dashed foul line, `foulk` a red and black one,
+ *   `faint` an old, faded line, `lights` a row of deck lights
+ * - `wire` an arresting wire, `cat` a catapult track, `jbd` a jet-blast deflector
+ * - `spot` a painted landing or take-off spot (a yellow ring, numbered when [t] is set), `tee` a spot with its
+ *   lineup line
+ * - `text` the hull number, painted on the deck
+ * - `island` an island, standing on the deck; `part` a structure on top of it
+ */
+@Serializable
+data class AfDeckMark(
+    val k: String = "",
+    val p: List<Int> = emptyList(),
+    val r: Int = 0,
+    val t: String? = null,
 )
 
 /** Where BMS signs a taxiway, and with which letter. */

@@ -71,35 +71,50 @@ object PlannedRoutes {
     /** How many of your steerpoints have to line up before the file is accepted as this mission. */
     private const val ENOUGH_MATCHES = 3
 
-    /** The save being flown, and the theater folder it belongs to. */
-    data class Source(val file: File, val theaterDir: File)
+    /**
+     * The save being flown, and the theater folder it belongs to.
+     *
+     * [theater] is the theater definition the save belongs to, when it is known; when it is not (a file handed in by a
+     * developer check), it is found from the folder the file is in. [theaterDir] is the folder that holds the
+     * theater's campaign folder — `Data` for the base theater — and is only a fallback for an install whose theater
+     * definitions cannot be read.
+     */
+    data class Source(val file: File, val theaterDir: File, val theater: Theaters.Theater? = null)
 
     private var cacheKey: String? = null
     private var cached: List<PlannedRoute> = emptyList()
-    private val flightTypesByDir = HashMap<String, Set<Int>>()
+    private val flightTypesByTable = HashMap<String, Set<Int>>()
     private val namesByDir = HashMap<String, Map<Int, String>>()
 
     /**
-     * The mission file that belongs to [theater] — the newest campaign save or engagement under that theater's own
-     * folder. With no theater named, every theater is considered and the check against your steerpoints decides.
+     * The mission file that belongs to [theater]: the newest campaign save or engagement in that theater's own
+     * campaign folder, as its theater definition names it ([Theaters.TheaterSet.newestSave] — settled, and never a
+     * campaign start or a TE template, which hold no flights). With no theater named, or a name no definition carries,
+     * every theater is considered and the check against your steerpoints decides.
+     *
+     * The theater definitions are the only reliable map from a theater to its files. Guessing from folder names — the
+     * way this was done up to 1.3.8 — matched "Korea KTO" to `Add-On Korea TvT` and `Add-On Korea 2012` but never to
+     * the base theater's own `Data\Campaign`, so Korea read TvT's start (a file with no flights) and never had a
+     * planned tanker track; and it could not see the campaign folders of Korea 2012's six theaters, which are two
+     * levels down, nor LKTO's second one (`Campaign+`). The old guess is kept only for an install whose theater list
+     * cannot be read at all ([legacySourceFor]).
      */
     fun sourceFor(install: BmsInstall, theater: String?): Source? {
         val base = install.baseDir?.let(::File) ?: return null
-        val theaters = theaterDirs(base)
-        val wanted = theaters.filter { matchesTheater(it, theater) }.ifEmpty { theaters }
+        val set = Theaters.at(base)
+        if (set.all.isEmpty()) return legacySourceFor(base, theater)
+        val wanted = set.current(theater)?.let { listOf(it) } ?: set.all
         var best: Source? = null
-        for (dir in wanted) {
-            val places = listOf(File(dir, "Campaign"), File(base, "User\\Missions"))
-            for (place in places) {
-                if (!place.isDirectory) continue
-                val newest = place.listFiles { f ->
-                    f.isFile && (f.name.endsWith(".cam", true) || f.name.endsWith(".tac", true))
-                }?.maxByOrNull { it.lastModified() } ?: continue
-                if (best == null || newest.lastModified() > best!!.file.lastModified()) best = Source(newest, dir)
-            }
+        for (t in wanted) {
+            val newest = set.newestSave(t) ?: continue
+            if (best == null || newest.lastModified() > best.file.lastModified()) best = sourceOf(set, t, newest)
         }
         return best
     }
+
+    /** A save of theater [t]: the folder above its campaign folder stands in as the theater's folder. */
+    private fun sourceOf(set: Theaters.TheaterSet, t: Theaters.Theater, file: File): Source =
+        Source(file, set.campaignDir(t)?.parentFile ?: file.parentFile?.parentFile ?: file, t)
 
     /**
      * The planned routes of the mission being flown, or nothing when the file on disk is not that mission.
@@ -115,7 +130,8 @@ object PlannedRoutes {
         val file = source.file
         // a file BMS is still writing is left alone until it has settled
         if (System.currentTimeMillis() - file.lastModified() < SETTLE_MS) return cached
-        val key = "${file.path}|${file.lastModified()}|${ownRoute.size}"
+        // the points, not only how many: another route of the same length is another question (P3)
+        val key = "${file.path}|${file.lastModified()}|${ownRoute.size}|${ownRoute.hashCode()}"
         if (cacheKey == key) return cached
         val read = runCatching { read(source, install) }
             .onFailure { BridgeLog.warn("Planned routes could not be read from ${file.name}: ${it.message}") }
@@ -141,8 +157,9 @@ object PlannedRoutes {
     /** Reads one mission file. Public so the developer check can point at a file of its own. */
     fun read(source: Source, install: BmsInstall): List<PlannedRoute> {
         val blob = source.file.readBytes() // read-only, whole file, no lock kept
-        val flights = flightTypes(source.theaterDir, install) ?: return emptyList()
-        val names = missionNames(source.theaterDir, install)
+        val place = placeOf(source, install)
+        val flights = flightTypes(place, install) ?: return emptyList()
+        val names = missionNames(place, install)
         val routes = ArrayList<PlannedRoute>()
         for (part in MissionArchive.parts(blob)) {
             if (!part.name.endsWith(".uni", true)) continue
@@ -154,7 +171,84 @@ object PlannedRoutes {
 
     // ---------------------------------------------------------------- where a theater keeps its things
 
-    /** The base folder (Korea) and every add-on theater beside it. */
+    /**
+     * Where one theater's things are: its definition in [set] when the install's theater definitions name it, and
+     * [dir], the folder above its campaign folder, for the old guess when they do not.
+     */
+    internal class Place(val set: Theaters.TheaterSet?, val theater: Theaters.Theater?, val dir: File)
+
+    /** The theater a save belongs to: the one it was found for, else the one whose campaign folder holds it. */
+    internal fun placeOf(source: Source, install: BmsInstall): Place {
+        if (source.theater != null) {
+            setsFor(source.file, install).firstOrNull { s -> s.all.any { it == source.theater } }
+                ?.let { return Place(it, source.theater, source.theaterDir) }
+        }
+        val folder = source.file.absoluteFile.parentFile
+        if (folder != null) for (s in setsFor(source.file, install)) {
+            s.owning(folder)?.let { return Place(s, it, source.theaterDir) }
+        }
+        return placeOf(source.theaterDir, install)
+    }
+
+    /**
+     * The theater whose folder is [theaterDir] — the folder above its campaign folder (`Data` for the base theater,
+     * `Data\Add-On Hellas`, `…\Add-On Korea 2012\Campaign\Korea 2012`), or the campaign folder itself.
+     */
+    internal fun placeOf(theaterDir: File, install: BmsInstall): Place {
+        val want = Theaters.canonical(theaterDir)
+        for (s in setsFor(theaterDir, install)) {
+            val t = s.all.firstOrNull { t ->
+                val c = s.campaignDir(t) ?: return@firstOrNull false
+                Theaters.canonical(c) == want || c.parentFile?.let { Theaters.canonical(it) } == want
+            }
+            if (t != null) return Place(s, t, theaterDir)
+        }
+        return Place(null, null, theaterDir)
+    }
+
+    /**
+     * The theater definitions that may know [file]: the install's own, then those of the BMS folder [file] sits in
+     * (a developer check may hand in a save from a copy), each only when it has any theaters.
+     */
+    private fun setsFor(file: File, install: BmsInstall): List<Theaters.TheaterSet> {
+        val sets = ArrayList<Theaters.TheaterSet>()
+        install.baseDir?.let { Theaters.at(File(it)) }?.takeIf { it.all.isNotEmpty() }?.let { sets += it }
+        var up: File? = file.absoluteFile
+        repeat(8) {
+            val dir = up ?: return@repeat
+            if (Theaters.resolveFile(dir, "Data\\TerrData\\TheaterDefinition\\theater.lst") != null) {
+                val s = Theaters.at(dir)
+                if (s.all.isNotEmpty() && sets.none { Theaters.canonical(it.root) == Theaters.canonical(s.root) }) sets += s
+                return sets
+            }
+            up = dir.parentFile
+        }
+        return sets
+    }
+
+    /**
+     * The old guess, for an install whose theater list cannot be read: the newest `.cam`/`.tac` in `Data\Campaign` or
+     * any `Data\Add-On *\Campaign` whose folder name shares a word with [theater] (all of them when none does).
+     * Also what `--camsource` shows as "old".
+     */
+    internal fun legacySourceFor(base: File, theater: String?): Source? {
+        val theaters = theaterDirs(base)
+        val wanted = theaters.filter { matchesTheater(it, theater) }.ifEmpty { theaters }
+        var best: Source? = null
+        for (dir in wanted) {
+            val places = listOf(File(dir, "Campaign"), File(base, "User\\Missions"))
+            for (place in places) {
+                if (!place.isDirectory) continue
+                val newest = place.listFiles { f ->
+                    f.isFile && (f.name.endsWith(".cam", true) || f.name.endsWith(".tac", true))
+                }?.maxByOrNull { it.lastModified() } ?: continue
+                if (best == null || newest.lastModified() > best.file.lastModified()) best = Source(newest, dir)
+            }
+        }
+        return best
+    }
+
+    /** The base folder (Korea) and every add-on theater beside it — the old guess. */
     private fun theaterDirs(base: File): List<File> {
         val data = File(base, "Data")
         val dirs = ArrayList<File>()
@@ -284,9 +378,12 @@ object PlannedRoutes {
      * Every unit record starts with a number that points into the theater's class table; the table says what the
      * thing is. A theater brings its own table, and it never changes while BMS is installed, so it is read once.
      */
-    internal fun flightTypes(theaterDir: File, install: BmsInstall): Set<Int>? {
-        flightTypesByDir[theaterDir.path]?.let { return it }
-        val table = classTable(theaterDir, install) ?: return null
+    internal fun flightTypes(theaterDir: File, install: BmsInstall): Set<Int>? = flightTypes(placeOf(theaterDir, install), install)
+
+    internal fun flightTypes(place: Place, install: BmsInstall): Set<Int>? {
+        val table = classTable(place, install) ?: return null
+        val key = "${table.path}|${table.lastModified()}|${table.length()}"
+        flightTypesByTable[key]?.let { return it }
         val found = HashSet<Int>()
         runCatching {
             table.bufferedReader().use { reader ->
@@ -312,23 +409,31 @@ object PlannedRoutes {
             }
         }.onFailure { BridgeLog.warn("The class table could not be read: ${it.message}") }
         if (found.isEmpty()) return null
-        flightTypesByDir[theaterDir.path] = found
+        flightTypesByTable[key] = found
         return found
     }
 
-    /** The campaign's string table: "AIR REFUEL", "CAP", "SEAD" and the rest, by number. */
     /**
      * The class table a theater's units are numbered by.
      *
      * Not necessarily in the theater's own folder. A campaign pack — Hellas WCP is one — ships a campaign and nothing
-     * else, and its theater definition (`Theaterdefinition\\*.tdf`) names the theater whose objects it uses:
-     * `objectdir Add-On Hellas\\Terrdata\\objects`. Looking only in the pack's folder found nothing, fell through to
-     * Korea's table, and every aircraft the pack's parent theater adds — the Greek F-16s, the HAF EMB-145H AWACS, 6500
-     * and up — was not a flight. Your own flight among them: the save then held nothing of yours, was not believed to be
-     * your mission, and no track was drawn at all; the briefing's circle stood in. So the definition is read first, then
-     * the theater's own folder, then Korea's. File names are matched without regard to case (FALCON4_CT.XML turns up).
+     * else, and its theater definition names the theater whose objects it uses: `objectdir Add-On Hellas\\Terrdata\\objects`.
+     * Looking only in the pack's folder found nothing, fell through to Korea's table, and every aircraft the pack's
+     * parent theater adds — the Greek F-16s, the HAF EMB-145H AWACS, 6500 and up — was not a flight. Your own flight
+     * among them: the save then held nothing of yours, was not believed to be your mission, and no track was drawn at
+     * all; the briefing's circle stood in. So the table comes from the theater definition ([Theaters.TheaterSet.classFile]:
+     * the `objectdir`'s own `Falcon4_CT.xml`, else `Data\TerrData\Objects`'s — per file, because Korea TvT ships some of
+     * the four tables and not others). Only an install whose definitions cannot be read falls back on looking for a
+     * definition beside the folder, then the folder itself, then Korea's. File names are matched without regard to
+     * case (FALCON4_CT.XML turns up).
      */
-    private fun classTable(theaterDir: File, install: BmsInstall): File? {
+    private fun classTable(place: Place, install: BmsInstall): File? {
+        if (place.set != null && place.theater != null) return place.set.classFile(place.theater, "Falcon4_CT.xml")
+        return legacyClassTable(place.dir, install)
+    }
+
+    /** The old way to the class table: a definition beside [theaterDir], the folder's own objects, then Korea's. */
+    internal fun legacyClassTable(theaterDir: File, install: BmsInstall): File? {
         val data = install.baseDir?.let { File(it, "Data") }
         val declared = objectDirOf(theaterDir)?.let { rel -> data?.let { File(it, rel) } }
         val places = listOfNotNull(declared, File(theaterDir, "TerrData\\Objects"), data?.let { File(it, "TerrData\\Objects") })
@@ -351,24 +456,44 @@ object PlannedRoutes {
         return null
     }
 
-    internal fun missionNames(theaterDir: File, install: BmsInstall): Map<Int, String> {
+    /**
+     * The campaign's string table: "AIR REFUEL", "CAP", "SEAD" and the rest, and the callsign words, by number.
+     *
+     * From the theater's own campaign folder, else `Data\Campaign` ([Theaters.TheaterSet.strings]). A line is a number,
+     * a run of whitespace and the text, and the whitespace is not always a tab — "341 RELOCATE" is written with a space,
+     * and splitting on tabs alone lost it, and with it the mission name of every relocating flight.
+     */
+    internal fun missionNames(theaterDir: File, install: BmsInstall): Map<Int, String> = missionNames(placeOf(theaterDir, install), install)
+
+    internal fun missionNames(place: Place, install: BmsInstall): Map<Int, String> {
+        if (place.set != null && place.theater != null) return place.set.strings(place.theater)
+        return legacyMissionNames(place.dir, install)
+    }
+
+    /** The old way to the string table (`Campaign\Strings.txt` under [theaterDir], else the base theater's). */
+    internal fun legacyMissionNames(theaterDir: File, install: BmsInstall): Map<Int, String> {
         namesByDir[theaterDir.path]?.let { return it }
         val file = listOfNotNull(
             File(theaterDir, "Campaign\\Strings.txt"),
             install.baseDir?.let { File(it, "Data\\Campaign\\Strings.txt") },
         ).firstOrNull { it.isFile }
         val map = HashMap<Int, String>()
-        if (file != null) runCatching {
-            file.forEachLine { line ->
-                val tab = line.indexOf('\t')
-                if (tab > 0) {
-                    val id = line.substring(0, tab).trim().toIntOrNull()
-                    val text = line.substring(tab + 1).trim()
-                    if (id != null && text.isNotEmpty()) map[id] = text
-                }
-            }
-        }
+        if (file != null) runCatching { map += parseStrings(file.readLines(Charsets.ISO_8859_1)) }
         namesByDir[theaterDir.path] = map
+        return map
+    }
+
+    /** `Strings.txt` lines: a number, then the text after the first run of whitespace (tab or space). */
+    internal fun parseStrings(lines: List<String>): Map<Int, String> {
+        val map = HashMap<Int, String>()
+        for (raw in lines) {
+            val line = raw.trimStart()
+            val cut = line.indexOfFirst { it == ' ' || it == '\t' }
+            if (cut <= 0) continue
+            val id = line.substring(0, cut).toIntOrNull() ?: continue
+            val text = line.substring(cut).trim()
+            if (text.isNotEmpty()) map[id] = text
+        }
         return map
     }
 
@@ -376,7 +501,9 @@ object PlannedRoutes {
     fun describe(source: Source, install: BmsInstall): String = buildString {
         explain = true
         val blob = source.file.readBytes()
-        val types = flightTypes(source.theaterDir, install)
+        val place = placeOf(source, install)
+        val types = flightTypes(place, install)
+        appendLine("  theater: ${place.theater?.name ?: "no theater definition (the folder ${place.dir.name} is guessed)"}; class table ${classTable(place, install)?.path ?: "not found"}")
         appendLine("  class table: ${types?.size ?: 0} flight types")
         why.clear()
         for (part in MissionArchive.parts(blob)) {

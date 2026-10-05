@@ -60,10 +60,17 @@ internal object TeamRelations {
     private var lookedAt = 0L
     private var lookedFor: String? = null
 
-    /** How often the save is looked for again. Finding it walks the theater folders; the picture asks 4 times a second. */
+    /** How often the save is looked for again. Finding it lists the theater's campaign folder; the picture asks 4 times a second. */
     private const val RELOOK_MS = 15_000L
 
-    /** The teams of the campaign BMS is flying, read again only when the save changes. */
+    /**
+     * The teams of the campaign BMS is flying, read again only when the save changes.
+     *
+     * The save is the one the planned tracks come from ([PlannedRoutes.sourceFor]): the newest settled campaign save or
+     * engagement in the current theater's own campaign folder, as its theater definition names it, never a start.
+     * Folder guessing read Korea's alliances out of `Add-On Korea TvT`'s start (GREFOR against YELFOR) whatever
+     * campaign was being flown in the base theater.
+     */
     @Synchronized
     fun current(install: BmsInstall, theater: String?): List<Team> {
         val now = System.currentTimeMillis()

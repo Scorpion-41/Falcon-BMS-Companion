@@ -241,19 +241,25 @@ private fun feet(ft: Double): String {
  * Turns a path into a clearance a pilot can follow: one line to read, the turn-by-turn under it, and the short
  * chips that say the same thing at a glance — the way a game tells you "right, then B, then left, then D".
  */
-fun clearanceFor(net: TaxiNet, path: TaxiPath, outbound: Boolean, spot: AfSpot?): TaxiClearance {
+fun clearanceFor(net: TaxiNet, path: TaxiPath, outbound: Boolean, spot: AfSpot?, runway: String = net.route.designator): TaxiClearance {
     val route = net.route
     val seq = path.nodes
     val legs = legsOf(route, seq)
-    val runway = route.designator
+    val no = spot?.label ?: "?"
     val steps = ArrayList<TaxiStep>()
     val chips = ArrayList<TaxiChip>()
     val named = ArrayList<String>()
     for (leg in legs) leg.name?.let { if (named.lastOrNull() != it) named.add(it) }
 
     if (outbound) {
-        val where = if (spot?.covered == true) "hardened shelter" else "open ramp"
-        steps.add(TaxiStep("Start on spot ${spot?.n ?: "?"} — $where", "${spot?.n ?: ""}", null, null, seq.first()))
+        // What the stand is, in the order a pilot cares: a roof over it, then whether it is the alert cell, and
+        // last the size limit BMS records for it. All three come from the field's own data; see [AfSpot].
+        val where = buildString {
+            append(if (spot?.covered == true) "hardened shelter" else "open ramp")
+            if (spot?.alert == true) append(", alert cell")
+            if (spot?.large == true) append(", no size limit")
+        }
+        steps.add(TaxiStep("Start on spot $no — $where", spot?.label ?: "", null, null, seq.first()))
     } else {
         val at = legs.firstOrNull()?.name
         steps.add(TaxiStep("Vacate runway $runway" + (at?.let { " at $it" } ?: ""), at ?: runway, null, null, seq.first()))
@@ -278,14 +284,14 @@ fun clearanceFor(net: TaxiNet, path: TaxiPath, outbound: Boolean, spot: AfSpot?)
         chips.add(TaxiChip(TaxiChipKind.END, "HOLD $runway"))
     } else {
         val nose = if (spot?.covered == true) ", nose into the shelter" else ""
-        steps.add(TaxiStep("Park on spot ${spot?.n ?: "?"}$nose", "${spot?.n ?: ""}", null, null, seq.last()))
-        chips.add(TaxiChip(TaxiChipKind.END, "SPOT ${spot?.n ?: "?"}"))
+        steps.add(TaxiStep("Park on spot $no$nose", spot?.label ?: "", null, null, seq.last()))
+        chips.add(TaxiChip(TaxiChipKind.END, "SPOT $no"))
     }
 
     val line = if (outbound) {
         "Taxi to runway $runway" + (if (named.isEmpty()) " along the ramp" else " via " + named.joinToString(", ")) + ". Hold short runway $runway."
     } else {
-        "Runway $runway, vacate" + (if (named.isEmpty()) "" else " via " + named.joinToString(", ")) + " to spot ${spot?.n ?: "?"}."
+        "Runway $runway, vacate" + (if (named.isEmpty()) "" else " via " + named.joinToString(", ")) + " to spot $no."
     }
     return TaxiClearance(line, steps, chips, path.ft, named)
 }
@@ -310,6 +316,36 @@ fun routeForPosition(field: Airfield, e: Double, n: Double): AfRoute? {
         if (near.second < away) { away = near.second; best = route }
     }
     return best
+}
+
+/**
+ * The network BMS's Ground controller counts spots in after a landing on [landed]'s runway end: the route of the
+ * **reciprocal** end, whose line-up point is where the landing rolls out (after landing on Gunsan 36, runway 18's).
+ * Ground's "park nn" (call 517) is a count of that network's parking points in storage order, read from the sim's
+ * code; the page showing the way in therefore draws that network and its numbers.
+ *
+ * The reciprocal is the route of the same runway (BMS's RunwayNumber, which tells parallel strips apart) on the
+ * opposite course; a field whose ends were not both built (six of 1,294 routes) keeps the route it was given.
+ */
+fun taxiInRoute(field: Airfield, landed: AfRoute): AfRoute {
+    fun offOpposite(r: AfRoute) = 180.0 - abs(wrap180(r.course - landed.course))
+    val opposite = field.routes.filter { it !== landed && offOpposite(it) < 30.0 }
+    return opposite.filter { it.rwy == landed.rwy }.minByOrNull(::offOpposite)
+        ?: opposite.minByOrNull(::offOpposite)
+        ?: landed
+}
+
+/** The runway landed on whose taxi-in network is [net] — the reciprocal end, as [taxiInRoute] pairs them. */
+fun landingRouteFor(field: Airfield, net: AfRoute): AfRoute =
+    field.routes.firstOrNull { it !== net && taxiInRoute(field, it) === net } ?: net
+
+/**
+ * The network a page draws for runway [runway]: its own route for a departure, the taxi-in network for a landing on
+ * it — so every spot number on the page is the one BMS says for that trip ([AfSpot.n]).
+ */
+fun routeShown(field: Airfield, runway: String?, outbound: Boolean): AfRoute? {
+    val named = field.routes.firstOrNull { it.designator == runway } ?: return null
+    return if (outbound) named else taxiInRoute(field, named)
 }
 
 /**

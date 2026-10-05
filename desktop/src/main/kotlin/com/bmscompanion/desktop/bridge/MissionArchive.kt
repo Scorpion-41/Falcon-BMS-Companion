@@ -56,6 +56,15 @@ internal object MissionArchive {
                 val unpacked = int32(raw, 6)
                 unpack(raw, 10, unpacked)?.let { Contents(it, records) }
             }
+            // the objectives of a start file: how many records, the unpacked length, then the packed length
+            "obj" -> {
+                if (raw.size < 10) return null
+                val records = int16(raw, 0)
+                val unpacked = int32(raw, 2)
+                // Hellas's campaign starts keep only this header: no records, nothing packed
+                if (unpacked == 0) return Contents(ByteArray(0), records)
+                unpack(raw, 10, unpacked)?.let { Contents(it, records) }
+            }
             // the campaign itself: packed length, then the unpacked length
             "cmp" -> {
                 if (raw.size < 8) return null
@@ -82,8 +91,9 @@ internal object MissionArchive {
      * A flag byte carries eight decisions, least significant bit first: a one means the next byte is itself, a zero
      * means the next two bytes are a place in the window and a length to copy from it. The window starts empty and
      * fills as the output is produced, which is why it has to be kept rather than reading back over the output.
+     * Null when [src] runs out first. [CampaignArchive] uses it for the parts it walks whole.
      */
-    private fun unpack(src: ByteArray, from: Int, want: Int): ByteArray? {
+    internal fun unpack(src: ByteArray, from: Int, want: Int): ByteArray? {
         if (want <= 0 || from >= src.size) return null
         val out = ByteArray(want)
         val window = ByteArray(WINDOW)

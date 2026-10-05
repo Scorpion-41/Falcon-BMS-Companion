@@ -40,7 +40,7 @@ object Prerequisites {
         ),
         Need(
             name = ".NET 8 runtime",
-            forWhat = "generating kneeboards with EZBoards, which BMS ships",
+            forWhat = "generating kneeboards with EZBoards (a separate tool by Logic)",
             installed = status(),
             required = false,
             url = "https://dotnet.microsoft.com/en-us/download/dotnet/8.0",

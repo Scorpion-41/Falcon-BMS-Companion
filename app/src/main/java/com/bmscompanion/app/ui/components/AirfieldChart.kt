@@ -25,14 +25,18 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.bmscompanion.app.data.airfield.AfDeckMark
 import com.bmscompanion.app.data.airfield.AfNode
 import com.bmscompanion.app.data.airfield.AfRoute
 import com.bmscompanion.app.data.airfield.AfRunway
@@ -73,9 +77,30 @@ data class ChartInks(
     /** anything with a roof over it — a hardened shelter, a hangar bay — kept clearly off the pavement tone so a
      *  covered spot reads as covered even when it is only a few pixels across */
     val shelter: Color,
+    /**
+     * The alert cell: red, as BMS's own parking charts print those numbers, and used nowhere else on the ground. A
+     * muted brick by day and a dusky rose by night rather than a signal red — it marks a stand nobody is sent to, not
+     * a warning — and lighter than the day ink, darker than the night ink, so it reads apart by lightness too.
+     */
+    val alert: Color,
     val hangar: Color,
-    /** a carrier's island: its own colour, because it is the one landmark on a deck of identical grey */
+    /** a carrier's island on a chart drawn before decks had their detail: its own colour, the one landmark there */
     val island: Color,
+    /**
+     * A carrier's flight deck: the dark grey of non-skid, by day and by night, because that is what a deck looks
+     * like and what every painted mark on it is chosen to stand out from.
+     */
+    val deck: Color,
+    /** what stands below a deck's edge and is seen from above — sponsons, galleries, catwalks — and the ski jump */
+    val deckEdge: Color,
+    /** the white paint on a deck: landing-area edges, centre lines, wires, the hull number */
+    val deckPaint: Color,
+    /** the yellow paint: centre lines on some decks, take-off lines, spots, and the edges of the lifts */
+    val deckYellow: Color,
+    /** the red of a foul line */
+    val deckRed: Color,
+    /** an island and what stands on it: lighter than the deck, the way a superstructure reads from above */
+    val islandTop: Color,
     val building: Color,
     val fuel: Color,
     val tower: Color,
@@ -94,7 +119,10 @@ data class ChartInks(
             apron = Color(0xFFCFD4D0), runway = Color(0xFF3A4247), runwayMark = Color(0xFFF2F4F1),
             ink = Color(0xFF161B1F), dim = Color(0xFF5D6A71), route = Color(0xFF0B74C4),
             you = Color(0xFF1B7A54),
-            shelter = Color(0xFF86A08E), hangar = Color(0xFF8D7B63), island = Color(0xFF5B4C7A), building = Color(0xFF7E8B99),
+            shelter = Color(0xFF86A08E), alert = Color(0xFF9B4B45),
+            hangar = Color(0xFF8D7B63), island = Color(0xFF5B4C7A), building = Color(0xFF7E8B99),
+            deck = Color(0xFF4B5258), deckEdge = Color(0xFFA3AAB0), deckPaint = Color(0xFFF6F7F5),
+            deckYellow = Color(0xFFE6BA2C), deckRed = Color(0xFFD8392D), islandTop = Color(0xFFC6CCD0),
             fuel = Color(0xFFB08928), tower = Color(0xFF9C4A63),
             signFill = Color(0xFFE8C22A), signInk = Color(0xFF1A1A12),
             accent = Color(0xFF1D5A88),
@@ -107,7 +135,10 @@ data class ChartInks(
             apron = Color(0xFF272E33), runway = Color(0xFF1C2329), runwayMark = Color(0xFFAFBCC2),
             ink = Color(0xFFE3E9E6), dim = Color(0xFF93A0A6), route = Color(0xFF3FC4F5),
             you = Color(0xFF4ECF98),
-            shelter = Color(0xFF5E7164), hangar = Color(0xFF6B5B47), island = Color(0xFF8E79BE), building = Color(0xFF4A5663),
+            shelter = Color(0xFF5E7164), alert = Color(0xFFC47C74),
+            hangar = Color(0xFF6B5B47), island = Color(0xFF8E79BE), building = Color(0xFF4A5663),
+            deck = Color(0xFF2F363C), deckEdge = Color(0xFF5E6870), deckPaint = Color(0xFFCBD3D7),
+            deckYellow = Color(0xFFC9A63A), deckRed = Color(0xFFD0564B), islandTop = Color(0xFF7F8A92),
             fuel = Color(0xFF8A6D24), tower = Color(0xFFA85E76),
             signFill = Color(0xFFCBA61F), signInk = Color(0xFF14140E),
             accent = Color(0xFF74B4E2),
@@ -364,53 +395,42 @@ fun AirfieldChart(
             )
         }
 
-        fun zoomAt(next: Float, at: Offset) {
+        /** zooms to [next] (1 to 40 times) about [at] after moving by [by]; answers the factor applied */
+        fun zoomAt(next: Float, at: Offset, by: Offset = Offset.Zero): Float {
+            val old = state.scale
             val capped = next.coerceIn(1f, 40f)
-            val c = Offset(at.x - w / 2, at.y - h / 2)
-            val f = capped / state.scale
-            state.panX = c.x - (c.x - state.panX) * f
-            state.panY = c.y - (c.y - state.panY) * f
+            val f = capped / old
+            val np = ZoomMath.keep(Offset(at.x - w / 2, at.y - h / 2), Offset(state.panX, state.panY) + by, f)
+            state.panX = np.x
+            state.panY = np.y
             state.scale = capped
+            return f
         }
+        // the wheel, the keys and a double tap glide (ZoomMath); a pinch follows the fingers
+        val glide = rememberZoomGlide { f, at -> zoomAt(state.scale * f, at) }
 
         androidx.compose.runtime.SideEffect {
             state.zoomHook = if (follow != null) null else { factor ->
                 val v = view()
                 val anchor = zoomAnchor?.let { v.at(it.x.toDouble(), it.y.toDouble()) } ?: Offset(w / 2, h / 2)
-                zoomAt(state.scale * factor, anchor)
+                glide.by(factor, anchor)
             }
         }
 
         val gestures = if (!interactive || follow != null) Modifier else Modifier
             .pointerInput(field.id, w, h) {
                 detectTransformGestures { centroid, pan, zoom, _ ->
-                    val next = (state.scale * zoom).coerceIn(1f, 40f)
-                    val c = Offset(centroid.x - w / 2, centroid.y - h / 2)
-                    val f = next / state.scale
-                    state.panX = c.x - (c.x - (state.panX + pan.x)) * f
-                    state.panY = c.y - (c.y - (state.panY + pan.y)) * f
-                    state.scale = next
+                    glide.stop()
+                    zoomAt(state.scale * ZoomMath.pinch(zoom), centroid, pan)
                 }
             }
             // A mouse wheel is how this is zoomed on a PC, and a trackpad on a laptop; the gesture detector above
-            // never sees either, so the scroll events are taken straight off the pointer stream.
-            .pointerInput(field.id, w, h) {
-                awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        if (event.type != PointerEventType.Scroll) continue
-                        val change = event.changes.firstOrNull() ?: continue
-                        val dy = change.scrollDelta.y
-                        if (dy != 0f) {
-                            zoomAt(state.scale * (if (dy < 0) 1.18f else 1f / 1.18f), change.position)
-                            change.consume()
-                        }
-                    }
-                }
-            }
+            // never sees either, so the scroll events are taken straight off the pointer stream — measured, so a
+            // touchpad's many small deltas zoom in proportion rather than a step each.
+            .wheelZoom(glide)
             .pointerInput(field.id, route?.designator, w, h) {
                 detectTapGestures(
-                    onDoubleTap = { p -> zoomAt(state.scale * 2f, p) },
+                    onDoubleTap = { p -> glide.by(ZoomMath.DOUBLE_TAP, p) },
                     onTap = { p ->
                         val r = activeRoute ?: return@detectTapGestures
                         val v = view()
@@ -444,7 +464,7 @@ fun AirfieldChart(
                 drawAsphalt(field, v, inks)
                 drawGroundFeatures(field, v, inks)
                 drawPavement(field, v, inks)
-                drawDeckMarks(field, v, inks)
+                drawDeckMarks(field, v, inks, tm)
                 drawRunways(field, v, inks)
                 drawCentreline(field, v, inks)
             }
@@ -479,6 +499,9 @@ fun AirfieldChart(
 // ---------------------------------------------------------------- labels
 
 /** One thing to write on the chart, and where it would like to go. */
+/** What a label's own background is drawn as: a plate behind the text, a ring round it, or a box round it. */
+private enum class LabelShape { PLATE, RING, BOX }
+
 private class ChartLabel(
     val text: String,
     val anchor: Offset,
@@ -490,6 +513,14 @@ private class ChartLabel(
     val weight: FontWeight,
     val leader: Boolean,
     val priority: Int,
+    /**
+     * A spot number carries its size in the shape around it, which is how BMS's own parking charts print it: a
+     * small stand's number is encircled, a large one's is boxed. [PLATE] is the filled slab a taxiway sign and a
+     * chosen spot get.
+     */
+    val shape: LabelShape = LabelShape.PLATE,
+    /** drawn round the shape rather than filled, so a number stays readable over pavement */
+    val outline: Color? = null,
 )
 
 /**
@@ -540,13 +571,41 @@ private class LabelBoard(val w: Float, val h: Float) {
             if (label.leader && moved > bh * 0.7f) {
                 scope.drawLine(label.ink.copy(alpha = 0.55f), label.anchor, p, strokeWidth = 1f)
             }
-            if (label.fill != null) {
-                scope.drawRoundRect(
-                    color = label.fill,
-                    topLeft = Offset(p.x - bw / 2, p.y - bh / 2),
-                    size = Size(bw, bh),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.5f, 2.5f),
-                )
+            // A ring has to be round, so it is sized on the larger of the two extents; a box takes the text's own
+            // shape. Both are drawn a hair wider than the glyphs so the digits never touch the line.
+            val ringR = max(bw, bh) / 2f + 1f
+            when {
+                label.fill == null && label.outline == null -> Unit
+                label.shape == LabelShape.RING -> {
+                    if (label.fill != null) scope.drawCircle(label.fill, ringR, p)
+                    if (label.outline != null) scope.drawCircle(label.outline, ringR, p, style = Stroke(width = 1.1f))
+                }
+                label.shape == LabelShape.BOX -> {
+                    val tl = Offset(p.x - bw / 2, p.y - bh / 2)
+                    if (label.fill != null) scope.drawRect(label.fill, topLeft = tl, size = Size(bw, bh))
+                    if (label.outline != null) {
+                        scope.drawRect(label.outline, topLeft = tl, size = Size(bw, bh), style = Stroke(width = 1.1f))
+                    }
+                }
+                else -> {
+                    if (label.fill != null) {
+                        scope.drawRoundRect(
+                            color = label.fill,
+                            topLeft = Offset(p.x - bw / 2, p.y - bh / 2),
+                            size = Size(bw, bh),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.5f, 2.5f),
+                        )
+                    }
+                    if (label.outline != null) {
+                        scope.drawRoundRect(
+                            color = label.outline,
+                            topLeft = Offset(p.x - bw / 2, p.y - bh / 2),
+                            size = Size(bw, bh),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.5f, 2.5f),
+                            style = Stroke(width = 1.1f),
+                        )
+                    }
+                }
             }
             scope.safeText(tm, label.text, Offset(p.x - layout.size.width / 2f, p.y - layout.size.height / 2f), style)
         }
@@ -564,17 +623,33 @@ private fun spotLabels(
         val from = v.at(lane)
         val mine = spot.n == selected
         val target = spot.n == destination
+        val picked = mine || target
+        // BMS's own parking charts print a small stand's number encircled, a large one's boxed and the alert cell's
+        // in red, so ours are drawn the same way and a pilot who knows those charts reads this one without a key.
+        // The chosen and destination spots keep their filled plate: which spot is yours outranks what size it is.
         labels.add(
             ChartLabel(
-                text = spot.n.toString(),
+                text = spot.label,                      // BMS Ground's number, "04"
                 anchor = at,
                 away = at - from,                       // out from the lane, which is where the room is
-                size = (if (mine || target) 11.5f else 9.5f) * labelScale,
-                ink = if (mine || target) inks.ground else inks.ink,
+                size = (if (picked) 11.5f else 9.5f) * labelScale,
+                ink = when {
+                    picked -> inks.ground
+                    spot.alert -> inks.alert
+                    else -> inks.ink
+                },
                 fill = if (mine) inks.you else if (target) inks.route else null,
-                weight = if (mine || target) FontWeight.Bold else FontWeight.Medium,
+                weight = if (picked || spot.alert) FontWeight.Bold else FontWeight.Medium,
                 leader = true,
-                priority = if (mine || target) 100 else 10,
+                priority = if (picked) 100 else if (spot.alert) 20 else 10,
+                shape = if (picked) LabelShape.PLATE else if (spot.small) LabelShape.RING else LabelShape.BOX,
+                // The ring or box is the whole point, so it is always drawn — but faintly, because a ramp of eighty
+                // stands drawn in full-strength outlines reads as chain-link. The alert cell keeps its red at full.
+                outline = when {
+                    picked -> null
+                    spot.alert -> inks.alert
+                    else -> inks.ink.copy(alpha = 0.45f)
+                },
             ),
         )
     }
@@ -715,40 +790,237 @@ fun chartRunways(field: Airfield): List<AfRunway> {
         .orEmpty()
 }
 
+/** The deck's own grey, a shade lighter or darker where the ship's paint is ([AfShip.tone]). */
+private fun deckColour(ship: AfShip, inks: ChartInks): Color = when {
+    ship.tone > 0 -> lerp(inks.deck, inks.deckEdge, 0.28f)
+    ship.tone < 0 -> lerp(inks.deck, Color.Black, 0.22f)
+    else -> inks.deck
+}
+
+/** A mark's points as a path on the page; closed for a ring. */
+private fun markPath(p: List<Int>, v: ChartView, close: Boolean): Path? {
+    if (p.size < 4) return null
+    val path = Path()
+    path.moveTo(v.x(p[0].toDouble(), p[1].toDouble()), v.y(p[0].toDouble(), p[1].toDouble()))
+    var i = 2
+    while (i + 1 < p.size) {
+        path.lineTo(v.x(p[i].toDouble(), p[i + 1].toDouble()), v.y(p[i].toDouble(), p[i + 1].toDouble()))
+        i += 2
+    }
+    if (close) path.close()
+    return path
+}
+
 /**
  * A carrier's hull, laid down before the deck markings so everything else sits on the ship.
  *
- * The island goes on **after** them ([drawShipIsland]): it is a structure standing on the deck, and drawn first the
- * deck's own lines and lane edges ran straight across it.
+ * With a detailed deck ([AfShip.marks]) that is three layers, the way a deck diagram is drawn: the structures below
+ * the deck edge in a lighter grey — sponsons, galleries, the catwalk that runs round a carrier — then the flight deck
+ * itself in dark non-skid grey on top of them, so what sticks out past the deck reads as structure and not as deck.
+ *
+ * The island goes on **after** the markings ([drawShipIsland]): it is a structure standing on the deck, and drawn
+ * first the deck's own lines ran straight across it.
  */
 private fun DrawScope.drawShipHull(field: Airfield, v: ChartView, inks: ChartInks) {
     val ship = field.ship ?: return
-    deckPath(ship.hull, v)?.let { hull ->
+    val hull = deckPath(ship.hull, v) ?: return
+    if (ship.marks.isEmpty()) {
         drawPath(hull, inks.pavement)
         drawPath(hull, inks.ink, style = Stroke(width = max(1f, v.ft(6.0))), alpha = 0.85f)
+        return
     }
+    // the catwalk: a narrow rim of structure all the way round, as a carrier has
+    drawPath(hull, inks.deckEdge, style = Stroke(width = max(1.2f, v.ft(9.0)), join = StrokeJoin.Round))
+    for (m in ship.marks) if (m.k == "edge") markPath(m.p, v, close = true)?.let {
+        drawPath(it, inks.deckEdge)
+        drawPath(it, inks.ink, style = Stroke(width = max(0.5f, v.ft(0.8))), alpha = 0.35f)
+    }
+    drawPath(hull, deckColour(ship, inks))
+    drawPath(hull, inks.ink, style = Stroke(width = max(0.8f, v.ft(1.2))), alpha = 0.7f)
 }
 
-/** The island: the one landmark on a deck, and what tells a pilot which side is starboard. */
+/**
+ * The islands, and what stands on them: the one landmark on a deck, and what tells a pilot which side is starboard.
+ *
+ * A light structure with a shadow on the deck, the way a superstructure reads from above, and its radomes, funnels,
+ * masts and platforms drawn on top once the page is close enough to show them.
+ */
 private fun DrawScope.drawShipIsland(field: Airfield, v: ChartView, inks: ChartInks) {
     val ship = field.ship ?: return
-    // Translucent, and outlined in its own colour. BMS parks aircraft where the real ship has its island — three
-    // of the Liaoning's eight spots are under it — so a solid block would simply hide them.
-    for (isl in ship.islands) deckPath(isl, v)?.let { island ->
-        drawPath(island, inks.island, alpha = 0.5f)
-        drawPath(island, inks.island, style = Stroke(width = max(1f, v.ft(5.0))))
+    if (ship.marks.isEmpty()) {
+        // Translucent, and outlined in its own colour. BMS parks aircraft where the real ship has its island — three
+        // of the Liaoning's eight spots are under it — so a solid block would simply hide them.
+        for (isl in ship.islands) deckPath(isl, v)?.let { island ->
+            drawPath(island, inks.island, alpha = 0.5f)
+            drawPath(island, inks.island, style = Stroke(width = max(1f, v.ft(5.0))))
+        }
+        return
+    }
+    val shadow = max(1f, v.ft(5.0))
+    val edge = Stroke(width = max(0.7f, v.ft(1.2)))
+    for (m in ship.marks) if (m.k == "island") markPath(m.p, v, close = true)?.let { island ->
+        translate(shadow, shadow) { drawPath(island, Color.Black, alpha = 0.35f) }
+        drawPath(island, inks.islandTop)
+        drawPath(island, inks.ink, style = edge, alpha = 0.8f)
+    }
+    // the detail on top: only once there is room for it, or it is a smudge
+    if (v.k < 0.22f) return
+    val part = lerp(inks.islandTop, inks.deck, 0.35f)
+    for (m in ship.marks) if (m.k == "part") markPath(m.p, v, close = true)?.let {
+        drawPath(it, part)
+        drawPath(it, inks.ink, style = Stroke(width = max(0.5f, v.ft(0.8))), alpha = 0.6f)
     }
 }
 
 /**
- * A carrier's deck markings: the landing area at its published angle, its centre line, the catapults and the ski
- * jump, all built from the real ship (see `tools/extractor/src/ships.mjs`).
+ * Everything painted or fitted on a carrier's deck, in the order the ship's data gives it: the landing area and its
+ * lines, the lifts, the ski jump, the arresting wires, the catapults and their blast deflectors, the painted spots
+ * and the hull number — each from the ship's own model or a published figure (see `tools/extractor/src/ships.mjs`).
  *
- * BMS's own runway rectangles are not drawn on a ship at all. It holds four or five of them and only one is a
- * deck: the rest are the approach path, a catapult and, on some ships, a rectangle of no width.
+ * Widths are in feet, so a line is as wide on the page as it is on the deck, with a floor in pixels so nothing
+ * vanishes on a board at its widest; the finest things — the boxes along a landing-area edge, the deck lights, the
+ * hatches, the sheaves at the ends of the wires — appear once the page is close enough to show them, as the detail
+ * of an airfield chart does.
+ *
+ * BMS's own runway rectangles are not drawn on a ship at all: they are the approach path, a catapult and, on some
+ * ships, a rectangle of no width.
  */
-private fun DrawScope.drawDeckMarks(field: Airfield, v: ChartView, inks: ChartInks) {
+private fun DrawScope.drawDeckMarks(field: Airfield, v: ChartView, inks: ChartInks, tm: TextMeasurer) {
     val ship = field.ship ?: return
+    if (ship.marks.isEmpty()) { drawPlainDeck(ship, v, inks); return }
+    val fine = v.k >= 0.45f
+    val deck = deckColour(ship, inks)
+    fun w(ft: Double, floor: Float) = max(floor, v.ft(ft))
+    fun dashes(on: Double, off: Double) = PathEffect.dashPathEffect(floatArrayOf(max(3f, v.ft(on)), max(2f, v.ft(off))))
+    fun pt(m: AfDeckMark, i: Int = 0) = v.at(m.p[i].toDouble(), m.p[i + 1].toDouble())
+    for (m in ship.marks) {
+        when (m.k) {
+            "lane" -> markPath(m.p, v, close = true)?.let { drawPath(it, Color.Black, alpha = 0.13f) }
+            "lift", "lift?" -> markPath(m.p, v, close = true)?.let {
+                drawPath(it, lerp(deck, inks.deckEdge, 0.12f))
+                drawPath(
+                    it, inks.deckYellow,
+                    style = Stroke(width = w(2.5, 1f), pathEffect = if (m.k == "lift?") dashes(8.0, 6.0) else null),
+                    alpha = if (m.k == "lift?") 0.7f else 0.95f,
+                )
+            }
+            "hatch" -> if (fine) markPath(m.p, v, close = true)?.let {
+                drawPath(it, Color.Black, alpha = 0.18f)
+                drawPath(it, inks.deckPaint, style = Stroke(width = w(0.8, 0.5f)), alpha = 0.45f)
+            }
+            "ski" -> markPath(m.p, v, close = true)?.let {
+                drawPath(it, inks.deckEdge, alpha = 0.42f)
+                drawPath(it, inks.deckPaint, style = Stroke(width = w(1.5, 0.7f)), alpha = 0.55f)
+            }
+            "step" -> if (m.p.size >= 4) drawLine(inks.deckPaint, pt(m), pt(m, 2), strokeWidth = w(1.5, 0.6f), alpha = 0.5f)
+            "line", "ladder" -> markPath(m.p, v, close = false)?.let { line ->
+                drawPath(line, inks.deckPaint, style = Stroke(width = w(3.0, 0.9f), join = StrokeJoin.Round), alpha = 0.92f)
+                if (m.k == "ladder" && fine && m.p.size >= 4) ladderBoxes(m, v, inks)
+            }
+            "dash", "ydash", "faint" -> markPath(m.p, v, close = false)?.let {
+                val ink = if (m.k == "ydash") inks.deckYellow else inks.deckPaint
+                drawPath(it, ink, style = Stroke(width = w(2.5, 0.8f), pathEffect = dashes(24.0, 16.0)), alpha = if (m.k == "faint") 0.3f else 0.9f)
+            }
+            "foul", "foulk" -> markPath(m.p, v, close = false)?.let {
+                // red and white (or red and black) in turn: the ground laid first, the red dashes on it
+                val under = if (m.k == "foulk") Color(0xFF151515) else inks.deckPaint
+                drawPath(it, under, style = Stroke(width = w(2.5, 0.9f)), alpha = 0.85f)
+                drawPath(it, inks.deckRed, style = Stroke(width = w(2.5, 0.9f), pathEffect = dashes(12.0, 12.0)))
+            }
+            "lights" -> if (fine && m.p.size >= 4) deckLights(m, v, inks)
+            "wire" -> if (m.p.size >= 4) {
+                val a = pt(m)
+                val b = pt(m, 2)
+                drawLine(inks.deckPaint, a, b, strokeWidth = w(1.6, 0.7f), alpha = 0.9f)
+                // the sheaves at either end, where the wire goes down through the deck
+                if (fine) for (c in listOf(a, b)) drawCircle(inks.deckPaint, radius = w(2.5, 1f), center = c, alpha = 0.9f)
+            }
+            "cat" -> if (m.p.size >= 4) {
+                val a = pt(m)
+                val b = pt(m, 2)
+                // the track: a light slot down the deck, with the shuttle at the end the jet is launched from
+                drawLine(inks.deckEdge, a, b, strokeWidth = w(6.0, 1.5f))
+                drawLine(deck, a, b, strokeWidth = w(1.5, 0.5f))
+                drawCircle(inks.deckPaint, radius = w(3.5, 1.2f), center = a)
+            }
+            "jbd" -> markPath(m.p, v, close = true)?.let {
+                drawPath(it, inks.deckEdge, alpha = 0.95f)
+                drawPath(it, inks.deckYellow, style = Stroke(width = w(1.2, 0.6f)))
+            }
+            "spot", "tee" -> if (m.p.size >= 2) {
+                val c = pt(m)
+                val r = max(2f, v.ft(m.r.toDouble()))
+                val ink = if (m.k == "tee") inks.deckPaint else inks.deckYellow
+                drawCircle(ink, radius = r, center = c, style = Stroke(width = w(2.0, 0.7f)), alpha = 0.9f)
+                if (m.k == "tee") {
+                    // the lineup line across the spot, square to the ship's axis
+                    val e = m.p[0].toDouble()
+                    val n = m.p[1].toDouble()
+                    drawLine(ink, v.at(e - m.r * 1.3, n), v.at(e + m.r * 1.3, n), strokeWidth = w(2.0, 0.7f), alpha = 0.9f)
+                }
+                m.t?.let { t -> if (r >= 5f) deckText(tm, t, c, r * 1.1f, 0.0, v, ink, 0.95f) }
+            }
+            "text" -> if (m.p.size >= 2) {
+                // the hull number, reading from astern, the way a pilot in the groove sees it
+                val px = v.ft(m.r.toDouble())
+                if (px >= 6f) m.t?.let { deckText(tm, it, pt(m), px, 0.0, v, inks.deckPaint, 0.85f) }
+            }
+        }
+    }
+}
+
+/** The boxes painted along a landing-area edge, one every seventy feet. */
+private fun DrawScope.ladderBoxes(m: AfDeckMark, v: ChartView, inks: ChartInks) {
+    val e0 = m.p[0].toDouble()
+    val n0 = m.p[1].toDouble()
+    val e1 = m.p[m.p.size - 2].toDouble()
+    val n1 = m.p[m.p.size - 1].toDouble()
+    val len = hypot(e1 - e0, n1 - n0)
+    if (len < 1) return
+    val angle = v.screenAngle(bearingOf(e0, n0, e1, n1))
+    val hw = v.ft(4.0)
+    val hl = v.ft(9.0)
+    var d = 35.0
+    while (d < len - 10) {
+        val c = v.at(e0 + (e1 - e0) * d / len, n0 + (n1 - n0) * d / len)
+        rotate(angle, c) {
+            drawRect(inks.deckPaint, topLeft = Offset(c.x - hw, c.y - hl), size = Size(hw * 2, hl * 2), alpha = 0.9f)
+        }
+        d += 70.0
+    }
+}
+
+/** A row of deck lights, one every thirty-seven feet — the spacing BMS lays them at. */
+private fun DrawScope.deckLights(m: AfDeckMark, v: ChartView, inks: ChartInks) {
+    val e0 = m.p[0].toDouble()
+    val n0 = m.p[1].toDouble()
+    val e1 = m.p[m.p.size - 2].toDouble()
+    val n1 = m.p[m.p.size - 1].toDouble()
+    val len = hypot(e1 - e0, n1 - n0)
+    var d = 0.0
+    while (d <= len) {
+        val t = if (len > 0) d / len else 0.0
+        drawCircle(inks.deckPaint, radius = max(0.8f, v.ft(1.6)), center = v.at(e0 + (e1 - e0) * t, n0 + (n1 - n0) * t), alpha = 0.8f)
+        d += 37.0
+    }
+}
+
+/** Text painted on the deck: centred on [at], [px] tall, the top of it towards [bearing]. */
+private fun DrawScope.deckText(tm: TextMeasurer, text: String, at: Offset, px: Float, bearing: Double, v: ChartView, ink: Color, alpha: Float) {
+    if (at.x < -px * 3 || at.y < -px * 3 || at.x > size.width + px * 3 || at.y > size.height + px * 3) return
+    // a font's size is a little more than the height of its figures
+    val style = TextStyle(color = ink.copy(alpha = alpha), fontSize = (px * 1.35f).toSp(), fontWeight = FontWeight.Bold)
+    val layout = tm.measure(text, style)
+    rotate(v.screenAngle(bearing), at) {
+        drawText(layout, topLeft = Offset(at.x - layout.size.width / 2f, at.y - layout.size.height / 2f))
+    }
+}
+
+/**
+ * The plain deck an older chart carries: the landing area at its published angle, its centre line, the catapults
+ * and the ski jump, all built from the published dimensions rather than the ship's model.
+ */
+private fun DrawScope.drawPlainDeck(ship: AfShip, v: ChartView, inks: ChartInks) {
     deckPath(ship.strip, v)?.let { strip ->
         drawPath(strip, inks.runway)
         // Outlined more strongly than a taxiway would be: on a deck of one grey the landing area has to be the
@@ -1034,6 +1306,9 @@ private fun DrawScope.drawSpots(r: AfRoute, v: ChartView, inks: ChartInks, selec
             target -> inks.route
             else -> null
         }
+        // The alert cell is red on BMS's own parking charts, and it is worth seeing from across the field rather
+        // than only when the numbers are large enough to read: an unchosen alert stand is inked red as well.
+        val edge = if (picked == null && spot.alert) inks.alert else null
         rotate(v.screenAngle(face), c) {
             val left = c.x - half
             val right = c.x + half
@@ -1051,13 +1326,14 @@ private fun DrawScope.drawSpots(r: AfRoute, v: ChartView, inks: ChartInks, selec
                 bay.lineTo(right, bottom)
                 bay.close()
                 drawPath(bay, picked ?: inks.shelter)
+                if (edge != null) drawPath(bay, edge, style = Stroke(width = v.ink(4.0, 0.9f)))
             } else {
                 // Open ramp: a thin stand box, the way an airport chart draws one. Barely inked, so a whole apron
                 // of them reads as a row of stands rather than as a grid drawn over the pavement.
                 val tl = Offset(left, top)
                 val sz = Size(half * 2, bottom - top)
                 if (picked != null) drawRect(picked, topLeft = tl, size = sz)
-                else drawRect(tl = tl, size = sz, ink = inks.dim, w = v.ink(3.0, 0.45f), a = 0.9f)
+                else drawRect(tl = tl, size = sz, ink = edge ?: inks.dim, w = v.ink(if (edge != null) 4.0 else 3.0, 0.45f), a = 0.9f)
             }
         }
     }
@@ -1123,8 +1399,11 @@ private fun DrawScope.drawYou(you: Offset, heading: Double?, v: ChartView, inks:
     val c = v.at(you.x.toDouble(), you.y.toDouble())
     // The halo says "you are here" on a field two miles across. On a deck a hundred feet either side of the jet is
     // a third of the ship, so it is drawn to the aircraft instead.
-    drawCircle(inks.you, radius = if (v.deck) max(5f, v.ft(45.0)) else max(8f, v.ft(120.0)), center = c, alpha = 0.22f)
-    if (heading != null) aircraft(c, v.screenAngle(heading), inks.you, max(7f, v.ft(84.0)), inks.ground, v.deck)
+    drawCircle(inks.you, radius = if (v.deck) max(5f, v.ft(40.0)) else max(8f, v.ft(120.0)), center = c, alpha = 0.22f)
+    // On a deck the jet is drawn at its own size — an F-16 is fifty feet long — because there the chart knows where
+    // it stands to within a few feet, and a symbol twice its size covers the wire or the catapult it is on.
+    val len = if (v.deck) max(6f, v.ft(32.0)) else max(7f, v.ft(84.0))
+    if (heading != null) aircraft(c, v.screenAngle(heading), inks.you, len, if (v.deck) Color.Black else inks.ground, v.deck)
     else drawCircle(inks.you, radius = max(4f, v.ft(70.0)), center = c)
 }
 

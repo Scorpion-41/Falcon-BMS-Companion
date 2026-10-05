@@ -1,0 +1,10 @@
+{
+ "btnClose": "Closes the charts.",
+ "lblFile":"Which chart is on show and how many there are. Tap it for the next one: the airport diagram, the parking charts, then the airport's instrument charts from the app.",
+ "btnAgc": "The airport diagram, drawn from Falcon BMS's own airfield data: runways, taxiways, ramp and buildings (Deck on a carrier). Hidden while it is on show.",
+ "btnApc1": "A parking chart: the ramp as BMS numbers its spots when this runway is in use (it numbers them again for each runway end). Where BMS has no ground chart, an instrument chart.",
+ "btnApc2": "A parking chart: the ramp as BMS numbers its spots when this runway is in use (it numbers them again for each runway end). Where BMS has no ground chart, an instrument chart.",
+ "btnApc3": "A parking chart: the ramp as BMS numbers its spots when this runway is in use (it numbers them again for each runway end). Where BMS has no ground chart, an instrument chart.",
+ "btnApc4": "A parking chart: the ramp as BMS numbers its spots when this runway is in use (it numbers them again for each runway end). Where BMS has no ground chart, an instrument chart.",
+ "cntChart": "The chart on show. A drawn chart (airport diagram, parking) is turned to fill the box, its north arrow saying which way; the wheel, two fingers or a drag zoom and pan it."
+}

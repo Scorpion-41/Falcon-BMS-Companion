@@ -46,14 +46,8 @@ class AcmiStore {
         val files = recordings(dir)
         if (files.isEmpty()) return 0 to 0L
         val bytes = files.sumOf { it.length() }
-        val op = ShellAPI.SHFILEOPSTRUCT().apply {
-            wFunc = ShellAPI.FO_DELETE
-            pFrom = encodePaths(files.map { it.path }.toTypedArray())
-            fFlags = (ShellAPI.FOF_ALLOWUNDO or ShellAPI.FOF_NOCONFIRMATION or ShellAPI.FOF_SILENT or ShellAPI.FOF_NOERRORUI).toShort()
-        }
-        val rc = Shell32.INSTANCE.SHFileOperation(op)
-        val gone = files.count { !it.exists() }
-        BridgeLog.info("$gone ACMI recording(s) moved to the Recycle Bin${if (rc != 0) " (shell code $rc)" else ""}")
+        val gone = recycle(files)
+        BridgeLog.info("$gone ACMI recording(s) moved to the Recycle Bin")
         return gone to bytes
     }
 
@@ -62,6 +56,22 @@ class AcmiStore {
     }.getOrDefault(emptyList())
 
     companion object {
+        /**
+         * Moves [files] to the Recycle Bin in one shell call — no question, no progress window, no error box — and answers
+         * how many are gone. Shared with the radio log's clean-up of BMS's old debug logs ([RadioLog.cleanup]).
+         */
+        fun recycle(files: List<File>): Int {
+            if (files.isEmpty()) return 0
+            val op = ShellAPI.SHFILEOPSTRUCT().apply {
+                wFunc = ShellAPI.FO_DELETE
+                pFrom = encodePaths(files.map { it.path }.toTypedArray())
+                fFlags = (ShellAPI.FOF_ALLOWUNDO or ShellAPI.FOF_NOCONFIRMATION or ShellAPI.FOF_SILENT or ShellAPI.FOF_NOERRORUI).toShort()
+            }
+            val rc = Shell32.INSTANCE.SHFileOperation(op)
+            if (rc != 0) BridgeLog.warn("Recycle Bin: shell code $rc")
+            return files.count { !it.exists() }
+        }
+
         /** A flight left behind by BMS that stopped before it finished writing: `…zip.acmi.013cc310`. */
         private val partial = Regex("""\.acmi\.[0-9a-f]{4,}$""")
 

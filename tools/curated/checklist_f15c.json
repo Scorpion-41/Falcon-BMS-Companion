@@ -2014,6 +2014,596 @@
       ]
     },
     {
+      "id": "ep-wcl-warning-caution-lights",
+      "group": "Emergency Procedures - Warning/Caution Lights",
+      "title": "Warning/Caution Lights",
+      "items": [
+        {
+          "type": "note",
+          "text": "BMS’s F-15C caution panel is work in progress: its lights currently all show red (the caution lights should be yellow), and not all of them work (Dash-1 3.23.1). The warning and caution light test is WIP and the LT TEST switch is not implemented; the fire warning system is not yet simulated."
+        },
+        {
+          "type": "subhead",
+          "text": "Warning lights"
+        },
+        {
+          "type": "light",
+          "title": "L BURN THRU",
+          "panel": "warning",
+          "text": "Left burn-through light on the fire warning panel: the Dash-1 lists it as the fire detection loop burn-through indication, and the checklist calls these the AB BURN THRU lights. BMS does not yet simulate the fire warning and extinguishing system.",
+          "action": "No fire procedure in the BMS F-15C checklist. In the engine start fire test (step 16) it must come on with the voice warning once a main generator is on line.",
+          "refs": [
+            "normal-starting-engines"
+          ],
+          "note": "Dash-1 pages 12, 47 · checklist page N-5"
+        },
+        {
+          "type": "light",
+          "title": "R BURN THRU",
+          "panel": "warning",
+          "text": "Right burn-through light on the fire warning panel: the Dash-1 lists it as the fire detection loop burn-through indication, and the checklist calls these the AB BURN THRU lights. BMS does not yet simulate the fire warning and extinguishing system.",
+          "action": "No fire procedure in the BMS F-15C checklist. In the engine start fire test (step 16) it must come on with the voice warning once a main generator is on line.",
+          "refs": [
+            "normal-starting-engines"
+          ],
+          "note": "Dash-1 pages 12, 47 · checklist page N-5"
+        },
+        {
+          "type": "light",
+          "title": "AMAD FIRE PUSH",
+          "panel": "warning",
+          "text": "Airframe-mounted accessory drive (AMAD) fire/overheat light on the fire warning panel. BMS does not yet simulate the fire warning and extinguishing system.",
+          "action": "No fire procedure in the BMS F-15C checklist. The AMAD fire warning works as soon as the JFS runs: the start fire tests (steps 5, 9 and 16) must light it with the voice warning.",
+          "refs": [
+            "normal-starting-engines"
+          ],
+          "note": "Dash-1 pages 12, 47 · checklist page N-5"
+        },
+        {
+          "type": "light",
+          "title": "ENG FIRE PUSH (L)",
+          "panel": "warning",
+          "text": "Left engine bay fire/overheat light (the lamp reads ENG FIRE PUSH, with an arrow pointing left). BMS does not yet simulate the fire warning and extinguishing system.",
+          "action": "No fire procedure in the BMS F-15C checklist. Per the Dash-1, pushing the light shuts off bleed air and fuel to that engine and arms its extinguisher; DISCHARGE/TEST to DISCHARGE fires it. The start fire test (step 9) must light it.",
+          "refs": [
+            "normal-starting-engines"
+          ],
+          "note": "Dash-1 pages 12, 47 · checklist page N-5"
+        },
+        {
+          "type": "light",
+          "title": "ENG FIRE PUSH (R)",
+          "panel": "warning",
+          "text": "Right engine bay fire/overheat light (the lamp reads ENG FIRE PUSH, with an arrow pointing right). BMS does not yet simulate the fire warning and extinguishing system.",
+          "action": "No fire procedure in the BMS F-15C checklist. Per the Dash-1, pushing the light shuts off bleed air and fuel to that engine and arms its extinguisher; DISCHARGE/TEST to DISCHARGE fires it. The start fire test (step 9) must light it.",
+          "refs": [
+            "normal-starting-engines"
+          ],
+          "note": "Dash-1 pages 12, 47 · checklist page N-5"
+        },
+        {
+          "type": "light",
+          "title": "CANOPY UNLOCKED",
+          "panel": "warning",
+          "text": "The canopy is not locked.",
+          "action": "Canopy – CLOSED AND LOCKED before takeoff (Before Takeoff, step 7). Airborne, the Training Manual says it means you took off with the canopy open: close it before the next takeoff.",
+          "refs": [
+            "normal-before-takeoff"
+          ],
+          "note": "Dash-1 page 50 · checklist page N-9"
+        },
+        {
+          "type": "light",
+          "title": "GEAR HANDLE",
+          "panel": "warning",
+          "text": "Red light in the landing gear handle: on while the gear is in transit. If it stays on, a gear malfunction is indicated.",
+          "action": "Stay below 300 kt. Gear handle DOWN; if the gear shows down, land as soon as possible. If not, below 190 kt pull the EMERG LG handle and check three greens with the handle light out (no nosewheel steering afterwards).",
+          "refs": [],
+          "note": "Training Manual pages 26, 29, 42–43"
+        },
+        {
+          "type": "subhead",
+          "text": "Caution lights"
+        },
+        {
+          "type": "light",
+          "title": "MASTER CAUTION",
+          "panel": "caution",
+          "text": "Comes on with any caution light except AV BIT, JFS LOW, SPD BK OUT and the spare.",
+          "action": "Press it to reset (MASTER CAUTION switch on the main communications panel). The caution light stays on until the fault is corrected, except HYDRAULIC and AUTO PLT, which go out with it.",
+          "refs": [],
+          "note": "Dash-1 pages 25, 48"
+        },
+        {
+          "type": "light",
+          "title": "SPD BK OUT",
+          "panel": "caution",
+          "text": "The speed brake is extended or partly extended (above 25 units AOA it retracts by itself). It does not bring on MASTER CAUTION.",
+          "action": "Retract the speed brake if you do not want it. Before taxi, cycle the speed brake and check the light goes out (step 10).",
+          "refs": [
+            "normal-before-taxiing"
+          ],
+          "note": "Dash-1 pages 19, 25 · checklist page N-7"
+        },
+        {
+          "type": "light",
+          "title": "RUDR LMTR",
+          "panel": "caution",
+          "text": "Shown on BMS’s caution panel, but no BMS F-15C manual says what lights it.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 page 60"
+        },
+        {
+          "type": "light",
+          "title": "BST SYS MAL",
+          "panel": "caution",
+          "text": "The emergency fuel boost pump is running on an abnormal power source. During start it comes on about 30 s after the first main generator, when the emergency generator drops off line, and goes out when the second main generator comes on line.",
+          "action": "Normal during engine start: it must go out once both generators are on line. No in-flight procedure in the BMS F-15C checklist.",
+          "refs": [
+            "normal-starting-engines"
+          ],
+          "note": "Dash-1 page 15 · Training Manual page 20"
+        },
+        {
+          "type": "light",
+          "title": "FUEL HOT",
+          "panel": "caution",
+          "text": "Shown on BMS’s caution panel, but no BMS F-15C manual says what lights it.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 page 60"
+        },
+        {
+          "type": "light",
+          "title": "TOT TEMP HI",
+          "panel": "caution",
+          "text": "Shown on BMS’s caution panel, but no BMS F-15C manual says what lights it.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 page 60"
+        },
+        {
+          "type": "light",
+          "title": "ATTITUDE",
+          "panel": "caution",
+          "text": "Shown on BMS’s caution panel, but no BMS F-15C manual says what lights it.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 page 60"
+        },
+        {
+          "type": "light",
+          "title": "L BST PMP",
+          "panel": "caution",
+          "text": "Left main boost pump (it alone feeds the left engine). The Dash-1 does not describe the light; it says that if a main boost pump fails the emergency boost pump comes on and the remaining pumps feed both engines.",
+          "action": "No procedure in the BMS F-15C checklist. The Dash-1 warns that a boost pump failure limits afterburner use, and that losing both main pumps and the emergency pump can flame out both engines.",
+          "refs": [],
+          "note": "Dash-1 pages 13, 15"
+        },
+        {
+          "type": "light",
+          "title": "R BST PMP",
+          "panel": "caution",
+          "text": "Right main boost pump (it alone feeds the right engine). The Dash-1 does not describe the light; it says that if a main boost pump fails the emergency boost pump comes on and the remaining pumps feed both engines.",
+          "action": "No procedure in the BMS F-15C checklist. The Dash-1 warns that a boost pump failure limits afterburner use, and that losing both main pumps and the emergency pump can flame out both engines.",
+          "refs": [],
+          "note": "Dash-1 pages 13, 15"
+        },
+        {
+          "type": "light",
+          "title": "L INLET",
+          "panel": "caution",
+          "text": "Shown on BMS’s caution panel, but no BMS F-15C manual says what lights it.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 page 60"
+        },
+        {
+          "type": "light",
+          "title": "R INLET",
+          "panel": "caution",
+          "text": "Shown on BMS’s caution panel, but no BMS F-15C manual says what lights it.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 page 60"
+        },
+        {
+          "type": "light",
+          "title": "IFF MODE 4",
+          "panel": "caution",
+          "text": "The Dash-1 says only that the caution panel has an IFF mode 4 light; it does not say what lights it.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 page 29"
+        },
+        {
+          "type": "light",
+          "title": "AV BIT",
+          "panel": "caution",
+          "text": "Avionics BIT light. It does not bring on MASTER CAUTION, and BMS does not implement the F-15C’s built-in test system.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 page 25"
+        },
+        {
+          "type": "light",
+          "title": "JFS LOW",
+          "panel": "caution",
+          "text": "The JFS start discharged an accumulator: the light comes on once the caution panel has power and goes out when a running engine has recharged the accumulators. It does not bring on MASTER CAUTION.",
+          "action": "Must be out before taxi (step 19). While it is on, emergency brakes and steering are not reliable for taxi, and a second JFS start should wait until the JFS is serviced (ground comm menu T, 7).",
+          "refs": [
+            "normal-before-taxiing",
+            "ep-loss-of-brakes"
+          ],
+          "note": "Checklist pages N-5, N-8, EP-5 · Dash-1 pages 25, 54"
+        },
+        {
+          "type": "light",
+          "title": "L GEN OUT",
+          "panel": "caution",
+          "text": "The left generator is off line: it took itself off after a fault, or its GEN switch is OFF. The right generator then powers every bus (the ECM pod is not simulated) and the emergency generator comes on.",
+          "action": "Once the fault has cleared, cycle that GEN switch (engine control panel) to bring it back; after an underfrequency trip it returns by itself. At engine shutdown both GEN OUT lights must come on (checklist N-12).",
+          "refs": [],
+          "note": "Dash-1 pages 14–15 · checklist page N-12"
+        },
+        {
+          "type": "light",
+          "title": "R GEN OUT",
+          "panel": "caution",
+          "text": "The right generator is off line: it took itself off after a fault, or its GEN switch is OFF. The left generator then powers every bus (the ECM pod is not simulated) and the emergency generator comes on.",
+          "action": "Once the fault has cleared, cycle that GEN switch (engine control panel) to bring it back; after an underfrequency trip it returns by itself. At engine shutdown both GEN OUT lights must come on (checklist N-12).",
+          "refs": [],
+          "note": "Dash-1 pages 14–15 · checklist page N-12"
+        },
+        {
+          "type": "light",
+          "title": "EMER BST ON",
+          "panel": "caution",
+          "text": "The emergency fuel boost pump is running: it runs after a main boost pump, main generator or double transformer-rectifier failure, and during start until both main generators are on line.",
+          "action": "During start: check it ON after the first engine (step 14) and out once both generators are on line. No in-flight procedure in the BMS F-15C checklist.",
+          "refs": [
+            "normal-starting-engines"
+          ],
+          "note": "Dash-1 pages 13, 15 · checklist page N-5"
+        },
+        {
+          "type": "light",
+          "title": "HYDRAULIC",
+          "panel": "caution",
+          "text": "Comes on with any hydraulic caution on the BIT panel (not simulated): a circuit shut off by the reservoir level sensing system after a leak, or low utility pump pressure.",
+          "action": "Read the hydraulic pressure indicators. Resetting MASTER CAUTION also puts this light out. Losing UTL A takes the normal brakes: see Loss of Brakes.",
+          "refs": [
+            "ep-loss-of-brakes"
+          ],
+          "note": "Dash-1 pages 16, 58 · checklist page EP-5"
+        },
+        {
+          "type": "light",
+          "title": "OIL PRESS",
+          "panel": "caution",
+          "text": "Engine oil pressure is low.",
+          "action": "On start, if oil pressure does not rise into the green arc, throttle OFF at once. Limits: 15–80 psi at idle, 30–80 psi at MIL/AB. No in-flight procedure in the BMS F-15C checklist.",
+          "refs": [
+            "normal-starting-engines",
+            "normal-engine-limitations-pw-220"
+          ],
+          "note": "Dash-1 pages 11, 58 · checklist pages N-5, N-19"
+        },
+        {
+          "type": "light",
+          "title": "INLET ICE",
+          "panel": "caution",
+          "text": "Ice is building up in the engine inlet (inlet ice detector). Not simulated in BMS: the Dash-1 marks this light N/I.",
+          "action": "Engine anti-ice with the ENG HEAT switch (ECS panel) and leave the icing. The DEEC turns engine anti-ice off above 30,000 ft or 15°C inlet temperature.",
+          "refs": [],
+          "note": "Dash-1 page 24 · Training Manual 2.1.15"
+        },
+        {
+          "type": "light",
+          "title": "PITCH RATIO",
+          "panel": "caution",
+          "text": "The Dash-1 does not describe the light. It says the pitch ratio drives to an intermediate position and locks if hydraulic pressure is lost, and that the pitch ratio switch and indicator do not work in BMS.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 pages 20, 51"
+        },
+        {
+          "type": "light",
+          "title": "ROLL RATIO",
+          "panel": "caution",
+          "text": "The Dash-1 does not describe the light. It says the roll ratio drives to mid-range and locks if UTL A and PC2A hydraulic pressure are lost or the roll ratio switch is in EMER (not simulated), and the aileron-rudder interconnect then stops working.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 pages 20–21"
+        },
+        {
+          "type": "light",
+          "title": "ANTI SKID",
+          "panel": "caution",
+          "text": "The anti-skid system has failed (it is only checked when the gear comes down), or the anti-skid switch is in PULSER. A failure can leave the aileron-rudder interconnect engaged after touchdown.",
+          "action": "If the brakes fail: anti-skid switch PULSER at high speed or OFF at taxi speed; if braking does not return, pull the emergency brake/steer handle. OFF or PULSER also frees the ARI.",
+          "refs": [
+            "ep-loss-of-brakes",
+            "ep-loss-of-directional-control"
+          ],
+          "note": "Dash-1 pages 18, 21, 42 · checklist pages EP-5, EP-6"
+        },
+        {
+          "type": "light",
+          "title": "L EEC",
+          "panel": "caution",
+          "text": "The left engine’s DEEC is in its secondary mode (the Dash-1 calls this the ENG CONTR light), after a DEEC fault or with the EEC switch OFF: no afterburner, RPM held to about 80%, nozzle almost closed.",
+          "action": "It stays in this mode until the fault clears and the engine’s EEC (ENG CONTR) switch is cycled. On takeoff, treat it as an afterburner failure/loss of thrust. Before taxi, cycling the switches must bring the lights on and out (step 17).",
+          "refs": [
+            "ep-engine-failure-loss-of-thrust-afterburner-failure-on-takeoff",
+            "normal-before-taxiing"
+          ],
+          "note": "Dash-1 pages 9, 65 · checklist page N-8"
+        },
+        {
+          "type": "light",
+          "title": "R EEC",
+          "panel": "caution",
+          "text": "The right engine’s DEEC is in its secondary mode (the Dash-1 calls this the ENG CONTR light), after a DEEC fault or with the EEC switch OFF: no afterburner, RPM held to about 80%, nozzle almost closed.",
+          "action": "It stays in this mode until the fault clears and the engine’s EEC (ENG CONTR) switch is cycled. On takeoff, treat it as an afterburner failure/loss of thrust. Before taxi, cycling the switches must bring the lights on and out (step 17).",
+          "refs": [
+            "ep-engine-failure-loss-of-thrust-afterburner-failure-on-takeoff",
+            "normal-before-taxiing"
+          ],
+          "note": "Dash-1 pages 9, 65 · checklist page N-8"
+        },
+        {
+          "type": "light",
+          "title": "CAS YAW",
+          "panel": "caution",
+          "text": "The yaw CAS axis has failed or is disengaged (the dual-channel CAS turns an axis off when it fails). A moderate yaw transient when yaw CAS drops out or re-engages is normal.",
+          "action": "Check the YAW CAS switch is ON (CAS panel); the checklist’s CAS reset is not implemented in BMS. The autopilot needs all three CAS axes.",
+          "refs": [],
+          "note": "Dash-1 pages 22, 43 · checklist page N-8"
+        },
+        {
+          "type": "light",
+          "title": "CAS ROLL",
+          "panel": "caution",
+          "text": "The roll CAS axis has failed or is disengaged (the dual-channel CAS turns an axis off when it fails). CAS moves the stabilators and rudders only, not the ailerons.",
+          "action": "Check the ROLL CAS switch is ON (CAS panel); the checklist’s CAS reset is not implemented in BMS. The autopilot needs all three CAS axes.",
+          "refs": [],
+          "note": "Dash-1 pages 22, 43 · checklist page N-8"
+        },
+        {
+          "type": "light",
+          "title": "CAS PITCH",
+          "panel": "caution",
+          "text": "The pitch CAS axis has failed or is disengaged (the dual-channel CAS turns an axis off when it fails). The hydromechanical controls alone can still fly the aircraft.",
+          "action": "Check the PITCH CAS switch is ON (CAS panel); the checklist’s CAS reset is not implemented in BMS. The autopilot needs all three CAS axes.",
+          "refs": [],
+          "note": "Dash-1 pages 22, 43 · checklist page N-8"
+        },
+        {
+          "type": "light",
+          "title": "L BLEED AIR",
+          "panel": "caution",
+          "text": "Shown on BMS’s caution panel, but no BMS F-15C manual says what lights it. Engine bleed air feeds the ECS and is selected with the AIR SOURCE knob.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 pages 23, 60, 69"
+        },
+        {
+          "type": "light",
+          "title": "R BLEED AIR",
+          "panel": "caution",
+          "text": "Shown on BMS’s caution panel, but no BMS F-15C manual says what lights it. Engine bleed air feeds the ECS and is selected with the AIR SOURCE knob.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 pages 23, 60, 69"
+        },
+        {
+          "type": "light",
+          "title": "WNDSHLD HOT",
+          "panel": "caution",
+          "text": "Shown on BMS’s caution panel, but no BMS F-15C manual says what lights it. The ECS supplies windshield anti-fog and anti-ice.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 pages 23, 60"
+        },
+        {
+          "type": "light",
+          "title": "FUEL LOW",
+          "panel": "caution",
+          "text": "Engine feed tank fuel is low; the Dash-1 mentions this light only in passing and gives no quantity.",
+          "action": "No procedure in the BMS F-15C checklist. With one engine shut down, its feed tank is only drawn on once the running engine’s feed tank is well below the FUEL LOW level.",
+          "refs": [],
+          "note": "Dash-1 page 13"
+        },
+        {
+          "type": "light",
+          "title": "BINGO FUEL",
+          "panel": "caution",
+          "text": "Shown on BMS’s caution panel; the Dash-1 does not describe the light, and its glossary defines BINGO as the return fuel state.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 pages 60, 73"
+        },
+        {
+          "type": "light",
+          "title": "OXY LOW",
+          "panel": "caution",
+          "text": "Shown on BMS’s caution panel, but no BMS F-15C manual says what lights it. The Training Manual says oxygen quantity is not modelled yet.",
+          "action": "No procedure in the BMS F-15C checklist. Before taxi: oxygen quantity CHECK, supply ON (step 21).",
+          "refs": [
+            "normal-before-taxiing"
+          ],
+          "note": "Checklist page N-8 · Training Manual page 22"
+        },
+        {
+          "type": "light",
+          "title": "ECS",
+          "panel": "caution",
+          "text": "Shown on BMS’s caution panel, but no BMS F-15C manual says what lights it. The ECS (work in progress in BMS) cools and pressurizes the cockpit and avionics with engine bleed air; the avionics switch to ram air when bleed air is off.",
+          "action": "No procedure in the BMS F-15C checklist.",
+          "refs": [],
+          "note": "Dash-1 pages 23, 69"
+        },
+        {
+          "type": "light",
+          "title": "HOOK",
+          "panel": "caution",
+          "text": "The arresting hook is not up and locked. Not simulated in BMS: the Dash-1 marks this light N/I.",
+          "action": "Arresting hook switch – UP unless you need the hook.",
+          "refs": [],
+          "note": "Dash-1 pages 19, 50"
+        },
+        {
+          "type": "light",
+          "title": "AUTO PLT",
+          "panel": "caution",
+          "text": "The Dash-1 does not say what lights it, only that pressing MASTER CAUTION resets it. The autopilot disengages itself beyond +4 g or below 0 g, with invalid INS attitude, or with a CAS axis off.",
+          "action": "Reset MASTER CAUTION. To re-engage: attitude hold switch ON, then altitude hold ON; all three CAS axes must be engaged.",
+          "refs": [],
+          "note": "Dash-1 pages 22, 25"
+        },
+        {
+          "type": "light",
+          "title": "EQUIP HOT",
+          "panel": "caution",
+          "text": "Described by the Training Manual, but BMS’s caution panel picture shows no light with this legend. One cause it gives: more than 7–8 minutes below 8,000 ft with the gear down can shut the ECS off.",
+          "action": "AIR SOURCE knob to normal (BOTH), throttles to 80% RPM. If it stays on: non-essential avionics off (the FCR shuts down by itself) and land at the earliest practical opportunity.",
+          "refs": [],
+          "note": "Training Manual 2.1.4 (page 31)"
+        },
+        {
+          "type": "subhead",
+          "text": "Other indicators"
+        },
+        {
+          "type": "light",
+          "title": "READY (JFS)",
+          "panel": "indicator",
+          "text": "Green READY light on the engine control panel: the JFS is running and ready to be engaged to an engine. It goes out when the JFS shuts down after both engines are started.",
+          "action": "Expect it within 10 s of pulling the JFS handle (15 s below 0°F). If the JFS will not engage, see JFS Fails to Engage; before another JFS start on a partly charged accumulator, service the JFS (ground comm menu T, 7).",
+          "refs": [
+            "normal-starting-engines",
+            "ep-jfs-fails-to-engage-or-abnormal-engagement-disengagement"
+          ],
+          "note": "Dash-1 pages 15, 66 · checklist pages N-5, EP-2"
+        },
+        {
+          "type": "light",
+          "title": "ALN",
+          "panel": "indicator",
+          "text": "INS alignment light on the NCI: solid after about 60 s (coarse), flashing at 1 Hz after 120 s (partial), flashing at 4 Hz after 240 s (full alignment).",
+          "action": "If it has not come on within about 60 s: check the ADI is erect, present position is displayed and the light tests good. To restart, NCI mode knob OFF for at least 2 s, then GC.",
+          "refs": [
+            "ep-ins-problems",
+            "normal-before-taxiing"
+          ],
+          "note": "Checklist pages N-6, EP-4"
+        },
+        {
+          "type": "light",
+          "title": "LEFT NOSE RIGHT",
+          "panel": "indicator",
+          "text": "Green landing gear lights: all three on when the gear is down and locked; all out, with the gear handle light out, when it is up and locked.",
+          "action": "A missing green with the gear handle light on is a gear malfunction: stay below 300 kt and see GEAR HANDLE under Warning lights.",
+          "refs": [],
+          "note": "Dash-1 page 51 · Training Manual pages 29, 42–44"
+        },
+        {
+          "type": "light",
+          "title": "FLAP",
+          "panel": "indicator",
+          "text": "Flap position indicator: yellow while the flaps travel, green when they are down. Lowered flaps blow up above about 250 kt and come back down at about 240 kt.",
+          "action": "Flaps DOWN for takeoff: check green (Before Taxiing step 11, Before Takeoff step 4).",
+          "refs": [
+            "normal-before-taxiing",
+            "normal-before-takeoff"
+          ],
+          "note": "Dash-1 pages 19, 51 · checklist pages N-7, N-9"
+        },
+        {
+          "type": "light",
+          "title": "READY (AR)",
+          "panel": "indicator",
+          "text": "Air refueling READY light on the canopy bow: the air refueling (slipway) door is open.",
+          "action": "Slipway switch – CLOSE when not refuelling; the Training Manual notes an open door costs nosewheel steering.",
+          "refs": [],
+          "note": "Dash-1 pages 13, 46 · Training Manual page 42"
+        },
+        {
+          "type": "light",
+          "title": "PROGRAM",
+          "panel": "indicator",
+          "text": "Countermeasures dispenser in SEMI AUTO: a dispense program built from RWR threat data is ready.",
+          "action": "Press the MAN 2 switch (left throttle) to dispense it. A MAN 1 or another MAN 2 command overrides it.",
+          "refs": [],
+          "note": "Dash-34 page 74"
+        },
+        {
+          "type": "light",
+          "title": "MINIMUM",
+          "panel": "warning",
+          "text": "Chaff or flare is down to the minimum quantity set in the data cartridge.",
+          "action": "No procedure; the minimum is set through the data cartridge before flight.",
+          "refs": [],
+          "note": "Dash-34 page 74"
+        },
+        {
+          "type": "light",
+          "title": "CHAFF / FLARE",
+          "panel": "indicator",
+          "text": "Blinking: that expendable is being dispensed. Steady: it is deselected with the DISP SEL switch on the CMD control panel.",
+          "action": "Steady and you want it: DISP SEL switch to BOTH (or to that expendable).",
+          "refs": [],
+          "note": "Dash-34 page 74"
+        },
+        {
+          "type": "subhead",
+          "text": "Voice and tone warnings"
+        },
+        {
+          "type": "note",
+          "text": "BMS’s Voice Warning System is not yet fully implemented (Dash-1 4.1.2.1.66): the fire test plays a voice warning, but the manuals name no voice message other than OVER G. Its fixed-volume messages do not blank other audio and may not be heard."
+        },
+        {
+          "type": "light",
+          "title": "OVER G, OVER G",
+          "panel": "warning",
+          "text": "Overload warning system: the aircraft has reached 100% of its maximum allowable g for the stores it carries. It repeats until the overload is relieved, and once started the full message (about 6 s) plays.",
+          "action": "Reduce the g. The HUD shows current g and maximum allowable g.",
+          "refs": [],
+          "note": "Dash-1 page 25"
+        },
+        {
+          "type": "light",
+          "title": "OVER-G TONE",
+          "panel": "warning",
+          "text": "900 Hz tone as the g nears the maximum allowable: beeping 4 times a second from 85%, 10 times a second from 92%, steady at 96–100%.",
+          "action": "Ease the g before the voice warning at 100%. The HUD shows current and maximum allowable g.",
+          "refs": [],
+          "note": "Dash-1 page 25"
+        },
+        {
+          "type": "light",
+          "title": "DEPARTURE TONE",
+          "panel": "warning",
+          "text": "900 Hz beeping tone warning of an impending departure: it starts at 30°/s yaw rate and beeps faster up to 60°/s.",
+          "action": "Smoothly neutralize the controls.",
+          "refs": [],
+          "note": "Dash-1 page 21 (paragraph marked N/I) · Training Manual page 52"
+        },
+        {
+          "type": "light",
+          "title": "HIGH AOA TONE",
+          "panel": "warning",
+          "text": "High angle-of-attack warning tone: not implemented in BMS.",
+          "action": null,
+          "refs": [],
+          "note": "Dash-1 page 21"
+        }
+      ]
+    },
+    {
       "id": "ep-jfs-fails-to-engage-or-abnormal-engagement-disengagement",
       "group": "Emergency Procedures",
       "title": "JFS Fails to Engage or Abnormal Engagement/Disengagement",

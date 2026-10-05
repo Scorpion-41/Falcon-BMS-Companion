@@ -32,6 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asSkiaBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -86,6 +88,8 @@ import kotlin.system.exitProcess
  */
 fun main(args: Array<String>) {
     Repo.init()
+    // before anything has drawn: Skia builds its graphics context with the first window and never revisits it
+    PcConfig.applyRenderer()
     // the VR board page is the PC's own: it exists only where there is a mouse to set the boards up with
     com.bmscompanion.app.ui.screens.mission.vrBoardsPane = { com.bmscompanion.app.ui.screens.mission.MissionVrBoardsPane() }
     com.bmscompanion.app.ui.railTop = railFullScreen
@@ -106,6 +110,11 @@ fun main(args: Array<String>) {
     com.bmscompanion.app.data.Platform.fetchText = { url -> fetchTextFromWeb(url) }
     com.bmscompanion.app.data.Platform.installer = PcInstaller
     com.bmscompanion.app.data.Platform.nowMillis = { System.currentTimeMillis() }
+    com.bmscompanion.app.data.Platform.encodePng = ::skiaPng
+    com.bmscompanion.app.data.Platform.encodeJpeg = ::skiaJpeg
+    com.bmscompanion.app.data.Platform.decodeImage = ::skiaDecode
+    // the Planner's Open and Save: Windows' own file dialog while this window reads Falcon BMS on this PC
+    com.bmscompanion.app.data.PcFiles.native = PcFileDialogs
     // an installer left behind by an update that has already happened is a few hundred megabytes of nothing
     com.bmscompanion.app.data.update.Updates.tidyCache()
     runCatching { javax.swing.UIManager.setLookAndFeel(javax.swing.UIManager.getSystemLookAndFeelClassName()) } // native folder dialogs
@@ -156,6 +165,24 @@ fun main(args: Array<String>) {
 /** Incremented to bring the window to the front (second start, tray icon). */
 private val ShowRequests = MutableStateFlow(0)
 
+/**
+ * A picture the app drew, as PNG bytes, through Skia (Platform.encodePng: the Planner's Upd Kneeboard draws each
+ * page and hands it to the kneeboard writer this way). The developer checks that print set the same function.
+ */
+fun skiaPng(image: androidx.compose.ui.graphics.ImageBitmap): ByteArray? = runCatching {
+    org.jetbrains.skia.Image.makeFromBitmap(image.asSkiaBitmap()).use { it.encodeToData(org.jetbrains.skia.EncodedImageFormat.PNG)?.bytes }
+}.getOrNull()
+
+/** A picture as JPEG bytes (Platform.encodeJpeg: the Planner's Save Map and the airport schedule, as WDP saves them). */
+fun skiaJpeg(image: androidx.compose.ui.graphics.ImageBitmap, quality: Int): ByteArray? = runCatching {
+    org.jetbrains.skia.Image.makeFromBitmap(image.asSkiaBitmap()).use { it.encodeToData(org.jetbrains.skia.EncodedImageFormat.JPEG, quality.coerceIn(0, 100))?.bytes }
+}.getOrNull()
+
+/** A picture file's bytes as a picture (Platform.decodeImage: a plan picture picked on the PC). */
+fun skiaDecode(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
+    org.jetbrains.skia.Image.makeFromEncoded(bytes).toComposeImageBitmap()
+}.getOrNull()
+
 /** Lifecycle and view models of the app, shared by the window before and after switching full screen. */
 private class WindowOwner : LifecycleOwner, ViewModelStoreOwner {
     private val registry = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
@@ -198,7 +225,20 @@ private fun ApplicationScope.MainWindow(startRoute: String?, nav: NavHostControl
             onPreviewKeyEvent = { e ->
                 when {
                     e.type == KeyEventType.KeyDown && e.key == Key.F11 -> { toggleFullscreen(); true }
-                    e.type == KeyEventType.KeyDown && e.key == Key.Escape && fullscreen -> { toggleFullscreen(); true }
+                    // the MFDs' full page is left first, then the window's full screen
+                    e.type == KeyEventType.KeyDown && e.key == Key.Escape && com.bmscompanion.app.ui.screens.mission.MfdFull.on -> {
+                        com.bmscompanion.app.ui.screens.mission.MfdFull.on = false; true
+                    }
+                    // Escape in full screen closes what is open in the Planner first, as it does in a window: one of
+                    // WDP's own windows or message boxes takes it itself (its Cancel), a Planner window (Open mission,
+                    // Print, the Guide…) is closed here; only then does Escape leave full screen
+                    e.type == KeyEventType.KeyDown && e.key == Key.Escape && fullscreen -> when {
+                        // the file window of a PC linked to another is a dialog, and Escape is its Cancel
+                        com.bmscompanion.app.data.PcFiles.isBrowsing -> false
+                        com.bmscompanion.app.ui.screens.wdp.WdpDialogs.stack.isNotEmpty() -> false
+                        com.bmscompanion.app.ui.screens.wdp.PlannerWindows.isOpen -> { com.bmscompanion.app.ui.screens.wdp.PlannerWindows.close(); true }
+                        else -> { toggleFullscreen(); true }
+                    }
                     else -> UiScale.handleKey(e)
                 }
             },

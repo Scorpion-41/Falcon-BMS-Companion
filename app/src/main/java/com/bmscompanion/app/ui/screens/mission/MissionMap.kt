@@ -1,5 +1,8 @@
 package com.bmscompanion.app.ui.screens.mission
 
+import com.bmscompanion.app.ui.components.drawDashedLine
+import com.bmscompanion.app.ui.components.AttackInks
+import com.bmscompanion.app.ui.components.drawAttackModel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -63,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import com.bmscompanion.app.data.Airport
 import com.bmscompanion.app.data.Repo
 import com.bmscompanion.app.data.mission.Contact
+import com.bmscompanion.app.data.mission.HostileContacts
 import com.bmscompanion.app.data.mission.MissionLink
 import com.bmscompanion.app.ui.Kneeboard
 import com.bmscompanion.app.ui.KneeboardActionsSlot
@@ -90,38 +94,53 @@ sealed interface MapSel {
     data class Pt(val x: Double, val y: Double) : MapSel
 }
 
-/** Map layer toggles, remembered across launches. */
-/** A ring that is a warning, not a boundary: dashed, so it never reads as a drawn border on the chart. */
-/** How wide a planned track is drawn: the width BMS uses for a tanker's own track. */
-private const val TRACK_WIDTH_NM = 12.0
+/** How far the Attack chip zooms: an attack's cues, a few miles either side of the target, across the map. */
+private const val ATTACK_ZOOM = 110f
 
-/** How wide a station is drawn: BMS names a point, and an orbit is a few miles across whatever the point. */
-private const val STATION_NM = 12.0
-
-private val SamRing = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(9f, 7f), 0f)
+// An attack's cues are drawn by the one attack drawing (ui/components/AttackDraw.kt), in its own inks.
 
 object MapLayers {
     var follow by mutableStateOf(Repo.getInt("m_follow", 1) == 1)
     var route by mutableStateOf(Repo.getInt("m_route", 1) == 1)
     /**
-     * Air defences, under one switch: the sites the briefing named with the reach of each system, and the rings of
-     * the pre-planned threats entered in the DTC. Two switches asked a pilot to know which list a given missile
-     * battery came from before he could decide whether to see it, which is not a question anybody has.
+     * Air defences, under one switch: the mission's threats ([com.bmscompanion.app.data.mission.MissionGround]: the
+     * sites the briefing named, else the spotted ones along the route) with the reach of each system, the rings of
+     * the pre-planned threats entered in the DTC, and the live ones of the Tacview feed that are one of those. Nothing
+     * else: a site the side has not spotted is never on the map, and there is no switch that would put it there.
      */
     var sams by mutableStateOf(Repo.getInt("m_sams", 1) == 1 && Repo.getInt("m_threats", 1) == 1)
+    /** Friendly, neutral and the rest of your own flight. Independent of [hostiles]. */
     var traffic by mutableStateOf(Repo.getInt("m_traffic", 1) == 1)
+    /** The other side, counted by [com.bmscompanion.app.data.mission.Contact.hostile]. Independent of [traffic]. */
     var hostiles by mutableStateOf(Repo.getInt("m_hostiles", 1) == 1)
     var labels by mutableStateOf(Repo.getInt("m_labels", 1) == 1)
-    var fields by mutableStateOf(Repo.getInt("m_fields", 1) == 1)
+    /**
+     * Every other airfield of the theater. Off by default: the flight's own — where it takes off, lands and its
+     * alternate — are always drawn, and the rest only crowded the map (a key of its own, so the old "m_fields",
+     * which was on for everyone, does not turn them all back on).
+     */
+    var fields by mutableStateOf(Repo.getInt("m_allfields", 0) == 1)
     /** The tanker and AWACS tracks the campaign planned, and the stations the briefing describes in words. */
     var support by mutableStateOf(Repo.getInt("m_support", 1) == 1)
+    /** The attack the plan sent from the Planner carries: VRP or VIP, pull-up point, offsets, the run-in. */
+    var attack by mutableStateOf(Repo.getInt("m_attack", 1) == 1)
+    /** The cartridge's lines (LINES STPT 31-54, four groups of six), dashed like the HSD draws them. */
+    var lines by mutableStateOf(Repo.getInt("m_lines", 1) == 1)
+    /**
+     * Everything a plan puts on the map, at once: its points, PPTs and lines and its attack (WDP mode's populated
+     * flight, or a plan an older device still has the PC lay over the briefing). Off, the map is what it would be
+     * without it.
+     */
+    var plan by mutableStateOf(Repo.getInt("m_plan", 1) == 1)
     fun save() {
         Repo.putInt("m_follow", if (follow) 1 else 0); Repo.putInt("m_route", if (route) 1 else 0)
         Repo.putInt("m_traffic", if (traffic) 1 else 0); Repo.putInt("m_hostiles", if (hostiles) 1 else 0); Repo.putInt("m_labels", if (labels) 1 else 0)
-        Repo.putInt("m_fields", if (fields) 1 else 0)
+        Repo.putInt("m_allfields", if (fields) 1 else 0)
         // one key for both, and the old one kept in step so an older version reads it the same way
         Repo.putInt("m_sams", if (sams) 1 else 0); Repo.putInt("m_threats", if (sams) 1 else 0)
         Repo.putInt("m_support", if (support) 1 else 0)
+        Repo.putInt("m_attack", if (attack) 1 else 0)
+        Repo.putInt("m_lines", if (lines) 1 else 0); Repo.putInt("m_plan", if (plan) 1 else 0)
     }
 }
 
@@ -174,37 +193,38 @@ class MapData(
     val arrField: Airport?,
     val altField: Airport?,
     val contactsConnected: Boolean?,
+    // 1.3.8: the merged mission (PlanMerge) the rest was drawn from, its lines and its attack
+    val merged: com.bmscompanion.app.data.mission.MergedMission = com.bmscompanion.app.data.mission.MergedMission(),
+    val lines: List<List<com.bmscompanion.app.data.mission.MergedPoint>> = emptyList(),
+    val attack: com.bmscompanion.app.data.mission.AttackOverlay? = null,
+    /** [bull] is the save header's bullseye (before 3D), not the live one */
+    val bullFromSave: Boolean = false,
+    /** a plan is applied, whether or not the Plan layer shows it (the chip is offered while it is) */
+    val planAvailable: Boolean = false,
+    /** the mission's threat picture ([MissionData.ground]) */
+    val ground: com.bmscompanion.app.data.mission.MissionGround? = null,
+    /** its air defences and ships, each with its reach, drawn by [drawMissionSites] */
+    val groundSites: List<com.bmscompanion.app.data.mission.MissionPicture.Site> = emptyList(),
+    /** the route the flight plan joins (feet), for whether a site is named */
+    val routeFt: List<Pair<Double, Double>> = emptyList(),
+)
+
+/** What of [MapData] changes only with the mission (not with every live tick): worked out once per mission change. */
+private class MapBase(
+    val merged: com.bmscompanion.app.data.mission.MergedMission,
+    val stpts: List<Stpt>,
+    val route: List<Stpt>,
+    val routeFt: List<Pair<Double, Double>>,
+    val ppts: List<Threat>,
+    val tracks: List<com.bmscompanion.app.data.mission.SupportTrack>,
+    val stations: List<SupportStation>,
+    val groundSites: List<com.bmscompanion.app.data.mission.MissionPicture.Site>,
+    /** the sites a live air defence must be one of to be drawn: the mission's and the PPTs */
+    val known: List<com.bmscompanion.app.data.mission.CampSite>,
 )
 
 /** Which of the two roles a briefing station is, in the words the campaign uses. */
 private fun role(st: SupportStation) = if (st.role.contains("tanker", true)) "Tanker" else "AWACS"
-
-/** The stations named in the briefing's support section, placed against this theater's airfields and towns. */
-private fun supportStations(
-    mission: com.bmscompanion.app.data.mission.MissionData?,
-    set: com.bmscompanion.app.data.AirportSet?,
-    geo: com.bmscompanion.app.data.GeoLayers?,
-): List<SupportStation> {
-    val entries = mission?.briefing?.support.orEmpty()
-    if (entries.isEmpty()) return emptyList()
-    fun one(name: String): Pair<Double, Double>? {
-        val n = name.trim().lowercase()
-        if (n.length < 3) return null
-        set?.airports?.firstOrNull { it.name.lowercase().startsWith(n) || it.icao?.lowercase() == n }?.let { return it.x to it.y }
-        geo?.places?.firstOrNull { it.n.lowercase() == n }?.let { return it.x to it.y }
-        return geo?.places?.firstOrNull { it.n.lowercase().startsWith(n) }?.let { it.x to it.y }
-    }
-    // "Nea Anchialos" is a place; so is the "Larissa" of "Larissa Airbase". Try what the briefing said, then its
-    // first word, because a briefing writes a name the way a pilot says it and a map writes it the way it is.
-    fun place(name: String): Pair<Double, Double>? =
-        one(name) ?: name.trim().substringBefore(' ').takeIf { it.length >= 3 }?.let { one(it) }
-    return entries.mapNotNull { e ->
-        val role = e.role ?: return@mapNotNull null
-        if (!role.contains("tanker", true) && !role.contains("awacs", true) && !role.contains("jstars", true)) return@mapNotNull null
-        val (at, text) = stationFromNotes(e.notes, ::place) ?: return@mapNotNull null
-        SupportStation(e.callsign, role, at.first, at.second, text)
-    }
-}
 
 @Composable
 fun rememberMapData(env: MissionEnv): MapData {
@@ -219,34 +239,73 @@ fun rememberMapData(env: MissionEnv): MapData {
     val geo by androidx.compose.runtime.produceState<com.bmscompanion.app.data.GeoLayers?>(null, env.theater?.mapId) {
         value = env.theater?.mapId?.let { com.bmscompanion.app.data.Repo.geo(it) }
     }
-    return remember(live, contacts, mission, env.set, reference, geo) {
-        val stpts = steerpoints(mission, live)
+    val showPlan = MapLayers.plan
+    // The merge reads only the jet's steerpoints from the live data, so it is worked out again when those change and
+    // when the mission does — not on each of the four live ticks a second, which made every frame of a pan wait on it.
+    val nav = live?.navPoints
+    val base = remember(nav, mission, env.set, reference, geo, showPlan) {
+        // the Plan chip off is the map without the plan: the same merge, with nothing sent
+        val merged = com.bmscompanion.app.data.mission.PlanMerge.merge(if (showPlan) mission else mission?.copy(plan = null), live)
+        val stpts = steerpoints(merged)
+        val route = stpts.filter { it.hasPos }
+        // the campaign's tanker and AWACS tracks; with no printed briefing, those of the save flight the Planner sent
+        val tracks = plannedTracks(mission?.tracks.orEmpty(), merged)
+        val ppts = preplannedPoints(merged)
+        val groundSites = missionSites(mission?.ground, reference)
+        MapBase(
+            merged = merged, stpts = stpts, route = route,
+            routeFt = route.filter { it.onRoute }.map { it.x!! to it.y!! },
+            ppts = ppts, tracks = tracks,
+            // the same stations as the Support card: your tanker on the merged route's Refuel steerpoint (the plan's,
+            // the cartridge's, BMS's believed route or the save's flight), the others where the briefing says
+            stations = plannedStations(merged, env.set, geo, tracks),
+            groundSites = groundSites,
+            known = groundSites.map { com.bmscompanion.app.data.mission.CampSite(system = it.system, x = it.x, y = it.y, spotted = true) } +
+                ppts.filter { !it.marker }.map { com.bmscompanion.app.data.mission.CampSite(system = it.name, x = it.x, y = it.y, spotted = true) },
+        )
+    }
+    // the feed's air defences: only those that are one of the mission's known sites (the PC sends no others either)
+    val sams = remember(contacts, base, reference) {
+        val all = contacts?.contacts.orEmpty().filter { it.kind == "sam" && it.hostile }
+        val known = all.filter { c -> com.bmscompanion.app.data.mission.MissionPicture.knownSite(c.name, c.x, c.y, base.known) }.map { it.id }.toSet()
+        if (known.isEmpty()) emptyList() else samSites(all.filter { it.id in known }, reference)
+    }
+    return remember(live, contacts, base, sams, mission) {
+        val merged = base.merged
         val own = ownship(live)
         val ctcs = contacts?.contacts.orEmpty()
         val ownContact = ctcs.firstOrNull { it.own }
-        val bases = airbases(live, mission?.briefing)
+        val bases = if (merged.briefing != null) airbases(live, merged, ctcs) else airbases(live, mission?.briefing, ctcs)
+        val liveBull = bullseye(live, ctcs)
+        // the save's own bullseye stands in before 3D only; in 3D the jet's is the one
+        val saveBull = if (liveBull == null && !merged.inJet) merged.saveBullseye
+            ?: mission?.ground?.let { g -> if (g.bullseyeX != null && g.bullseyeY != null) g.bullseyeX to g.bullseyeY else null } else null
         MapData(
-            stpts = stpts,
-            route = stpts.filter { it.hasPos },
-            ppts = preplannedThreats(mission, live),
+            stpts = base.stpts,
+            route = base.route,
+            ppts = base.ppts,
             marks = markpoints(live),
             live = live,
             own = own,
             ownPos = own ?: ownContact?.let { it.x to it.y },
             ownHdg = if (own != null) live!!.hdgTrue else ownContact?.hdg ?: 0.0,
             ctcs = ctcs,
-            sams = samSites(ctcs, reference).let { all ->
-                // what the briefing did not name is not the pilot's to see
-                val briefed = briefedSystems(mission, reference)
-                all.filter { it.threatId != null && it.threatId in briefed }
-            },
-            stations = supportStations(mission, env.set, geo),
-            tracks = mission?.tracks.orEmpty(),
-            bull = bullseye(live, ctcs),
-            depField = matchAirport(env.set, bases.departure),
-            arrField = matchAirport(env.set, bases.arrival),
-            altField = matchAirport(env.set, bases.alternate),
+            sams = sams,
+            stations = base.stations,
+            tracks = base.tracks,
+            bull = liveBull ?: saveBull,
+            depField = bases.departureIn(env.set),
+            arrField = bases.arrivalIn(env.set),
+            altField = bases.alternateIn(env.set),
             contactsConnected = contacts?.connected,
+            merged = merged,
+            lines = merged.lines,
+            attack = merged.attack,
+            bullFromSave = saveBull != null,
+            planAvailable = mission?.plan?.applied == true,
+            ground = mission?.ground,
+            groundSites = base.groundSites,
+            routeFt = base.routeFt,
         )
     }
 }
@@ -267,7 +326,8 @@ fun MissionMapPane(env: MissionEnv, state: MapState, sel: MapSel?, onSel: (MapSe
             Column(Modifier.width(400.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (sel != null) SelectionCard(env, sel, d, Modifier.fillMaxWidth()) { onSel(null) }
                 FlightTiles(d.live, d.bull, compact = true)
-                PictureCard(d.ctcs, d.ownPos, d.ownHdg, d.bull, onPick = { onSel(MapSel.Ctc(it.id)) })
+                // the Map tab drops the card while hostile contacts are off (the Dashboard's keeps its note)
+                if (rememberHostilesOn()) PictureCard(d.ctcs, d.ownPos, d.ownHdg, d.bull, onPick = { onSel(MapSel.Ctc(it.id)) })
                 SteerpointList(d.stpts, d.ownPos, d.bull, selected = (sel as? MapSel.Stp)?.n) { s -> onSel(MapSel.Stp(s.n)); state.flyTo(s.x!!, s.y!!, maxOf(state.scale, 4f)); MapLayers.follow = false }
             }
         }
@@ -295,8 +355,14 @@ fun LiveMap(
     compactControls: Boolean = false,
     /** A VR board has no pointer, so it gets the chart and none of the controls. */
     bare: Boolean = false,
+    /** Keep the theater covering the frame at every zoom — what a dashboard card wants, not a full page. */
+    fillBox: Boolean = false,
 ) {
     val th = env.theater ?: return
+    // the attack is the one Populate from Planner took (WDP mode) or the cartridge's own (EZBoards mode, 1.3.8:
+    // PlanMerge.cartridgeAttack), and only on a map of the theater it was planned in: sim feet from one theater are a
+    // place in every other. Every copy of the map — a board's too — reads it from the mission.
+    val planAttack = d.attack?.takeIf { it.theater.isEmpty() || it.theater.equals(th.id, ignoreCase = true) }
     val link by MissionLink.state.collectAsState()
     // measuring labels is the most expensive part of a redraw: cache layouts across the 4 Hz updates
     // the same table the Tankers & AWACS page builds: it carries the channel and which one is yours
@@ -305,17 +371,36 @@ fun LiveMap(
     val density = LocalDensity.current
     val hitPx = with(density) { 30.dp.toPx() }
     var layersOpen by remember { mutableStateOf(!compactControls) }
-    val visibleContacts = d.ctcs.filter { c ->
-        c.kind != "bullseye" && c.kind != "sam" && !c.own && MapLayers.traffic && (!c.hostile || MapLayers.hostiles)
+    // Two independent switches, not one nested in the other: Traffic is your own side, Hostiles is theirs. A pilot who
+    // turns Hostiles off wants the enemy off the map and his own flight left on it, and one who turns Traffic off wants
+    // the reverse. Nesting them let Traffic quietly govern both, so switching Traffic on brought the enemy back with it.
+    // The switch is a second filter: hostile contacts reach a device at all only while the PC's setting is on
+    // (HostileContacts, off by default), and the chip is not offered otherwise.
+    val hostilesOn = rememberHostilesOn()
+    val showHostiles = hostilesOn && MapLayers.hostiles
+    val showTraffic = MapLayers.traffic
+    val visibleContacts = remember(d.ctcs, showHostiles, showTraffic) {
+        d.ctcs.filter { c ->
+            c.kind != "bullseye" && c.kind != "sam" && !c.own &&
+                if (c.hostile) showHostiles else showTraffic
+        }
+    }
+    // the theater's airfields that are drawn, each with its runways, worked out once per theater rather than on every
+    // frame of a pan (a theater has hundreds, and each frame built a list for each)
+    val fieldRunways = remember(env.set) {
+        env.set?.airports.orEmpty().map { Triple(it, airfieldRunways(it), mapsAirfield(it)) }
     }
 
     // First view: the route (or ownship) instead of the whole theater.
-    var framed by remember(th.id) { mutableStateOf(state.initialized) }
-    LaunchedEffect(th.id, d.route.isNotEmpty(), d.ownPos != null) {
+    // and again after a new mission or a switch of mode (MissionEpoch): the new route, not the last one's
+    val epoch = MissionEpoch.n
+    var framed by remember(th.id, epoch) { mutableStateOf(MissionEpoch.framed(state, state.initialized)) }
+    LaunchedEffect(th.id, epoch, d.route.isNotEmpty(), d.ownPos != null) {
         if (framed) return@LaunchedEffect
-        val target = d.ownPos ?: d.route.firstOrNull()?.let { it.x!! to it.y!! } ?: return@LaunchedEffect
+        val target = d.ownPos ?: (d.route.firstOrNull { it.onRoute } ?: d.route.firstOrNull())?.let { it.x!! to it.y!! } ?: return@LaunchedEffect
         state.flyTo(target.first, target.second, 3.5f)
         framed = true
+        MissionEpoch.markFramed(state)
     }
     LaunchedEffect(d.live?.t, MapLayers.follow) {
         if (MapLayers.follow && d.own != null) state.flyTo(d.own.first, d.own.second, maxOf(state.scale, 3f))
@@ -333,7 +418,11 @@ fun LiveMap(
 
     Box(modifier) {
         TheaterMap(
-            th.map, th.sizeFt, Modifier.fillMaxSize(), state, maxScale = 24f, fillWidth = false, zoomButtons = !bare,
+            // Close enough to read an attack's cues — a pull-up point two or three miles out, offsets a few thousand
+            // feet from the target — which at the old limit were one blob. Past the sharpest tiles the ground only
+            // magnifies, but the symbols and lines stay sharp, and they are what is looked at that close.
+            th.map, th.sizeFt, Modifier.fillMaxSize(), state, maxScale = ATTACK_ZOOM * 1.6f, fillWidth = false, zoomButtons = !bare,
+            fillBox = fillBox,
             onUserGesture = { if (MapLayers.follow) { MapLayers.follow = false; MapLayers.save() } },
             onTap = { x, y, pr ->
                 val tap = pr.toScreen(x, y)
@@ -341,9 +430,10 @@ fun LiveMap(
                 val cands = buildList<Pair<MapSel, Double>> {
                     visibleContacts.forEach { add(MapSel.Ctc(it.id) to dist(it.x, it.y)) }
                     if (MapLayers.route) d.route.forEach { add(MapSel.Stp(it.n) to dist(it.x!!, it.y!!) + 4) }
-                    if (MapLayers.sams) d.ppts.forEachIndexed { i, p -> add(MapSel.Ppt(i) to dist(p.x, p.y) + 6) }
+                    if (MapLayers.sams || MapLayers.support) d.ppts.forEachIndexed { i, p -> if (if (p.marker) MapLayers.support || MapLayers.sams else MapLayers.sams) add(MapSel.Ppt(i) to dist(p.x, p.y) + 6) }
                     if (MapLayers.sams) d.sams.forEach { add(MapSel.Ctc(it.id) to dist(it.x, it.y) + 6) }
-                    if (MapLayers.fields) env.set?.airports?.forEach { add(MapSel.Field(it.id) to dist(it.x, it.y) + 8) }
+                    val flightFields = setOfNotNull(d.depField?.id, d.arrField?.id, d.altField?.id)
+                    env.set?.airports?.forEach { if (it.id in flightFields || MapLayers.fields && mapsAirfield(it)) add(MapSel.Field(it.id) to dist(it.x, it.y) + 8) }
                 }
                 val best = cands.minByOrNull { it.second }
                 onSel(if (best != null && best.second < hitPx * 1.6) best.first else MapSel.Pt(x, y))
@@ -352,128 +442,91 @@ fun LiveMap(
             // The colours are taken here, inside the pass: remembered once, they kept whatever ink was current when
             // the map first appeared. A label is white with a dark blur behind it on relief, satellite and dark — and
             // the other way about on the chart, where white on white with a black blur was unreadable.
-            val labelStyle = TextStyle(
-                color = if (Hud.onLightMap) Color(0xFF12151A) else Color.White,
-                fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                shadow = if (Hud.onLightMap) MapGlow else MapShadow,
-            )
+            // Everything here is drawn with the marks every map of the mission shares (MissionMapMarks.kt), so the
+            // Planner's Map page draws the same mission the same way; the labels are gathered and placed last, the
+            // flight plan's first (MapNames).
+            val labelStyle = mapLabelStyle()
             val stptStyle = labelStyle.copy(color = Hud.Amber)
-            val fieldStyle = labelStyle.copy(color = Hud.Green)
             val placed = ArrayList<androidx.compose.ui.geometry.Rect>()
-            fun on(p: Offset) = p.x > -60 && p.y > -60 && p.x < size.width + 60 && p.y < size.height + 60
+            val names = MapNames()
+            fun on(p: Offset) = onMap(p)
 
             // Airfields, drawn as airfields: a ring with the field's own runways across it, at their real headings.
-            // Where you take off and land is solid, the alternate an open ring, every other field small and faint —
-            // three kinds that read apart without a legend. The symbols themselves are drawn last, over everything
+            // Where you take off and land is solid, the alternate an open ring, and (only with All airfields on) every
+            // other field small and faint — three kinds that read apart without a legend. The symbols themselves are drawn last, over everything
             // else on the map: a take-off steerpoint sits on the field it leaves from, aircraft sit on it on the
-            // ground, and either of them hid the airfield underneath. The names are placed here, so that they keep
-            // their turn in the queue ahead of the labels that follow.
+            // ground, and either of them hid the airfield underneath. A carrier is drawn only when it is the flight's:
+            // the theater's list has it where the campaign started it.
             val fieldSymbols = ArrayList<Triple<Offset, List<Offset>, FieldMark>>()
-            if (MapLayers.fields) env.set?.airports?.forEach { a ->
+            fieldRunways.forEach { (a, runways, drawn) ->
                 val p = pr.toScreen(a.x, a.y)
                 if (!on(p)) return@forEach
-                val role = when (a.id) { d.depField?.id -> "DEP"; d.arrField?.id -> "ARR"; d.altField?.id -> "ALT"; else -> null }
-                // each runway once — parallel ones are one line on a symbol this size
-                val runways = a.runways.mapNotNull { it.ends.firstOrNull()?.headingTrue }
-                    .map { ((it % 180) + 180) % 180 }
-                    .distinctBy { (it / 6).toInt() }
-                    .map { h ->
-                        val rad = Math.toRadians(h)
-                        val v = pr.toScreen(a.x + cos(rad) * 6076.12, a.y + sin(rad) * 6076.12) - p
-                        val len = v.getDistance()
-                        if (len > 0f) v / len else Offset(0f, -1f)
-                    }
-                    .ifEmpty { listOf(Offset(0.7071f, -0.7071f)) }
-                if (role != null) {
-                    val tag = if (d.depField?.id == d.arrField?.id && role != "ALT") "HOME" else role
-                    fieldSymbols += Triple(p, runways, if (role == "ALT") FieldMark.ALTERNATE else FieldMark.HOME)
-                    placeText(tm, "$tag ${a.icao ?: a.name}", p + Offset(15f, -8f), fieldStyle, placed)
-                } else {
-                    fieldSymbols += Triple(p, runways, FieldMark.OTHER)
-                }
+                val dep = a.id == d.depField?.id
+                val arr = a.id == d.arrField?.id
+                val alt = a.id == d.altField?.id
+                val tag = fieldTag(dep, arr, alt)
+                if (tag == null && (!MapLayers.fields || !drawn)) return@forEach
+                fieldSymbols += Triple(p, runways, fieldMark(dep, arr, alt))
+                if (tag != null) nameField(a, tag, p, names)
             }
 
-            // pre-planned threat rings
-            if (MapLayers.sams) d.ppts.forEach { t ->
+            // Pre-planned threats: a ring for a threat, and for a marker (AWACS, tanker, a friendly — Ppt.ini gives those
+            // a tenth of a foot) a small flag with no ring, which is what the HSD shows. What the plan put there and the
+            // jet does not have yet is dashed with a hollow centre; what it cleared is faint.
+            if (MapLayers.sams) d.ppts.filter { !it.marker }.forEach { t ->
                 val c = pr.toScreen(t.x, t.y)
                 val r = (t.rangeNm * pr.pxPerNm).toFloat()
-                if (c.x + r < 0 || c.y + r < 0 || c.x - r > size.width || c.y - r > size.height) return@forEach
-                drawCircle(Hostile.copy(alpha = 0.08f), r, c)
-                drawCircle(Hostile.copy(alpha = 0.75f), r, c, style = Stroke(2.5f))
-                drawCircle(Hostile, 5f, c)
-                placeText(tm, t.name, c + Offset(8f, 2f), labelStyle.copy(color = Hostile), placed)
+                if (!ringOnMap(c, r)) return@forEach
+                drawPptRing(c, r, RING_FILL, plan = t.notInJet, fade = if (t.cleared) 0.35f else 1f)
+                names.add(NamePrio.PPT, planLabel(t.name, t.fromPlan, t.notInJet, t.cleared), pptLabelAt(c), labelStyle.copy(color = if (t.notInJet) PlanInk else SamRed))
+            }
+            if (MapLayers.sams || MapLayers.support) d.ppts.filter { it.marker }.forEach { t ->
+                val c = pr.toScreen(t.x, t.y)
+                if (!on(c)) return@forEach
+                val ink = if (t.notInJet) PlanInk else Friendly
+                drawPptMarker(c, ink, dashed = t.notInJet, fade = if (t.cleared) 0.4f else 1f)
+                if (MapLayers.labels) names.add(NamePrio.PPT, planLabel(t.name, t.fromPlan, t.notInJet, t.cleared), markerLabelAt(c), labelStyle.copy(color = ink))
+            }
+
+            // The cartridge's lines, each joined in its own order and never to another, dashed like the HSD draws
+            // them. A plan's line the jet does not have yet is drawn thinner in the Planner's colour.
+            if (MapLayers.lines) d.lines.forEach { line ->
+                val first = line.firstOrNull() ?: return@forEach
+                val pts = line.map { pr.toScreen(it.x, it.y) }
+                if (pts.none { on(it) }) return@forEach
+                val ink = if (first.notInJet) PlanInk else LineInk
+                drawCartridgeLine(pts, ink, plan = first.notInJet, fade = if (first.cleared) 0.35f else 1f)
+                if (MapLayers.labels) names.add(NamePrio.LINE, planLabel("LINE ${first.line}", first.source == com.bmscompanion.app.data.mission.PlanItemSource.PLAN, first.notInJet, first.cleared), lineLabelAt(pts[0]), labelStyle.copy(color = ink))
             }
 
             // The air defences BMS is streaming, each with the reach of its own system. Drawn under everything
             // that moves: a ring is a place you do not want to be, not a thing to look at.
             if (MapLayers.sams) d.sams.forEach { site ->
                 val c = pr.toScreen(site.x, site.y)
-                val ink = if (site.friendly) Friendly else Hostile
-                val r = ((site.rangeNm ?: 0.0) * pr.pxPerNm).toFloat()
-                if (r > 2f) {
-                    if (c.x + r < 0 || c.y + r < 0 || c.x - r > size.width || c.y - r > size.height) return@forEach
-                    drawCircle(ink.copy(alpha = 0.06f), r, c)
-                    drawCircle(ink.copy(alpha = 0.5f), r, c, style = Stroke(2f, pathEffect = SamRing))
-                } else if (!on(c)) return@forEach
-                // a launcher is a square: the shape every briefing draws a SAM with
-                val h = 4.5f
-                drawRect(MapHalo, Offset(c.x - h - 1.5f, c.y - h - 1.5f), Size(2 * h + 3f, 2 * h + 3f))
-                drawRect(ink, Offset(c.x - h, c.y - h), Size(2 * h, 2 * h), style = Stroke(2f))
-                if (MapLayers.labels) placeText(tm, site.label, c + Offset(9f, 2f), labelStyle.copy(color = ink), placed)
+                val ink = if (site.friendly) Friendly else SamRed
+                if (!drawLiveSam(c, ((site.rangeNm ?: 0.0) * pr.pxPerNm).toFloat(), ink)) return@forEach
+                if (MapLayers.labels) names.add(NamePrio.SITE, site.label, c + Offset(9f, 2f), labelStyle.copy(color = ink))
             }
 
-            // What the campaign planned for the tankers and the AWACS, when the mission file gave it to us: the
-            // transit drawn thin, and the leg they hold on drawn as the corridor a pilot goes looking for.
+            // The mission's threats (MissionPicture): the sites the briefing names (else the spotted ones along the
+            // route), drawn as the Planner's Map page draws them, so every map of the mission looks the same by default
+            if (MapLayers.sams) drawMissionSites(pr, d.groundSites, MapLayers.labels, RING_FILL, names, d.routeFt)
+
+            // What the campaign planned for the tankers and the AWACS, when the mission file gave it to us: only the
+            // leg they hold on, drawn as the corridor a pilot goes looking for (their transit is not drawn).
             if (MapLayers.support) d.tracks.forEach { t ->
-                val ink = if (t.role.contains("tanker", true)) TankerColor else AwacsColor
                 // the one your flight was given is the one you will actually fly to: drawn as such, with the
-                // channel you tune written where you are looking
-                val mine = t.yours
-                val strong = if (mine) 1f else 0.6f
-                val route = t.points.map { pr.toScreen(it.x, it.y) }
-                if (route.size >= 2) {
-                    for (i in 1 until route.size) {
-                        val a = route[i - 1]
-                        val b = route[i]
-                        if (!on(a) && !on(b)) continue
-                        drawLine(ink.copy(alpha = 0.35f * strong), a, b, strokeWidth = 1.5f, pathEffect = SamRing)
-                    }
-                }
-                val legs = t.points.withIndex().filter { it.value.station }.map { route[it.index] }
-                if (legs.size >= 2) {
-                    val from = legs.first()
-                    val to = legs.last()
-                    val dx = to.x - from.x
-                    val dy = to.y - from.y
-                    val len = hypot(dx.toDouble(), dy.toDouble()).toFloat()
-                    if (len > 1f && (on(from) || on(to))) {
-                        // the corridor is as wide as a track is flown: twelve miles, the width BMS draws its own
-                        val half = (TRACK_WIDTH_NM * pr.pxPerNm / 2).toFloat()
-                        val nx = -dy / len * half
-                        val ny = dx / len * half
-                        val box = androidx.compose.ui.graphics.Path().apply {
-                            moveTo(from.x + nx, from.y + ny)
-                            lineTo(to.x + nx, to.y + ny)
-                            lineTo(to.x - nx, to.y - ny)
-                            lineTo(from.x - nx, from.y - ny)
-                            close()
-                        }
-                        drawPath(box, ink.copy(alpha = if (mine) 0.16f else 0.07f))
-                        drawPath(box, ink.copy(alpha = if (mine) 0.9f else 0.45f), style = Stroke(if (mine) 3f else 2f))
-                        if (MapLayers.labels) {
-                            val mid = Offset((from.x + to.x) / 2, (from.y + to.y) / 2)
-                            // what to call it, and what to tune: the channel comes from the support table, which
-                            // knows the briefing's TACAN and BMS's own allocation
-                            val asset = support.firstOrNull { a -> a.callsign.equals(t.callsign, true) }
-                            val label = listOfNotNull(
-                                t.callsign ?: t.role.uppercase(),
-                                asset?.tacan?.let { "TCN $it" },
-                                if (mine) "YOURS" else null,
-                            ).joinToString(" · ")
-                            placeText(tm, label, mid + Offset(6f, -6f), labelStyle.copy(color = ink), placed)
-                        }
-                    }
-                }
+                // channel you tune written where you are looking — the channel comes from the support table, which
+                // knows the briefing's TACAN and BMS's own allocation
+                val legs = t.points.filter { it.station }
+                val asset = support.firstOrNull { a -> a.callsign.equals(t.callsign, true) }
+                drawSupportTrack(
+                    pr,
+                    legs.takeIf { it.size >= 2 }?.first()?.let { com.bmscompanion.app.data.wdp.DtcFromMission.Pt(it.x, it.y) },
+                    legs.takeIf { it.size >= 2 }?.last()?.let { com.bmscompanion.app.data.wdp.DtcFromMission.Pt(it.x, it.y) },
+                    trackInk(t.role), t.yours,
+                    if (MapLayers.labels) trackLabel(t.callsign ?: t.role.uppercase(), asset?.tacan, t.yours) else null, names,
+                )
             }
 
             // Where the briefing says the tanker and the AWACS will be — on the map from the moment it is printed,
@@ -481,57 +534,54 @@ fun LiveMap(
             // A role the campaign gave us a real track for needs none of this.
             if (MapLayers.support) d.stations.forEach { st ->
                 if (d.tracks.any { it.role.equals(role(st), true) }) return@forEach
-                val c = pr.toScreen(st.x, st.y)
-                val ink = if (st.role.contains("tanker", true)) TankerColor else AwacsColor
-                val r = (STATION_NM * pr.pxPerNm).toFloat()
-                if (c.x + r < 0 || c.y + r < 0 || c.x - r > size.width || c.y - r > size.height) return@forEach
-                drawCircle(ink.copy(alpha = 0.06f), r, c)
-                drawCircle(ink.copy(alpha = 0.55f), r, c, style = Stroke(2f, pathEffect = SamRing))
-                drawCircle(MapHalo, 6f, c)
-                drawCircle(ink, 4f, c)
-                if (MapLayers.labels) {
-                    val what = st.role.uppercase()
-                    placeText(tm, "$what ${st.callsign} station", c + Offset(9f, -8f), labelStyle.copy(color = ink), placed)
-                }
+                drawSupportStation(
+                    pr.toScreen(st.x, st.y), (STATION_NM * pr.pxPerNm).toFloat(), trackInk(st.role),
+                    if (MapLayers.labels) "${st.role.uppercase()} ${st.callsign} station" else null, names,
+                )
             }
 
-            // bullseye
-            d.bull?.let { (bx, by) -> drawBullseye(pr.toScreen(bx, by), pr, rings = 5, ringNm = 20) }
-
-            // flight plan
-            if (MapLayers.route && d.route.size > 1) {
-                val main = d.route.filterNot { it.isAlternate }
-                for (i in 0 until main.size - 1) {
-                    val a = pr.toScreen(main[i].x!!, main[i].y!!)
-                    val b = pr.toScreen(main[i + 1].x!!, main[i + 1].y!!)
-                    drawLine(MapHalo, a, b, 6f)
-                    drawLine(Hud.Amber, a, b, 3f)
-                }
-                d.route.filter { it.isAlternate }.forEach { alt ->
-                    main.lastOrNull()?.let { last ->
-                        drawLine(Hud.Amber.copy(alpha = 0.7f), pr.toScreen(last.x!!, last.y!!), pr.toScreen(alt.x!!, alt.y!!), 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f)))
-                    }
-                }
+            // bullseye (before 3D possibly the save header's own, which says so)
+            d.bull?.let { (bx, by) ->
+                val c = pr.toScreen(bx, by)
+                drawBullseye(c, pr, rings = 5, ringNm = 20)
+                if (d.bullFromSave && MapLayers.labels) names.add(NamePrio.BULL, "BULLSEYE (from the save)", c + Offset(12f, 6f), labelStyle.copy(color = Hud.Cyan))
             }
+
+            // Flight plan: the route line joins flight-plan points only — the briefing's rows and the plan's own points.
+            // A precision target (the recon bank, action -1) is marked where it is and never joined: joining it drew a
+            // leg from the last route point out to the target area.
+            val flightPlan = d.route.filter { it.onRoute }
+            if (MapLayers.route && flightPlan.size > 1) drawRouteLegs(
+                flightPlan.map { s -> LegPt(pr.toScreen(s.x!!, s.y!!), land = s.isLand, refuel = s.isRefuel, alternate = s.isAlternate) },
+                Hud.Amber,
+            )
             if (MapLayers.route) d.route.forEach { s ->
                 val p = pr.toScreen(s.x!!, s.y!!)
-                if (!on(p)) return@forEach
-                if (s.isTarget) {
-                    val path = Path().apply { moveTo(p.x, p.y - 11f); lineTo(p.x + 11f, p.y); lineTo(p.x, p.y + 11f); lineTo(p.x - 11f, p.y); close() }
-                    drawPath(path, MapHalo, style = Stroke(6f))
-                    drawPath(path, Hostile, style = Stroke(3f))
-                } else {
-                    drawCircle(MapHalo, 9f, p)
-                    drawCircle(Hud.Amber, 7f, p, style = Stroke(3f))
+                // Plan and jet disagree: the plan's point is drawn hollow and dashed in the Planner's colour, joined by
+                // a thin line to where the jet has it (in 3D the jet's is the one shown; before 3D the plan's is, and
+                // the line goes to where the jet would load it)
+                val other = if (s.otherX != null && s.otherY != null) pr.toScreen(s.otherX, s.otherY) else null
+                if (s.notInJet && other != null && (on(p) || on(other))) {
+                    drawDashedLine(PlanInk.copy(alpha = 0.8f), p, other, 1.5f, floatArrayOf(5f, 5f))
+                    val planAt = if (s.source == com.bmscompanion.app.data.mission.PlanItemSource.JET) other else p
+                    drawCircle(MapHalo, 11f, planAt, style = Stroke(4.5f))
+                    drawCircle(PlanInk, 10f, planAt, style = Stroke(2.5f, pathEffect = PlanDash))
                 }
-                val text = if (MapLayers.labels && pr.scale >= 2.5f) "${s.n} ${s.desc ?: ""}".trim() else "${s.n}"
-                placeText(tm, text, p + Offset(11f, -18f), stptStyle, placed)
+                if (!on(p)) return@forEach
+                val hollowPlan = s.notInJet && s.source != com.bmscompanion.app.data.mission.PlanItemSource.JET
+                val ink = if (hollowPlan || !s.isTarget && s.fromPlan) PlanInk else if (s.isTarget) Hostile else Hud.Amber
+                drawSteerpoint(p, s.isTarget, ink, hollow = hollowPlan, fade = if (s.cleared) 0.4f else 1f)
+                val base = stptText(s.n, s.desc ?: s.targetName?.takeIf { s.isTarget } ?: if (s.planRow) s.title else null, MapLayers.labels, pr)
+                val text = if (MapLayers.labels) planLabel(base, s.fromPlan, s.notInJet, s.cleared) else base
+                names.add(NamePrio.STPT, text, stptLabelAt(p), if (s.notInJet || s.fromPlan) stptStyle.copy(color = PlanInk) else stptStyle)
             }
+            // The attack the plan carries, around its target (drawAttack, the same on a VR board's map)
+            if (MapLayers.attack && planAttack != null) drawAttack(planAttack, pr, tm, labelStyle, placed) { on(it) }
             // markpoints and datalink points
             if (MapLayers.route) d.marks.forEach { m ->
                 val p = pr.toScreen(m.x, m.y)
                 drawRect(Hud.Magenta, p - Offset(6f, 6f), androidx.compose.ui.geometry.Size(12f, 12f), style = Stroke(2.5f))
-                placeText(tm, "${m.type} ${m.i}", p + Offset(9f, 2f), labelStyle.copy(color = Hud.Magenta), placed)
+                names.add(NamePrio.TRAFFIC, "${m.type} ${m.i}", p + Offset(9f, 2f), labelStyle.copy(color = Hud.Magenta))
             }
 
             // traffic from the Tacview feed
@@ -542,7 +592,7 @@ fun LiveMap(
                 drawContact(c, p, col, pr)
                 if (MapLayers.labels && c.kind != "missile") {
                     val who = listOfNotNull(supportLabel(c), c.group ?: c.name ?: c.kind).joinToString(" ")
-                    placeText(tm, "$who ${flightLevel(c.altFt)}", p + Offset(10f, 4f), labelStyle.copy(color = col), placed)
+                    names.add(NamePrio.TRAFFIC, "$who ${flightLevel(c.altFt)}", p + Offset(10f, 4f), labelStyle.copy(color = col))
                 }
             }
 
@@ -550,14 +600,17 @@ fun LiveMap(
             // because where you are is the one thing that must never be covered
             fieldSymbols.forEach { (p, runways, mark) -> drawAirfield(p, runways, mark) }
 
+            // the labels, the flight plan's first
+            names.place(this, tm, placed)
+
             // ownship
             d.ownPos?.let { (ox, oy) -> drawOwnship(pr.toScreen(ox, oy), d.ownHdg, pr) }
 
             // selection
             selPos?.let { (sx, sy) ->
                 val p = pr.toScreen(sx, sy)
-                drawCircle(Hud.Magenta, 22f, p, style = Stroke(3f))
-                d.ownPos?.let { (ox, oy) -> drawLine(Hud.Magenta.copy(alpha = 0.6f), pr.toScreen(ox, oy), p, 2f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))) }
+                drawSelection(p)
+                d.ownPos?.let { (ox, oy) -> drawDashedLine(Hud.Magenta.copy(alpha = 0.6f), pr.toScreen(ox, oy), p, 2f, floatArrayOf(10f, 8f)) }
             }
         } }
 
@@ -582,10 +635,21 @@ fun LiveMap(
                     HudChip("Route", MapLayers.route) { MapLayers.route = !MapLayers.route; MapLayers.save() }
                     HudChip("SAMs", MapLayers.sams) { MapLayers.sams = !MapLayers.sams; MapLayers.save() }
                     HudChip("Support", MapLayers.support) { MapLayers.support = !MapLayers.support; MapLayers.save() }
-                    HudChip("Traffic", MapLayers.traffic) { MapLayers.traffic = !MapLayers.traffic; MapLayers.save() }
-                    HudChip("Hostiles", MapLayers.hostiles) { MapLayers.hostiles = !MapLayers.hostiles; MapLayers.save() }
+                    // the cartridge's lines, offered when there are any
+                    if (d.lines.isNotEmpty() || (MapLayers.plan && d.merged.planApplied && d.merged.lines.isNotEmpty())) HudChip("Lines", MapLayers.lines) { MapLayers.lines = !MapLayers.lines; MapLayers.save() }
+                    // everything the plan put on the map, at once — offered while a plan is applied
+                    if (d.planAvailable) HudChip("Plan", MapLayers.plan) { MapLayers.plan = !MapLayers.plan; MapLayers.save() }
+                    // shown once a plan with an attack was sent; turning it on flies the map to it
+                    planAttack?.let { a ->
+                        HudChip("Attack", MapLayers.attack) {
+                            MapLayers.attack = !MapLayers.attack; MapLayers.save()
+                            if (MapLayers.attack) a.target?.let { t -> MapLayers.follow = false; state.flyTo(t.north, t.east, ATTACK_ZOOM) }
+                        }
+                    }
+                    HudChip("Friendlies", MapLayers.traffic) { MapLayers.traffic = !MapLayers.traffic; MapLayers.save() }
+                    if (hostilesOn) HudChip("Hostiles", MapLayers.hostiles) { MapLayers.hostiles = !MapLayers.hostiles; MapLayers.save() }
                     HudChip("Labels", MapLayers.labels) { MapLayers.labels = !MapLayers.labels; MapLayers.save() }
-                    HudChip("Fields", MapLayers.fields) { MapLayers.fields = !MapLayers.fields; MapLayers.save() }
+                    HudChip("All fields", MapLayers.fields) { MapLayers.fields = !MapLayers.fields; MapLayers.save() }
                 }
             }
             if (flightStrip) FlightStrip(d.live, d.bull)
@@ -597,7 +661,7 @@ fun LiveMap(
         if (!bare) Box(
             Modifier.align(Alignment.BottomEnd).padding(12.dp).size(46.dp).clip(RoundedCornerShape(23.dp)).background(Hud.Surface.copy(alpha = 0.95f))
                 .border(1.dp, Hud.Outline, RoundedCornerShape(23.dp)).clickable {
-                    val t = d.ownPos ?: d.route.firstOrNull()?.let { it.x!! to it.y!! }
+                    val t = d.ownPos ?: (d.route.firstOrNull { it.onRoute } ?: d.route.firstOrNull())?.let { it.x!! to it.y!! }
                     if (t != null) state.flyTo(t.first, t.second, maxOf(state.scale, 4f))
                     if (d.own != null) { MapLayers.follow = true; MapLayers.save() }
                 },
@@ -619,10 +683,14 @@ private fun MapOptionsButton() {
             LayerRow("Route and steerpoints", MapLayers.route) { MapLayers.route = it }
             LayerRow("SAMs and threat rings", MapLayers.sams) { MapLayers.sams = it }
             LayerRow("Tanker and AWACS stations", MapLayers.support) { MapLayers.support = it }
-            LayerRow("Traffic", MapLayers.traffic) { MapLayers.traffic = it }
-            LayerRow("Hostiles", MapLayers.hostiles) { MapLayers.hostiles = it }
+            LayerRow("Attack profile (Planner)", MapLayers.attack) { MapLayers.attack = it }
+            LayerRow("Lines (DTC)", MapLayers.lines) { MapLayers.lines = it }
+            LayerRow("Plan sent from the Planner", MapLayers.plan) { MapLayers.plan = it }
+            LayerRow("Friendly and neutral traffic", MapLayers.traffic) { MapLayers.traffic = it }
+            if (rememberHostilesOn()) LayerRow("Hostile traffic", MapLayers.hostiles) { MapLayers.hostiles = it }
+            else Text(HostileContacts.OFF, color = Hud.TextDim, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             LayerRow("Labels", MapLayers.labels) { MapLayers.labels = it }
-            LayerRow("Airfields", MapLayers.fields) { MapLayers.fields = it }
+            LayerRow("All airfields", MapLayers.fields) { MapLayers.fields = it }
             HorizontalDivider(color = Hud.Outline.copy(alpha = 0.6f))
             MapLookMenuItems()
         }
@@ -645,6 +713,14 @@ val MapShadow = Shadow(Color.Black, blurRadius = 5f)
 /** The same, for a light chart: the label is dark and what stands it off the ground is white. */
 val MapGlow = Shadow(Color.White, blurRadius = 5f)
 
+/** A map label with the plan's marks spelt out: "SA-3 · PLAN · NOT IN JET". */
+fun planLabel(text: String, fromPlan: Boolean, notInJet: Boolean, cleared: Boolean = false): String = when {
+    cleared -> "$text · CLEARED"
+    notInJet -> "$text · NOT IN JET"
+    fromPlan -> "$text · PLAN"
+    else -> text
+}
+
 /** Bullseye symbol with range rings every [ringNm] and cardinal spokes. */
 fun DrawScope.drawBullseye(c: Offset, pr: MapProjection, rings: Int, ringNm: Int) {
     for (ring in 1..rings) drawCircle(Hud.Cyan.copy(alpha = if (ring % 2 == 0) 0.25f else 0.16f), pr.pxPerNm * ringNm * ring, c, style = Stroke(1.2f))
@@ -655,6 +731,36 @@ fun DrawScope.drawBullseye(c: Offset, pr: MapProjection, rings: Int, ringNm: Int
         val len = pr.pxPerNm * ringNm * rings
         drawLine(Hud.Cyan.copy(alpha = 0.35f), c, c + Offset((sin(rad) * len).toFloat(), (-cos(rad) * len).toFloat()), 1f)
     }
+}
+
+/**
+ * The attack, drawn as every map draws it (1.3.8, `drawAttackModel`): the path the jet flies, the dotted leg past the
+ * target, the VIP square or the VRP circle (never both, no loose IP), the pull-up point, the mode's offset aimpoints
+ * (no dashed lines from them to the target, B15) and the target on top, labelled through the map's own anti-overlap,
+ * and under the target the caption — "Pop-up · VRP · TGT STPT 7", with "not in the cartridge — Save to DTC" in amber
+ * when the cartridge as saved does not hold it. One drawing for the Mission map, a VR board's map and the Planner's Map
+ * page. [captioned] false leaves the caption off.
+ */
+fun DrawScope.drawAttack(
+    attack: com.bmscompanion.app.data.mission.AttackOverlay,
+    pr: MapProjection,
+    tm: androidx.compose.ui.text.TextMeasurer,
+    labelStyle: TextStyle,
+    placed: MutableList<androidx.compose.ui.geometry.Rect>,
+    captioned: Boolean = true,
+    visible: (Offset) -> Boolean,
+) {
+    val light = Hud.onLightMap || Hud.paperInks
+    drawAttackModel(
+        attack, { n, e -> pr.toScreen(n, e) }, AttackInks.of(light), notes = MapLayers.labels, visible = visible,
+    ) { text, at, ink -> placeText(tm, text, at, labelStyle.copy(color = ink), placed) }
+    if (!captioned) return
+    val t = attack.target ?: return
+    val p = pr.toScreen(t.north, t.east)
+    if (!visible(p)) return
+    val (cap, warn) = com.bmscompanion.app.data.mission.AttackDrawing.captionWithSaved(attack)
+    if (cap.isNotEmpty()) placeText(tm, cap, p + Offset(-12f, 14f), labelStyle.copy(color = if (light) Color.Black else Color.White), placed)
+    if (warn != null) placeText(tm, warn, p + Offset(-12f, 30f), labelStyle.copy(color = Hud.Amber), placed)
 }
 
 /** Ownship jet symbol with a heading line. */
@@ -705,45 +811,10 @@ fun DrawScope.drawContact(c: Contact, p: Offset, col: Color, pr: MapProjection) 
     }
 }
 
-private enum class FieldMark { HOME, ALTERNATE, OTHER }
-
-/**
- * The chart symbol for an airfield: a ring and its runways, [runways] being unit screen directions. Home is a solid
- * disc with the runways cut dark through it; the alternate an open ring with the runways drawn across and past it;
- * any other field the same, small and faint. Each sits on a dark halo so it holds on relief and satellite alike.
- */
-private fun DrawScope.drawAirfield(p: Offset, runways: List<Offset>, mark: FieldMark) {
-    val ink = Hud.Green
-    val halo = MapHalo
-    when (mark) {
-        FieldMark.HOME -> {
-            val r = 10f
-            drawCircle(halo, r + 3f, p)
-            drawCircle(ink, r, p)
-            runways.forEach { v -> drawLine(MapHalo.copy(alpha = 0.85f), p - v * (r * 0.78f), p + v * (r * 0.78f), 3.5f, cap = StrokeCap.Round) }
-        }
-        FieldMark.ALTERNATE -> {
-            val r = 9f
-            drawCircle(halo, r, p, style = Stroke(6f))
-            runways.forEach { v -> drawLine(halo, p - v * (r + 4f), p + v * (r + 4f), 7f, cap = StrokeCap.Round) }
-            drawCircle(ink, r, p, style = Stroke(2.5f))
-            runways.forEach { v -> drawLine(ink, p - v * (r + 4f), p + v * (r + 4f), 3f, cap = StrokeCap.Round) }
-        }
-        FieldMark.OTHER -> {
-            val r = 5f
-            val faint = ink.copy(alpha = 0.75f)
-            drawCircle(halo, r, p, style = Stroke(4f))
-            runways.forEach { v -> drawLine(halo, p - v * (r + 2.5f), p + v * (r + 2.5f), 4f, cap = StrokeCap.Round) }
-            drawCircle(faint, r, p, style = Stroke(1.5f))
-            runways.forEach { v -> drawLine(faint, p - v * (r + 2.5f), p + v * (r + 2.5f), 1.75f, cap = StrokeCap.Round) }
-        }
-    }
-}
-
 /** Label with simple declutter: skipped if it would overlap one already drawn. */
 fun DrawScope.placeText(tm: androidx.compose.ui.text.TextMeasurer, text: String, topLeft: Offset, style: TextStyle, placed: MutableList<androidx.compose.ui.geometry.Rect>) {
     if (topLeft.x > size.width || topLeft.y > size.height || text.isBlank()) return
-    val layout = tm.measure(text, style)
+    val layout = com.bmscompanion.app.ui.components.MapText.label(this, tm, text, style).layout
     val r = androidx.compose.ui.geometry.Rect(topLeft.x, topLeft.y, topLeft.x + layout.size.width, topLeft.y + layout.size.height)
     if (r.right < 0 || r.bottom < 0 || placed.any { it.overlaps(r) }) return
     placed += r
@@ -787,6 +858,9 @@ fun SelectionCard(env: MissionEnv, sel: MapSel, d: MapData, modifier: Modifier, 
     var accent = Hud.Magenta
     var field: Airport? = null
     var pos: Pair<Double, Double>? = null
+    // a threat names a system the app's Threat Guide describes: the card offers that entry
+    var guide: com.bmscompanion.app.data.Threat? = null
+    val reference by androidx.compose.runtime.produceState(emptyList<com.bmscompanion.app.data.Threat>()) { value = Repo.threats() }
     when (sel) {
         is MapSel.Ctc -> {
             val c = ctcs.firstOrNull { it.id == sel.id } ?: return
@@ -798,8 +872,9 @@ fun SelectionCard(env: MissionEnv, sel: MapSel, d: MapData, modifier: Modifier, 
                 subtitle = listOfNotNull(c.name?.takeIf { it != title }, c.coalition).joinToString(" · ").ifBlank { null }
                 rows += "RING" to (site?.rangeNm?.let { "${it.toInt()} nm engagement" } ?: "range not known")
                 own?.let { rows += "BRAA" to bra(it.first, it.second, c.x, c.y) }
-                d.bull?.let { rows += "BULLS" to bra(it.first, it.second, c.x, c.y) }
+                // (BULLS is added below for every card with a position; adding it here too listed it twice)
                 pos = c.x to c.y
+                guide = site?.threatId?.let { id -> reference.firstOrNull { it.id == id } } ?: threatGuideEntry(c.name, reference)
             } else {
             accent = contactColor(c)
             title = c.group ?: c.name ?: "Contact"
@@ -813,24 +888,34 @@ fun SelectionCard(env: MissionEnv, sel: MapSel, d: MapData, modifier: Modifier, 
         }
         is MapSel.Stp -> {
             val s = stpts.firstOrNull { it.n == sel.n } ?: return
-            accent = if (s.isTarget) Hostile else Hud.Amber
+            accent = if (s.notInJet || s.fromPlan) PlanInk else if (s.isTarget) Hostile else Hud.Amber
             title = "STPT ${s.n} · ${s.title}"
             subtitle = listOfNotNull(s.action, s.comments).joinToString(" · ").ifBlank { null }
             s.time?.let { rows += "TOS" to it }
             s.altText?.let { rows += "ALT" to it }
             s.cas?.let { rows += "CAS" to "$it kt" }
             s.targetName?.let { rows += "TGT" to it }
+            // where the point came from: tapping a plan item says so
+            rows += "FROM" to sourceText(s.source, s.notInJet)
+            if (s.notInJet) rows += "!" to "Not in the jet yet: Save to DTC in the Planner, then LOAD in BMS's DTC window"
+            if (s.cleared) rows += "!" to "Cleared in the Planner — still in the jet until saved"
+            if (!s.onRoute && s.isTarget) rows += "NOTE" to "A precision target: marked, not part of the route"
             if (s.hasPos) pos = s.x!! to s.y!!
             // takeoff / landing steerpoints sit on an airfield: offer its charts too
             if (s.hasPos) field = env.set?.airports?.minByOrNull { rangeNm(it.x, it.y, s.x!!, s.y!!) }?.takeIf { rangeNm(it.x, it.y, s.x!!, s.y!!) < 3 }
         }
         is MapSel.Ppt -> {
             val t = ppts.getOrNull(sel.index) ?: return
-            accent = Hostile
-            title = "Threat · ${t.name}"
-            rows += "RANGE" to "%.0f nm".format(t.rangeNm)
-            own?.let { if (rangeNm(it.first, it.second, t.x, t.y) < t.rangeNm) rows += "!" to "You are inside this ring" }
+            accent = if (t.notInJet) PlanInk else if (t.marker) Friendly else SamRed
+            title = (if (t.marker) "PPT ${t.n} · " else "Threat · ") + t.name
+            if (!t.marker) rows += "RANGE" to "%.0f nm".format(t.rangeNm)
+            t.code?.let { rows += "CODE" to it }
+            rows += "FROM" to sourceText(t.source, t.notInJet)
+            if (t.notInJet) rows += "!" to "Not in the jet yet: Save to DTC in the Planner, then LOAD in BMS's DTC window"
+            if (t.cleared) rows += "!" to "Cleared in the Planner — still in the jet until saved"
+            own?.let { if (!t.marker && rangeNm(it.first, it.second, t.x, t.y) < t.rangeNm) rows += "!" to "You are inside this ring" }
             pos = t.x to t.y
+            if (!t.marker) guide = threatGuideEntry(t.name, reference)
         }
         is MapSel.Field -> {
             val a = env.set?.airports?.firstOrNull { it.id == sel.id } ?: return
@@ -847,6 +932,8 @@ fun SelectionCard(env: MissionEnv, sel: MapSel, d: MapData, modifier: Modifier, 
         is MapSel.Pt -> {
             title = "Map point"
             pos = sel.x to sel.y
+            // a point on an airfield (a weapon target on a runway, a tap near a field) offers its charts
+            field = env.set?.airports?.minByOrNull { rangeNm(it.x, it.y, sel.x, sel.y) }?.takeIf { rangeNm(it.x, it.y, sel.x, sel.y) < 3 }
         }
     }
     pos?.let { (px, py) ->
@@ -873,7 +960,7 @@ fun SelectionCard(env: MissionEnv, sel: MapSel, d: MapData, modifier: Modifier, 
                 pair.forEach { (k, v) ->
                     Row(Modifier.weight(1f).padding(vertical = 2.dp)) {
                         Text(k, fontSize = 11.sp, color = if (k == "!") Hostile else Hud.TextDim, modifier = Modifier.width(72.dp))
-                        Text(v, style = LocalExtra.current.monoSmall.copy(fontSize = 13.sp), color = if (k == "!") Hostile else Hud.Text, maxLines = 2)
+                        Text(v, style = if (k == "FROM" || k == "NOTE" || k == "!") MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp) else LocalExtra.current.monoSmall.copy(fontSize = 13.sp), color = if (k == "!") Hostile else Hud.Text, maxLines = 2)
                     }
                 }
                 if (pair.size < perRow) Spacer(Modifier.weight(1f))
@@ -883,9 +970,17 @@ fun SelectionCard(env: MissionEnv, sel: MapSel, d: MapData, modifier: Modifier, 
         field?.let { a ->
             Spacer(Modifier.height(8.dp))
             Text(
-                "Airfield details & charts ›",
+                if (sel is MapSel.Field) "Airfield details & charts ›" else "${a.name}: details & charts ›",
                 Modifier.clip(RoundedCornerShape(8.dp)).background(Hud.Green.copy(alpha = 0.15f)).clickable { env.theater?.let { th -> env.nav.go(missionAirportRoute(th.id, a.id)) } }.padding(horizontal = 10.dp, vertical = 6.dp),
-                color = Hud.Green, fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                color = Hud.Green, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        guide?.let { t ->
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Threat guide: ${t.name} ›",
+                Modifier.clip(RoundedCornerShape(8.dp)).background(Hostile.copy(alpha = 0.15f)).clickable { env.nav.go("m/threat/${android.net.Uri.encode(t.id)}") }.padding(horizontal = 10.dp, vertical = 6.dp),
+                color = Hostile, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
         }
     }
@@ -902,6 +997,13 @@ fun PictureCard(ctcs: List<Contact>, own: Pair<Double, Double>?, ownHdg: Double,
     val ref = own ?: bull
     val sorted = hostiles.sortedWith(compareBy({ it.isCrew() }, { c -> ref?.let { rangeNm(it.first, it.second, c.x, c.y) } ?: 0.0 }))
     val threats = hostiles.count { !it.isCrew() }
+    // hostile contacts come from the live feed only while the PC's setting is on (HostileContacts, off by default)
+    if (!rememberHostilesOn()) {
+        com.bmscompanion.app.ui.components.SectionCard("Picture", accent = Hostile) {
+            Text(HostileContacts.OFF + ": the enemy is what the briefing and the cockpit show.", style = MaterialTheme.typography.bodySmall, color = Hud.TextDim)
+        }
+        return
+    }
     com.bmscompanion.app.ui.components.SectionCard("Picture", accent = Hostile, trailing = {
         Text("$threats hostile", fontSize = 11.sp, color = Hud.TextDim)
         // same setting as the map's Hostiles chip
@@ -939,7 +1041,13 @@ fun PictureCard(ctcs: List<Contact>, own: Pair<Double, Double>?, ownHdg: Double,
 @Composable
 fun SteerpointList(stpts: List<Stpt>, own: Pair<Double, Double>?, bull: Pair<Double, Double>?, selected: Int?, onPick: (Stpt) -> Unit) {
     if (stpts.isEmpty()) return
-    com.bmscompanion.app.ui.components.SectionCard("Steerpoints", accent = Hud.Amber) {
+    // the card's title is tagged like THREATS / PRESETS / COMMS when any row is the plan's or not in the jet yet
+    val fromPlan = stpts.any { it.fromPlan }
+    val notInJet = stpts.any { it.notInJet }
+    com.bmscompanion.app.ui.components.SectionCard(
+        "Steerpoints", accent = Hud.Amber,
+        trailing = if (fromPlan || notInJet) ({ PlanTags(fromPlan || notInJet, notInJet, compact = true) }) else null,
+    ) {
         stpts.forEach { s ->
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(if (selected == s.n) Hud.Amber.copy(alpha = 0.12f) else Color.Transparent)
@@ -949,7 +1057,11 @@ fun SteerpointList(stpts: List<Stpt>, own: Pair<Double, Double>?, bull: Pair<Dou
                 Text("%2d".format(s.n), style = LocalExtra.current.mono, color = if (s.isTarget) Hostile else Hud.Amber, modifier = Modifier.width(30.dp))
                 Column(Modifier.weight(1f)) {
                     Text(s.title, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (s.isTarget) Hostile else Hud.Text)
-                    Text(listOfNotNull(s.time, s.altText, s.action).joinToString(" · "), fontSize = 11.sp, color = Hud.TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        PlanTags(s.fromPlan, s.notInJet, Modifier.padding(end = 6.dp), compact = true)
+                        if (s.cleared) ClearedTag(Modifier.padding(end = 6.dp))
+                        Text(listOfNotNull(s.time, s.altText, s.action).joinToString(" · "), fontSize = 11.sp, color = Hud.TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
                 }
                 if (s.hasPos) {
                     val ref = own ?: bull

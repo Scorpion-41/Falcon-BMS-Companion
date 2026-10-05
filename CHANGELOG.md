@@ -1,5 +1,241 @@
 # Changelog
 
+## 1.3.8 (BMS 4.38) — October 2026
+
+**Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install**; existing settings are kept.
+
+This release adds **WDP for Falcon BMS 4.38.1**, a port of Falcas's Weapon Delivery Planner that runs on the PC,
+Android and in the browser on BMS 4.38.1's own data, and a choice of source for the Mission section: **EZBoards mode**
+(BMS's printed briefing) or **WDP mode** (the flight planned in the Planner). It also adds live MFDs, Dashboard pages,
+a weather generator, carrier decks drawn from BMS's models, a Radio page with automatic taxi, and a Reference section.
+
+---
+
+### New: EZBoards mode and WDP mode
+
+- **Mode switch.** **EZBoards | WDP** at the top of the Mission section and on Setup selects where the section's data
+  comes from. The choice is kept on the PC and applies to every device and VR board; a line under the switch names
+  the current source.
+- **EZBoards mode** (the default). The Mission section shows the briefing BMS prints at **PRINT**, and EZBoards makes
+  the cockpit kneeboards, as before. The Planner is locked in this mode.
+- **WDP mode.** The Mission section shows the flight planned in the Planner — route, targets, loadout, package, tanker
+  and AWACS tracks, radios, the saved cartridge, the attack and the save's weather — as taken by **Populate from
+  Planner**. When BMS printed a briefing of the same flight, that briefing is used, so the flight reads the same in
+  both modes.
+- **Populate from Planner** runs only when pressed (Planner toolbar, Save to DTC menu, Kneeboards page, and the
+  Mission pages before the first Populate). Unsaved Planner edits prompt to save first. The result is kept on the PC
+  across restarts.
+- **EZBoards and the HTML Briefing tool are paused in WDP mode**, since both write the cockpit pages the Planner
+  writes. Their buttons are disabled with the reason; the EZBoards setting is kept for EZBoards mode.
+- **Each new mission starts clean.** When a new mission begins (a PRINT of another flight, or another flight opened or
+  populated in the Planner), lines, PPTs, targets and nav offsets the Planner saved for an earlier flight are removed
+  from the cartridge and the TE's mission file, provided they are unchanged. A mode switch does the same, and restores
+  BMS's own cockpit pages where the other mode's tool wrote them for an earlier flight. Values changed since by BMS or
+  the pilot are kept. Load the DTC in BMS as usual afterwards.
+
+### New: WDP for Falcon BMS 4.38.1 — Mission → Planner
+
+A port of Falcas's **Weapon Delivery Planner** with every control in its original place, using BMS 4.38.1's
+airports, radios, HARM codes, PPT types, aircraft, stores, pylons and racks. It is available in WDP mode on every
+device and works through the PC, which holds the saves, the cartridge and the kneeboard pages.
+
+Typical order: in BMS, save the DTC and the mission, then **PRINT**; in the Planner, **Open mission…**, plan, **Save
+to DTC**; in BMS, **LOAD** and **SAVE** the DTC; then **Populate from Planner** and **Upd Kneeboard**, and **FLY**.
+
+- **Open mission… and Pick a flight.** Campaign, TE and training saves of every installed theater, newest first, with
+  search and a list of recent files. BMS's campaign starts are listed but never opened. Pick a flight shows the save's
+  full ATO by team and package, then the seat. WDP's question "Did you save Precision STPT in the DTC for THIS
+  flight?" decides whether steerpoints come from the save (No, the default) or from the cartridge (Yes).
+- **Steps and Guide.** Steps lists the ten steps from BMS to the cockpit and marks the current one. The Guide covers
+  every page, planning on a phone or in a browser, and multiplayer; it can be read without a PC link.
+- **DataCard, Coordination Card and Briefing.** WDP's card filled from the save: airbases, flight plan with times and
+  fuel, targets, support flights, comm card, Link 16, ATIS, Config rows, laser codes and bullseye. Situation, intel,
+  ROE and emergency procedures come from the printed briefing of the same flight, or are worded from the save as BMS
+  words them. Weather is read from the save's own weather file at the departure, target and landing fields;
+  **Reload WX** reads any weather map. The card stays on the planned flight; other flights are planned with Pick a
+  flight.
+- **Map** (new page). The cartridge as the HSD will show it, unsaved edits included, beside what the mission provides
+  and the cartridge does not yet hold (tracks, threats, fields). A tap adds an item to the DTC; **Move** and **Take
+  out** edit placed items. Includes an **HSD preview** and WDP's MAP tab: lat/long grid, bullseye rings, airfields by
+  side, a readout of position, ground height and magnetic variation, Measure, Auto PPT, Clear PPT, Clear Lines, Change
+  Area and Save Map.
+- **DTC.** All sixteen tabs, filled from the cartridge, with BMS 4.38.1's defaults and HARM codes. **From mission…**
+  on nine tabs fills a tab from the mission: tracks as lines, support aircraft and spotted threats as PPTs, the flight
+  plan, targets, TACAN, ILS, the comm plan, laser codes and HARM tables. Clear All lists what it would remove and asks
+  first.
+- **Attack: Pop-up, HADB and TOSS** in one tab, with a rail beside the page to switch between them. **TGT STPT**
+  selects the target and, in VIP mode, **IP STPT** the IP (VRP needs no IP; HADB plans from a VRP only). **IP STPT at
+  the VRP** places a steerpoint at the VRP and plans the attack as VIP from it. **Save to DTC** on an attack page also
+  fills the DataCard's Delivery section once the cartridge is saved, so the card and the cartridge agree. The attack last changed
+  is drawn the same way on every map (Planner Map page, kneeboard attack page, Mission map after Populate). Target
+  elevation comes from BMS's height map, and every ELEV can be typed.
+- **Performance.** Take-off, climb, cruise and refusal from WDP's engine tables for all five engines, with BMS's
+  pylons and racks and the mission's weather. A new **Loadout** window with a grouped store list, search, Mirror and
+  totals writes the DataCard's Config rows.
+- **ATO Targets.** WDP's ATO Target List: every target of the side's flights, in sortable Units and Objectives lists
+  with latitude and longitude.
+- **Save to DTC.** One toolbar button for every page, showing the number of unsaved edits; WDP's own cartridge buttons
+  remain on their pages. As in WDP, the cartridge is written directly, without a backup, and only the changed lines
+  are touched. With a TE open, the TE's mission file is written as well, since BMS loads it over the cartridge.
+- **Upd Kneeboard.** Writes BMS's cockpit kneeboard pages, keeping each file's format and the half not printed. The
+  default set is the DataCard and Coordination Card on pages 1-2 in WDP mode (2-3 in EZBoards mode). Other pages:
+  briefing and weather, target list, route map, attack profile, ground charts of the departure, arrival and alternate,
+  or a picture file (`.jpg`, `.png`, `.bmp`, `.dds`). Each page shows which tool wrote it, and BMS's original can be
+  restored.
+- **Options.** Settings (BMS folder and theater, weather files, Planner folders, tooltips, auto-load of the last
+  mission) and About WDP. Every control has a tooltip.
+- **Files.** File buttons always work on the BMS PC: Windows' own dialog on the PC, a folder browser on other
+  devices. Files use WDP's formats and are kept in `User\BMS Companion Planner` inside the BMS folder, laid out like
+  WDP's program folder.
+- **Touch and window sizes.** Pages scale to the window and never scroll. By finger, a text box is edited in a bar
+  above the keyboard with − / +, Next and Done; other controls open large editors. With a mouse, every tab and toolbar
+  button stays visible in windows from 1024 pixels wide.
+- **Compared with WDP 3.7.24** (details in `docs/WDP-PORT.md`):
+  - *The same as WDP:* pages and controls laid out as in WDP; the attack geometry, ballistics and performance tables
+    give WDP's results, checked against WDP itself; latitude and longitude as WDP prints them, which match BMS's own
+    ACMI recordings and AIPs to within 2 m.
+  - *Corrected:* BMS 4.38 weather files (`.twx` version 8) could not be read; some training and TE missions did not
+    load; precision steerpoints were lost or shifted on save, and a campaign save cleared BMS's route; ILS
+    frequencies below 109.00 were altered; HARM codes were missing or wrong; IFF codes lost leading zeros; offset aim
+    points on steerpoints 24-25 were never read back; a cartridge could carry VIP and VRP lines for one attack;
+    the card's TGT in HUD ignored the check's result; TOSS VIP bearings had north and east swapped; pressure altitude
+    had the wrong sign; HADB and TOSS heights assumed a sea-level target; the ATO Target List printed no
+    coordinates; Korea TvT had none either.
+  - *New in the Planner:* runs on the PC, Android and in a browser; BMS 4.38.1 data throughout; Open mission… and
+    Pick a flight from any device; the Map page; From mission… on the DTC tabs; the Attack rail, IP STPT and IP STPT
+    at the VRP; Save to DTC filling the DataCard; the Loadout window; Upd Kneeboard keeping each page's format, with
+    pictures; Populate from Planner; Steps and the Guide; a TE's mission file written with the cartridge.
+  - WDP's Threats and Munition pages are not included; the Reference section covers them.
+- **Credit.** The Planner is a port of Falcas's Weapon Delivery Planner (WDP) to Falcon BMS 4.38.1; its pages, attack
+  geometry, ballistics and performance planning are his work. He is credited on every Planner page, in About and in
+  the Guide.
+
+### New: one mission picture on every map
+
+The Mission map, the VR map board and the Planner's Map page draw the same mission: route and steerpoints, tanker and
+AWACS tracks, PPT rings, the mission's threats, departure, arrival and alternate fields, the bullseye and, in 3D, live
+traffic.
+
+- **Mission threats only.** The sites named in the printed briefing's threat analysis, placed from the save, plus the
+  PPTs; in WDP mode without a printed briefing, spotted sites whose rings reach the route. Enemy sites the side has not
+  spotted are never shown, including from the live feed.
+- **Hostile SAM rings use one red on every map**; friendly SAMs stay blue.
+- **Less clutter by default.** Only the flight's own airfields (**All airfields** shows the rest), and tanker and
+  AWACS tracks without their transit legs. The Planner's Map page adds **All known SAMs** and **WDP's look**.
+- **DTC lines** are drawn, with a **Lines** switch; a threat opens its Threat Guide page.
+- **Route and tracks before 3D in EZBoards mode**, from BMS's mission file or the save when either matches the
+  briefing.
+
+### New: live MFDs
+
+- **MFDs Dashboard card.** The actual MFD pictures from Falcon BMS in an F-16 bezel. The 20 buttons and the BRT and
+  GAIN rockers press BMS's own keys (SYM and CON have no BMS command and are shown inactive). Side by side or stacked,
+  with a full-page view.
+- **Setup.** Requires **Export RTT Textures → Enable** on the Falcon BMS Launcher's main page. The display states what
+  is missing; **Setup → Cockpit displays** has the guide. **Live picture** off keeps the buttons without reading the
+  pictures.
+- **Administrator rights.** When Falcon BMS runs as administrator and BMS Companion does not, Windows blocks the button
+  presses. The card reports this and how to resolve it: run both with the same rights.
+- There is no MFD VR board; in VR the cockpit's own displays are in view.
+
+### New: Dashboard pages and a Weather card
+
+- **Five Dashboard pages**, switched with numbered buttons, with default pages for the map, the MFDs and flight data.
+  Customize Dashboard works per page; the 1.3.7 layout becomes page 1.
+- **Weather card**: cloud, visibility, wind and temperature at take-off, target and landing.
+
+### New: weather generator (Mission → Weather)
+
+A port of Craig Andera's **WeatherGen** (MIT licence, credited on the About page): moving pressure systems, BMS's four
+weather types placed by pressure, wind that follows the systems and veers with height, and cloud, visibility and
+temperature that follow the fronts.
+
+- **Preview and panels.** The map shows type, pressure or temperature, wind, cloud and visibility, with a forecast per
+  cell or airfield. Presets, parameters, type weights, override regions and a time bar, in WeatherGen's order. Each
+  theater keeps its own settings.
+- **Save map** writes a new map (`BMSC <name>`) beside BMS's own; **Save series** also writes an update map for each
+  time step, starting at the mission's clock. **Open** restores the settings a map was made from.
+- **Use in BMS.** A map takes effect once selected under Weather → Map Model and saved in BMS (SAVE WTH, then save the
+  TE or campaign), before PRINT. The Save panel lists the steps.
+- **Every BMS theater** is supported. BMS's ready-made maps are never changed; update maps a series replaces are backed
+  up first and can be restored.
+- Three WeatherGen errors are corrected: wind aloft turning the long way round, random temperatures and wind aloft, and
+  pressure colours below 28.5 inHg.
+
+### New: carrier decks from BMS's models
+
+Carrier decks are drawn from the 3D model BMS flies: outline, angled landing area, wires, catapults, deflectors, ski
+jump, lifts, island and hull number, for nineteen ships. With ACMI recording on, the jet is shown at its position on
+the deck on the Taxi page and the ground-chart VR boards, following the ship.
+
+### New: parking spot types
+
+Spots are drawn as on the theaters' parking charts: a ring for small-aircraft stands, a box for stands without a size
+limit, the alert cell in red, and a roofed bay for shelters and hangars. The spot list and the clearance say the same.
+
+### New: Reference section
+
+- **One Reference entry** with **Airfields | Map | Threats | Arsenal** and the theater picker. Existing links still
+  open the same pages.
+- **Info** box under the ground chart on every airfield page, in every theater: latitude and longitude as BMS shows
+  them, elevation, and the field's frequencies in divert order. Tap a value to copy it.
+
+### New: Radio page and automatic taxi
+
+Requires Falcon BMS debug mode and **Display Radio Subtitles** (SETUP → SIMULATION). Without them, nothing changes.
+
+- **Radio page.** Every radio call of the session, grouped (ATC, AWACS, Tanker, My flight, Flights, Other), with sim
+  time and search.
+- **Automatic taxi.** The Taxi page and the Live taxi VR board follow Ground and Tower: the runway cleared to before
+  departure, and the parking spot assigned after landing.
+- **Delete old debug logs** (Setup, off by default) moves older BMS debug logs to the Recycle Bin, keeping a chosen
+  number of recent sessions.
+
+### New: Graphics setting (PC)
+
+A **Graphics** card on the server page and in Setup selects **OpenGL** or **Software** rendering for PCs without a
+Direct3D 12 driver (applies after a restart). **Go easy on this machine** reads the jet once a second instead of four
+times.
+
+### Improved
+
+- **Parking numbers match BMS Ground** ("park 04") on the Taxi page, the VR ground charts and kneeboard charts;
+  about one spot in five was numbered differently before. **Taxi in** uses the numbering Ground uses after landing.
+- **Smooth zoom** on every map and chart: mouse wheel, + / − and double tap zoom smoothly about the pointer; touchpads
+  zoom proportionally.
+- **Faster maps on Android**, with smooth panning on 60 Hz and 120 Hz screens, including older devices.
+- **On-screen keyboard** no longer resizes the app; a covered field is moved into view.
+- **Briefing** marks the player's flight as YOU and the package lead as PRIMARY.
+- **Checklists**: Previous / Next on each checklist; one Starting Engine procedure for the F-16 Block 40/42/50/52 with
+  per-engine figures; a complete warning and caution light index with first actions and links to the procedures
+  (F-16 and F-15C).
+- **Android** keeps the screen on while the Mission section is open.
+- **Setup** shows the mission mode, the MFD guide and the Graphics card.
+- **Kneeboards page** states which tool writes the cockpit pages in each mode, and the order of steps.
+- **Hostile contacts from the live feed are off by default**: the map, Dashboard, AWACS page and VR boards show only
+  what the pilot is briefed or sees in the cockpit, until **Show hostile contacts (live)** is turned on in Setup.
+
+### Fixed
+
+- **Korea: tanker and AWACS tracks and friend/foe** were read from the wrong file. Saves, aircraft tables and names now
+  come from BMS's theater definitions, which also adds the six Korea 2012 theaters and LKTO Papa.
+- **Tanker and AWACS tracks** appeared only in 3D; they now appear once the briefing is printed.
+- **Recon targets** (steerpoints 15-22 in a 4.38.1 cartridge) were drawn as part of the route, and the Taxi page could
+  open on a recon target's field instead of steerpoint 1's.
+- **AWACS and tanker PPTs** were drawn as small threat rings and PPTs showed codes; they are now markers, named from the
+  theater's PPT table ("SA-3", "AWACS").
+- **Traffic and Hostiles** map switches depended on each other; they are now independent (Traffic is **Friendlies**).
+- **US carriers in Korea** were all identified as the Carl Vinson, with her radios and deck. In Israel, the Carl Vinson
+  carried the Liaoning's radios; she is 10X, 270.2 again.
+- **Briefing** treated the package lead's flight as the player's when the player was not leading.
+- **Kneeboards on PRINT** occasionally did not run.
+- **Taxi page** clearance and spot list were out of reach on a tablet held sideways; chart and cards now sit side by
+  side whenever the page is wider than tall.
+- **Browser version**: one mouse-wheel step zoomed the map fully in, and arrows, ticks and menu symbols showed as empty
+  boxes.
+
+---
+
 ## 1.3.7 (BMS 4.38) — September 2026
 
 **Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install** — everything you have set up carries over.
@@ -152,7 +388,7 @@ Installable straight from **About → check for updates**, and **keeps what you 
 
 ## 1.3.3 (BMS 4.38) — September 2026
 
-Everything since 1.3.1. The headline is **VR kneeboards**: BMS Companion now serves numbered boards that OpenKneeboard shows on your knee in the cockpit, with your own controller buttons turning the pages. Alongside that: **instrument charts** for Korea and the Falklands, the **kneeboard exported by BMS's HTML Briefing tool** shown inside the app and in VR, **updating from inside the app**, **ACMI clean-up**, and a long list of fixes — the Android 9/10 crash, the folder picker that closed the PC app, and every installer problem reported since 1.3.
+Everything since 1.3.1. The headline is **VR kneeboards**: BMS Companion now serves numbered boards that OpenKneeboard shows on your knee in the cockpit, with your own controller buttons turning the pages. Alongside that: **instrument charts** for Korea and the Falklands, the **kneeboard exported by UOAF's HTML Briefing tool** shown inside the app and in VR, **updating from inside the app**, **ACMI clean-up**, and a long list of fixes — the Android 9/10 crash, the folder picker that closed the PC app, and every installer problem reported since 1.3.
 
 **Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. iPhone, iPad and any other browser need nothing installed — they open the PC's address. The APK and the PC package are larger this time: the instrument charts are bundled so they work with no connection and no BMS installed.
 
@@ -183,9 +419,9 @@ A **board** is one page of BMS Companion served at its own address — `http://<
 
 **How the boards read.** The page is set like a kneeboard, not like a web page: the sheet's name is large in the board's accent ink, section headings carry a bar of that ink, and the figures you reach for — TACAN channel, UHF, VHF, bullseye — sit in raised boxes, found by shape rather than by reading. Tables are ruled, with every other row shaded. Every page keeps a margin from the tablet's frame, and the page counter is a faint number in the corner instead of a strip taken off the board.
 
-### New: the kneeboard from BMS's HTML Briefing tool, in the app and in VR
+### New: the kneeboard from UOAF's HTML Briefing tool, in the app and in VR
 
-Falcon BMS ships UOAF's **HTML Briefing** tool in `Tools\html_brief_win`. It is a separate program: you run it yourself and press its own export button, and it writes a kneeboard as PDF (or PNG) pages. BMS Companion does not replace it and does not automate it — **it reads what that tool last exported and shows those pages**:
+UOAF's **HTML Briefing** tool is a separate download (BMS Companion looks for it in `Tools\html_brief_win`). You run it yourself and press its own export button, and it writes a kneeboard as PDF (or PNG) pages. BMS Companion does not replace it and does not automate it — **it reads what that tool last exported and shows those pages**:
 
 - **Mission → Briefing → HTML Briefing generated kneeboard**: the exported pages as cards; tap one to open it in the chart viewer, with zoom, arrows, swipe and Esc.
 - **As a VR board**: choose *HTML Briefing kneeboards* for any board and its pages are one OpenKneeboard tab away, turned with your page binding.

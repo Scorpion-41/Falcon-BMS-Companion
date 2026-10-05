@@ -4,14 +4,21 @@ import com.bmscompanion.app.data.Airport
 import com.bmscompanion.app.data.AirportSet
 import com.bmscompanion.app.data.Theater
 import com.bmscompanion.app.data.mission.Briefing
+import com.bmscompanion.app.data.mission.Contact
 import com.bmscompanion.app.data.mission.Dtc
 import com.bmscompanion.app.data.mission.Live
+import com.bmscompanion.app.data.mission.MergedMission
+import com.bmscompanion.app.data.mission.MergedPoint
 import com.bmscompanion.app.data.mission.MissionData
 import com.bmscompanion.app.data.mission.NavPoint
+import com.bmscompanion.app.data.mission.PlanItemSource
+import com.bmscompanion.app.data.mission.PlanMerge
 import com.bmscompanion.app.ui.screens.FT_PER_NM
+import com.bmscompanion.app.ui.screens.airportKind
 import com.bmscompanion.app.ui.screens.bearingRange
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /** Finds our bundled theater for the BMS theater name (e.g. "Hellas WCP" → hellas-wcp). */
@@ -25,32 +32,156 @@ fun resolveTheater(theaters: List<Theater>, bmsName: String?): Theater? {
 
 fun String.norm() = lowercase(Locale.US).filter { it.isLetterOrDigit() }
 
-/** Matches a BMS airbase name ("Larissa", "Nea Anchialos Airbase, 11 nm SW of Volos", "Nea Tower") to an airport. */
-fun matchAirport(set: AirportSet?, raw: String?): Airport? {
+/**
+ * Matches a BMS airbase name ("Larissa", "Nea Anchialos Airbase, 11 nm SW of Volos", "Nea Tower") to an airport.
+ *
+ * Where the app reads it, BMS names a base by the **first word** of its name: the VoiceHelpers string in shared
+ * memory and the comm ladder both say "Osan" for Osan AB, "Nea" for Nea Anchialos — and "USS" for every one of
+ * Korea's three US carriers. So one name can fit several bases, and [clues] (what else the mission says about that
+ * base) choose between them. When they cannot, a ship is never guessed: taking the first in the file is what put
+ * every Korean carrier pilot on the Carl Vinson. An airfield keeps the first match, as it always did.
+ */
+// Compiled once: the live map matches its three bases on each of the four live ticks a second, and compiling these
+// for every field of the theater each time was half of the main thread's work while a mission map was panned.
+private val CALL_WORDS = Regex("\\b(ATIS|Tower|Ground|Approach|Departure|Airbase|Air Base|Airport|AB|AFB)\\b", RegexOption.IGNORE_CASE)
+private val FIELD_WORDS = Regex("\\b(Airbase|Air Base|Airport|AB|AFB|Airstrip|Heliport)\\b", RegexOption.IGNORE_CASE)
+/** a field's name without its kind, normalised (matchAirport's `an`), by name */
+private val BARE_NAMES = HashMap<String, String>()
+
+fun matchAirport(set: AirportSet?, raw: String?, clues: BaseClues = BaseClues()): Airport? {
     if (set == null || raw.isNullOrBlank()) return null
-    val name = raw.substringBefore(',').replace(Regex("\\b(ATIS|Tower|Ground|Approach|Departure|Airbase|Air Base|Airport|AB|AFB)\\b", RegexOption.IGNORE_CASE), "").trim()
+    val whole = raw.substringBefore(',').trim()
+    val name = whole.replace(CALL_WORDS, "").trim()
     if (name.isEmpty()) return null
     val q = name.norm()
-    fun an(a: Airport) = a.name.replace(Regex("\\b(Airbase|Air Base|Airport|AB|AFB|Airstrip|Heliport)\\b", RegexOption.IGNORE_CASE), "").norm()
-    return set.airports.firstOrNull { an(it) == q }
-        ?: set.airports.firstOrNull { an(it).startsWith(q) }
-        ?: set.airports.firstOrNull { q.startsWith(an(it)) && an(it).length >= 4 }
-        ?: set.airports.firstOrNull { it.icao?.norm() == q }
+    fun an(a: Airport) = synchronized(BARE_NAMES) { BARE_NAMES.getOrPut(a.name) { a.name.replace(FIELD_WORDS, "").norm() } }
+    // most exact first, and every base that fits the first test anything fits; the whole name comes first because
+    // two bases can be the same once the words are taken off ("Fuxin Airbase", "Fuxin Airport")
+    val tests = listOf<(Airport) -> Boolean>(
+        { it.name.norm() == whole.norm() },
+        { an(it) == q },
+        { an(it).startsWith(q) },
+        { q.startsWith(an(it)) && an(it).length >= 4 },
+        { it.icao?.norm() == q },
+    )
+    val tiers = tests.map { t -> set.airports.filter(t) }
+    val fits = tiers.firstOrNull { it.isNotEmpty() } ?: return null
+    // The clues are asked about every base the name could stand for, not just the most exact: "Panghyon" is all of
+    // Panghyon Airbase and the start of Panghyon Highwaystrip South, and BMS says "Panghyon" for both.
+    clues.pick(tiers.flatten().distinct())?.let { return it }
+    if (fits.size == 1) return fits[0]
+    // Only a ship BMS would call by this word counts against the guess: "C" (the Falklands' C Armado Tola) is the start
+    // of CV40 Tarawa too, but BMS calls that ship "CV40", so the airfield keeps its first match.
+    return fits[0].takeUnless { afloat(it) || fits.any { f -> afloat(f) && f.name.trim().substringBefore(' ').norm() == q } }
 }
 
-data class Airbases(val departure: String?, val arrival: String?, val alternate: String?)
+/** A ship: BMS gives it no position (0, or half a grid cell), and some theaters type it as an airbase (Falklands). */
+fun afloat(a: Airport): Boolean = airportKind(a) == "Carrier" || (abs(a.x) <= 1640.0 && abs(a.y) <= 1640.0)
 
-fun airbases(live: Live?, b: Briefing?): Airbases {
+/**
+ * What a mission says about one of its bases besides the name, to tell apart the bases that name fits: the
+ * frequencies its comm ladder rows give, the TACAN channels in the jet, and the hull number of the ship the jet is
+ * standing on. Each narrows the choice only when it fits one of them, and the answer must be a single base.
+ */
+data class BaseClues(
+    /** "270.200", from the ladder rows of that base */
+    val freqs: List<String> = emptyList(),
+    /** "10X" in the DED; weaker than the ladder, because the pilot may have tuned another ship's */
+    val tacans: List<String> = emptyList(),
+    /** "71", from Tacview's "CVN-71 Roosevl" */
+    val hulls: List<String> = emptyList(),
+) {
+    fun pick(fits: List<Airport>): Airport? {
+        var left = fits
+        fun narrow(score: (Airport) -> Int) {
+            val best = left.maxOf(score)
+            if (best > 0) left = left.filter { score(it) == best }
+        }
+        if (hulls.isNotEmpty()) narrow { a -> numbers("${a.name} ${a.fullName}").count { it in hulls } }
+        val mine = freqs.mapNotNull(::khz).toSet()
+        if (mine.isNotEmpty()) narrow { a -> a.freqs?.run { listOf(towerUhf, towerVhf, groundUhf, approachUhf, opsUhf, lsoUhf, atisVhf) }.orEmpty().mapNotNull(::khz).count { it in mine } }
+        // an air-to-air channel is a tanker or a wingman, never a base
+        val channels = tacans.filterNot { "A/A" in it }.mapNotNull { Regex("^(\\d+)\\s*([XY])").find(it.trim().uppercase(Locale.US))?.value?.replace(" ", "") }
+        if (channels.isNotEmpty()) narrow { a -> if (a.tacan?.label in channels) 1 else 0 }
+        return left.singleOrNull()
+    }
+
+    private fun khz(mhz: String?) = mhz?.trim()?.toDoubleOrNull()?.let { (it * 1000).roundToInt() }
+}
+
+private fun numbers(s: String) = Regex("\\d+").findAll(s).map { it.value.trimStart('0').ifEmpty { "0" } }.toList()
+
+/** The hull number of the ship the jet is standing on, from the name Tacview gives it ("CVN-71 Roosevl" → 71). */
+fun deckHulls(live: Live?, contacts: List<Contact>?): List<String> {
+    val l = live?.takeIf { !it.flying && (it.x != 0.0 || it.y != 0.0) } ?: return emptyList()
+    val ship = contacts.orEmpty().filter { it.kind == "ship" }.minByOrNull { hypot(it.x - l.x, it.y - l.y) }
+        ?.takeIf { hypot(it.x - l.x, it.y - l.y) < 1500 } ?: return emptyList()
+    return numbers(ship.name.orEmpty())
+}
+
+data class Airbases(
+    val departure: String?, val arrival: String?, val alternate: String?,
+    val departureClues: BaseClues = BaseClues(), val arrivalClues: BaseClues = BaseClues(), val alternateClues: BaseClues = BaseClues(),
+) {
+    fun departureIn(set: AirportSet?) = matchAirport(set, departure, departureClues)
+    fun arrivalIn(set: AirportSet?) = matchAirport(set, arrival, arrivalClues)
+    fun alternateIn(set: AirportSet?) = matchAirport(set, alternate, alternateClues)
+}
+
+/** The bare words a carrier's ladder rows are called by, and the notes BMS puts beside them (Comms.b). */
+private val LADDER_WORDS = Regex("\\b(ATIS|Tower|Ground|Approach|Departure|Paddles)\\b", RegexOption.IGNORE_CASE)
+private val LADDER_NOTES = Regex("^(Departure|Recovery|Alternate)\\s+(Airbase|Carrier)|^Landing Signal Officer", RegexOption.IGNORE_CASE)
+
+/**
+ * The flight's departure, recovery and alternate bases, by name, with what else the mission says about each.
+ * [contacts] (the Tacview picture) tells which ship the jet is sitting on.
+ */
+fun airbases(live: Live?, b: Briefing?, contacts: List<Contact>? = null): Airbases {
     val v = live?.voice
-    fun ladder(prefix: String) = b?.comms?.firstOrNull { it.agency.startsWith(prefix, true) && it.callsign != null }?.callsign
+    fun rows(prefix: String) = b?.comms?.filter { it.agency.startsWith(prefix, true) }.orEmpty()
+    // An airfield's rows are "Osan ATIS", "Osan Tower". A carrier's are plain "ATIS", "Tower", "Ground", and the
+    // ship's name goes in the notes of the Ground row (Approach for recovery and alternate): Comms.b, #IF_DEP_CARRIER.
+    fun ladder(prefix: String): String? {
+        val rows = rows(prefix)
+        return rows.firstOrNull { it.callsign != null }?.callsign?.takeIf { LADDER_WORDS.replace(it, "").isNotBlank() }
+            ?: rows.firstNotNullOfOrNull { r -> r.notes?.trim()?.takeIf { it.isNotEmpty() && !LADDER_NOTES.containsMatchIn(it) } }
+    }
+    // a briefing printed for another flight says nothing about this one's bases
+    val same = v?.flight == null || b?.overview?.flight == null || b.overview.flight.norm() == v.flight.norm()
+    val tacans = listOfNotNull(live?.tacanUfc, live?.tacanAux)
+    fun clues(prefix: String, home: Boolean, hulls: List<String> = emptyList()) = BaseClues(
+        freqs = if (same) rows(prefix).flatMap { listOfNotNull(it.uhf, it.vhf) } else emptyList(),
+        tacans = if (home) tacans else emptyList(),
+        hulls = hulls,
+    )
     return Airbases(
         departure = v?.departure ?: ladder("Dep "),
         arrival = v?.arrival ?: ladder("Arr "),
         alternate = v?.alternate ?: b?.alternate ?: ladder("Alt "),
+        departureClues = clues("Dep ", home = true, deckHulls(live, contacts)),
+        arrivalClues = clues("Arr ", home = true),
+        alternateClues = clues("Alt ", home = false),
     )
 }
 
-/** One steerpoint with everything we know: briefing row + coordinates from shared memory (3D) or the DTC file. */
+/**
+ * The bases of the merged mission: the briefing's (or the jet's) as [airbases] finds them, and — for a flight made
+ * from a save, which has no comm ladder — the save's own home, landing and alternate bases where those say nothing.
+ */
+fun airbases(live: Live?, merged: MergedMission, contacts: List<Contact>? = null): Airbases {
+    val b = airbases(live, merged.briefing, contacts)
+    val f = merged.plan?.flight?.takeIf { merged.fromSave } ?: return b
+    return b.copy(
+        departure = b.departure ?: f.home?.name,
+        arrival = b.arrival ?: f.landing?.name,
+        alternate = b.alternate ?: f.alternate?.name,
+    )
+}
+
+/**
+ * One steerpoint with everything we know: the briefing row and the position the merge settled on (PlanMerge: the jet in
+ * 3D, then the plan sent from the Planner, the cartridge, BMS's mission file).
+ */
 data class Stpt(
     val n: Int,
     val x: Double?,
@@ -64,40 +195,68 @@ data class Stpt(
     val comments: String?,
     val isTarget: Boolean,
     val targetName: String?,
+    // 1.3.8, from the merge (PlanMerge): where the position came from, and what the plan did to it
+    val source: PlanItemSource = PlanItemSource.BRIEFING,
+    /** the plan's point differs from what the jet has (or will load): drawn hollow, tagged NOT IN JET */
+    val notInJet: Boolean = false,
+    /** a steerpoint the briefing does not have, added by the plan: a PLAN row */
+    val planRow: Boolean = false,
+    /** the plan cleared it while the cartridge still holds it */
+    val cleared: Boolean = false,
+    /** a flight-plan point: the route line joins it (precision targets such as the recon bank are not) */
+    val onRoute: Boolean = true,
+    /** the cartridge action code (−1 a precision target, 1 take-off, 7 land …) */
+    val actionCode: Int = 0,
+    /** where the other of plan and jet has it, when they differ (drawn hollow, joined by a thin line) */
+    val otherX: Double? = null,
+    val otherY: Double? = null,
 ) {
     val hasPos get() = x != null && y != null && (x != 0.0 || y != 0.0)
     val isAlternate get() = comments?.contains("Alternate", true) == true
-    val title get() = desc ?: targetName ?: "STPT $n"
+    val title get() = desc ?: targetName ?: if (planRow) PlanMerge.actionWord(actionCode) else "STPT $n"
+    /** came from the Planner's plan */
+    val fromPlan get() = source == PlanItemSource.PLAN
 }
 
-fun steerpoints(m: MissionData?, live: Live?): List<Stpt> {
-    val b = m?.briefing
-    val dtc = m?.dtc
-    val liveWp = live?.navPoints?.filter { it.type == "WP" }.orEmpty().associateBy { it.i }
-    val dtcWp = dtc?.steerpoints.orEmpty().associateBy { it.n }
-    val numbers = (b?.steerpoints.orEmpty().map { it.n } + liveWp.keys + dtcWp.keys.filter { it <= 25 }).distinct().sorted()
-    return numbers.map { n ->
-        val row = b?.steerpoints?.firstOrNull { it.n == n }
-        val lp = liveWp[n]
-        val dp = dtcWp[n]
-        val desc = row?.desc
-        Stpt(
-            n = n,
-            x = lp?.x ?: dp?.x, y = lp?.y ?: dp?.y, altFt = lp?.altFt ?: dp?.altFt,
-            desc = desc, time = row?.time, cas = row?.cas, altText = row?.alt, action = row?.action, comments = row?.comments,
-            isTarget = dp?.isTarget == true || desc?.contains("Attack", true) == true || desc?.contains("Target", true) == true || desc?.contains("Recon", true) == true,
-            targetName = dp?.name,
-        )
-    }
+/** Every steerpoint (STPT 1-25) of the merged mission, in number order: the briefing's rows first of all. */
+fun steerpoints(m: MissionData?, live: Live?): List<Stpt> = steerpoints(PlanMerge.merge(m, live))
+
+fun steerpoints(merged: MergedMission): List<Stpt> = merged.allSteerpoints.map { it.toStpt() }
+
+fun MergedPoint.toStpt() = Stpt(
+    n = n,
+    x = if (hasPos) x else null, y = if (hasPos) y else null, altFt = if (hasPos) altFt else null,
+    desc = desc, time = time, cas = cas, altText = altText, action = actionText, comments = comments,
+    isTarget = isTarget, targetName = name,
+    source = source, notInJet = notInJet, planRow = planRow, cleared = cleared, onRoute = onRoute, actionCode = action,
+    otherX = planX ?: jetX, otherY = planY ?: jetY,
+)
+
+/**
+ * A pre-planned threat (or, with [marker], a point with no ring — an AWACS, a tanker, a friendly). [source] and
+ * [notInJet] say what the plan did to it; a differing plan PPT is drawn dashed beside the jet's.
+ */
+data class Threat(
+    val name: String, val x: Double, val y: Double, val rangeNm: Double,
+    val marker: Boolean = false,
+    val code: String? = null,
+    val n: Int = 0,
+    val source: PlanItemSource = PlanItemSource.CARTRIDGE,
+    val notInJet: Boolean = false,
+    val cleared: Boolean = false,
+) {
+    val fromPlan get() = source == PlanItemSource.PLAN
 }
 
-data class Threat(val name: String, val x: Double, val y: Double, val rangeNm: Double)
-
-fun preplannedThreats(m: MissionData?, live: Live?): List<Threat> {
-    val fromLive = live?.navPoints?.filter { it.type == "PT" && (it.rangeNm ?: 0.0) > 0 }.orEmpty()
-    if (fromLive.isNotEmpty()) return fromLive.map { Threat(it.name ?: "PPT ${it.i}", it.x, it.y, it.rangeNm ?: 0.0) }
-    return m?.dtc?.ppts.orEmpty().map { Threat(it.name ?: "PPT ${it.n}", it.x, it.y, it.rangeNm) }
+/** Every pre-planned point of the merged mission — threats and markers — slot by slot (PlanMerge). */
+fun preplannedPoints(merged: MergedMission): List<Threat> = merged.ppts.map {
+    Threat(it.name ?: "PPT ${it.n}", it.x, it.y, if (it.marker) 0.0 else it.rangeNm, it.marker, it.code, it.n, it.source, it.notInJet, it.cleared)
 }
+
+fun preplannedPoints(m: MissionData?, live: Live?): List<Threat> = preplannedPoints(PlanMerge.merge(m, live))
+
+/** The pre-planned threats: the rings. The markers (AWACS, tanker, friendly) are not threats. */
+fun preplannedThreats(m: MissionData?, live: Live?): List<Threat> = preplannedPoints(m, live).filter { !it.marker && it.rangeNm > 0 }
 
 /**
  * Where a tanker or an AWACS is planned to be: the station the briefing names, before anybody is airborne.
@@ -205,6 +364,51 @@ fun samSites(contacts: List<com.bmscompanion.app.data.mission.Contact>, referenc
             threatId = hit?.id,
         )
     }
+}
+
+/** The Threat Guide's air-defence categories: what a pre-planned threat ring or a SAM site can be. */
+private val AIR_DEFENCE = setOf("SAM", "AAA", "MANPADS", "SAM_RADAR", "SEARCH_RADAR")
+
+/**
+ * The Threat Guide entry a threat's name stands for: a PPT's "SA-3", "Hawk" or "SA-10", a feed's "SA-6 Gainful TEL".
+ *
+ * A whole name equal to an entry's name or alias wins. Otherwise the name's first word is matched against the first
+ * word of each entry's name and aliases: equal when it carries a digit ("SA-3" is "SA-3 Goa"), or when it is a word
+ * of four letters or more naming an air defence ("KSAM", "Nike" — never "Ulsan", a waypoint that is also a ship's
+ * name); the entry's with a letter after it ("SA-10" is the guide's "SA-10B"), never a digit ("SA-1" is not
+ * "SA-10B"); and "Crotale-NG" is "Crotale". Null when the guide has no such system (a generic "AAA", "ManPads").
+ */
+fun threatGuideEntry(name: String?, reference: List<com.bmscompanion.app.data.Threat>): com.bmscompanion.app.data.Threat? {
+    val words = name?.trim()?.split(Regex("\\s+"))?.filter { it.isNotBlank() }.orEmpty()
+    if (words.isEmpty()) return null
+    val whole = words.joinToString("").norm()
+    val first = words[0].norm()
+    val stem = words[0].substringBefore('-').norm()
+    if (whole.length < 3) return null
+    val digit = first.any { it.isDigit() }
+    var best: com.bmscompanion.app.data.Threat? = null
+    var bestScore = 0
+    for (t in reference) {
+        val ad = t.category in AIR_DEFENCE
+        for (label in listOf(t.name) + t.aliases) {
+            val lk = label.norm()
+            val lw = label.trim().split(Regex("\\s+")).firstOrNull()?.norm().orEmpty()
+            if (lk.isEmpty() || lw.isEmpty()) continue
+            var score = when {
+                lk == whole -> 300
+                lw == first && (digit || (ad && first.length >= 4)) -> 200
+                digit && lw.length > first.length && lw.startsWith(first) && lw.substring(first.length).all { it.isLetter() } -> 150
+                ad && lw.length >= 4 && '-' in words[0] && stem == lw -> 100
+                else -> 0
+            }
+            if (score == 0) continue
+            // the entry's own name before an alias, an air defence before an aircraft or a ship
+            if (label == t.name) score += 10
+            if (ad) score += 5
+            if (score > bestScore) { bestScore = score; best = t }
+        }
+    }
+    return best
 }
 
 fun markpoints(live: Live?): List<NavPoint> = live?.navPoints?.filter { it.type == "MK" || it.type == "DL" }.orEmpty()

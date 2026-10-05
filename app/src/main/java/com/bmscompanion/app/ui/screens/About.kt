@@ -295,10 +295,22 @@ private fun CreditsCard(open: ((String) -> Unit)?) {
             "https://www.falcon-bms.com/", open,
         )
         Credit(
+            "Weapon Delivery Planner — Falcas",
+            "The Planner is a port of Falcas's Weapon Delivery Planner to Falcon BMS 4.38.1. " +
+                "Its pages, attack geometry, ballistics and performance planning are his work.",
+            "https://forum.falcon-bms.com/", open,
+        )
+        Credit(
             "EZBoards, by \"Logic\"",
-            "The kneeboard generator that ships with BMS. BMS Companion only launches it; the boards and the " +
-                "briefing tables are its own work.",
-            "https://www.falcon-bms.com/", open,
+            "A separate kneeboard generator, available from the Falcon BMS forum. BMS Companion only launches it; " +
+                "the boards and the briefing tables are its own work.",
+            "https://forum.falcon-bms.com/", open,
+        )
+        Credit(
+            "HTML Briefing — UOAF",
+            "A separate download, not part of Falcon BMS; BMS Companion looks for it in Tools\\html_brief_win. " +
+                "BMS Companion only starts it and shows the kneeboard pages it exports.",
+            null, open,
         )
         Credit(
             "OpenKneeboard — Fred Emmott",
@@ -310,6 +322,13 @@ private fun CreditsCard(open: ((String) -> Unit)?) {
             "The real-time telemetry stream the AWACS picture is built from.",
             "https://www.tacview.net/", open,
         )
+        Credit(
+            "WeatherGen — Craig Andera",
+            "The weather generator behind the Weather page: its pattern, its types and winds, its override regions " +
+                "and its time steps are WeatherGen's, ported line for line from Tyrant's Virtual Mission Tools 0.63. " +
+                "MIT licence, Copyright (c) 2017 Craig Andera.",
+            "https://candera.github.io/weathergen/", open,
+        )
         Text(
             "The reference pages come from Falcon BMS and from published AIP documents.",
             style = MaterialTheme.typography.bodySmall, color = Hud.TextFaint, modifier = Modifier.padding(top = 8.dp),
@@ -318,14 +337,14 @@ private fun CreditsCard(open: ((String) -> Unit)?) {
 }
 
 @Composable
-private fun Credit(who: String, what: String, url: String, open: ((String) -> Unit)?) {
+private fun Credit(who: String, what: String, url: String?, open: ((String) -> Unit)?) {
     Column(
         Modifier.fillMaxWidth().padding(bottom = 10.dp)
-            .let { if (open == null) it else it.clickable { open(url) } },
+            .let { if (open == null || url == null) it else it.clickable { open(url) } },
     ) {
         Text(who, style = MaterialTheme.typography.titleSmall, color = Hud.Text, fontWeight = FontWeight.SemiBold)
         Text(what, style = MaterialTheme.typography.bodySmall, color = Hud.TextDim)
-        Text(url.removePrefix("https://").trimEnd('/'), style = LocalExtra.current.monoSmall, color = Hud.Cyan)
+        if (url != null) Text(url.removePrefix("https://").trimEnd('/'), style = LocalExtra.current.monoSmall, color = Hud.Cyan)
     }
 }
 

@@ -1,0 +1,1 @@
+{"form":"fclsInfo","roots":[{"name":"btnClose","kind":"button","winKind":"Button","bg":"Silver","font":"Arial","fontSize":12,"fontStyle":"Bold","fg":"Black","x":404,"y":139,"w":80,"h":30,"text":"Close"},{"name":"txtInfo","kind":"text","winKind":"TextBox","bg":"#404040","fg":"White","x":12,"y":12,"multiline":true,"w":386,"h":157}],"clientW":496,"clientH":181,"bg":"#404040"}

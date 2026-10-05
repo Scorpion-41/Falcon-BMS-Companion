@@ -1,0 +1,9 @@
+{
+ "lblInfo": "What Apply does: the point named here goes into the steerpoint (or target row) picked below.",
+ "lblNorth": "The point's latitude (degrees, minutes), as it will go into the cartridge.",
+ "lblEast": "The point's longitude (degrees, minutes), as it will go into the cartridge.",
+ "lblStpt": "The steerpoint (or row of the target list) the point goes into: pick its number beside it.",
+ "btnCancel": "Closes the window; nothing is placed.",
+ "btnApply":"Apply: puts the point there, a steerpoint as Precision. Picked from the mission, a slot that holds a point is replaced only after a question.",
+ "numStpt": "The steerpoint (or row of the target list) the point goes into. Picked from the mission, it starts on the first empty one."
+}

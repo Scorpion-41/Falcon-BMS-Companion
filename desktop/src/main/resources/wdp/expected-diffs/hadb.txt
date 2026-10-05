@@ -1,0 +1,20 @@
+# The HADB page against Weapon Delivery Planner (--wdppagetest hadb): where the port prints something else on purpose.
+# One fix per line: <D-number>  <values, * = any characters>  [when <fact><op><value> && ...]  [value <WDP's>><port's>]
+# Facts: ops (the row's sequence), wpmin (the lowest steerpoint the port's box reached), ref.<column> (WDP's value),
+# port.<column> (the port's); a value starting with @ is another fact. Any difference no line names fails.
+# The D-numbers are the plan's; what each fixed value says instead is checked in the geometry section of the test.
+
+# D8  the target steerpoint may be 1 or 2 (WDP's box stopped at 3): once the port's box went there, the row plans
+#     against another steerpoint than WDP's and anything may differ.
+D8  *  when wpmin~^[12]$
+
+# D5  the ingress TAS from this flow's tracking-point altitude. WDP's was one flow behind; on the rows where that
+#     left WDP's ingress TAS different from the port's, everything laid out from the turn radius differs with it.
+D5  st_intIngressTAS,st_intTurnRadius,lblVRPbrg,lblVRPrng,lblVRPelv,lblVRPnm,lblVRPPUPbrg,lblVRPPUPrng,lblVRPPUPelv,lblPUPnm,lblWheel*,lblSlantRange*,lblAdvIngAltVal,nav_VRP_*,nav_VRPPUP_*  when ref.st_intIngressTAS!=@port.st_intIngressTAS
+
+# D4  the pull-up point's bearing takes atan(R/D) (WDP: tan). Nothing moves at 0° off, where both vanish.
+D4  lblVRPPUPbrg,nav_VRPPUP_Bearing  when port.sld_trbAngleOff!=0
+
+# D5  a bearing is never printed "360.0": north is 0.0 (the right-hand N of the compass, and 359.95..360).
+D5  lbl*brg  value 360.0>0.0
+D5  nav_*_Bearing  value 360>0.0

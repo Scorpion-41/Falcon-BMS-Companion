@@ -1,0 +1,8 @@
+{
+ "cboLead": "The lead (1)'s name on the card: pick from the briefing's pilot roster and the names used on this device before, or type one.",
+ "cboWing1": "The wingman (2)'s name on the card: pick from the briefing's pilot roster and the names used on this device before, or type one.",
+ "cboElement": "The element lead (3)'s name on the card: pick from the briefing's pilot roster and the names used on this device before, or type one.",
+ "cboWing4": "The element's wingman (4)'s name on the card: pick from the briefing's pilot roster and the names used on this device before, or type one.",
+ "btnOK": "Puts the four names in the card's flight block, and remembers them on this device for next time.",
+ "btnCancel": "Closes the window; the names stay as they were."
+}

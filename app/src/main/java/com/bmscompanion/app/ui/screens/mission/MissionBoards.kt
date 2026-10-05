@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,6 +24,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.PauseCircle
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -45,6 +47,8 @@ import com.bmscompanion.app.data.mission.BoardTable
 import com.bmscompanion.app.data.mission.EzRun
 import com.bmscompanion.app.data.mission.LinkState
 import com.bmscompanion.app.data.mission.MissionLink
+import com.bmscompanion.app.data.mission.MissionMode
+import com.bmscompanion.app.ui.screens.wdp.PlannerPopulate
 import com.bmscompanion.app.ui.components.CollapsibleCard
 import com.bmscompanion.app.ui.components.Masonry
 import com.bmscompanion.app.ui.components.SectionCard
@@ -63,14 +67,15 @@ import java.util.Locale
  * the manual button underneath as the fallback it is. The two sections below fold, and remember being folded.
  */
 @Composable
-fun MissionBoardsPane(env: MissionEnv, onSetup: () -> Unit) {
+fun MissionBoardsPane(env: MissionEnv, onSetup: () -> Unit, onOpenTab: ((MissionTab) -> Unit)? = null) {
     val info by MissionLink.info.collectAsState()
     val mission by MissionLink.mission.collectAsState()
     val board = mission?.board
     val ezInfo = info?.ezBoards
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        EzGenerateCard(onSetup)
+        WhichKneeboard(info.wdpMode)
+        EzGenerateCard(onSetup, onOpenTab)
 
         // The VR board addresses: a page of its own until now, and only ever on the PC that runs the headset.
         vrBoardsPane?.let { pane ->
@@ -84,11 +89,11 @@ fun MissionBoardsPane(env: MissionEnv, onSetup: () -> Unit) {
             initiallyOpen = false,
             accent = Hud.Amber,
             rememberKey = "kb_html",
-            preview = "The pages BMS's own HTML Briefing tool exports. Nothing here needs you if you do not use it.",
-        ) { KneeboardPages(env.nav) }
+            preview = "The pages UOAF's HTML Briefing tool exports. Nothing here needs you if you do not use it.",
+        ) { KneeboardPages(env.nav, onOpenTab) }
 
         if (board == null || board.tables.none { it.rows.isNotEmpty() }) {
-            if (ezInfo?.configured == true && info?.briefing?.available == true) {
+            if (ezInfo?.configured == true && info?.briefing?.available == true && !info.wdpMode) {
                 Text("Board preview unavailable (xbrief could not read the briefing).", color = Hud.TextFaint, fontSize = 12.sp)
             }
             return@Column
@@ -107,9 +112,14 @@ fun MissionBoardsPane(env: MissionEnv, onSetup: () -> Unit) {
  * The button used to be the whole card, which put the least-used path first: with auto-generate on, printing the
  * briefing is all a pilot ever does, and the button is for the times that went wrong. So the two steps come first, the
  * state of the kneeboards is stated rather than implied, and the button sits under a rule with its own explanation.
+ *
+ * **In WDP mode** (1.3.8) EZBoards is suspended on the PC: GENERATE NOW is greyed out with the reason, the switch for
+ * PRINT shows the pilot's setting as kept but suspended, and beside the greyed button is **Populate from Planner**
+ * ([onOpenTab] reaches the Planner when the press needs it). The steps are WDP mode's: the Planner, Save to DTC,
+ * Populate, Upd Kneeboard.
  */
 @Composable
-fun EzGenerateCard(onSetup: () -> Unit) {
+fun EzGenerateCard(onSetup: () -> Unit, onOpenTab: ((MissionTab) -> Unit)? = null) {
     val info by MissionLink.info.collectAsState()
     val ez by MissionLink.ez.collectAsState()
     val link by MissionLink.state.collectAsState()
@@ -117,36 +127,68 @@ fun EzGenerateCard(onSetup: () -> Unit) {
     val last: EzRun? = listOfNotNull(ez.result, ezInfo?.lastRun).maxByOrNull { it.time }
     val running = ez.running || ezInfo?.running == true
     val printed = info?.briefing?.available == true
+    val wdp = info.wdpMode
+    // the PC says so (EzStatus.suspended); a PC that knows the modes but not the flag is suspended by WDP mode alone
+    val suspended = wdp || ezInfo?.suspended == true
 
-    SectionCard("BMS kneeboards", accent = Hud.Amber) {
+    SectionCard("BMS kneeboards", accent = Hud.Amber, trailing = { if (info != null) ModeTag(if (wdp) MissionMode.WDP else MissionMode.EZBOARDS) }) {
         Text(
-            "The sheets BMS shows in the cockpit, written from your briefing by EZBoards (by Logic, which BMS ships).",
+            if (suspended) "The sheets BMS shows in the cockpit. In WDP mode they come from the Planner's Upd " +
+                "Kneeboard, and EZBoards (by Logic) is paused."
+            else "The sheets BMS shows in the cockpit, written from your briefing by EZBoards (by Logic).",
             style = MaterialTheme.typography.bodySmall, color = Hud.TextDim,
         )
 
         Spacer(Modifier.height(12.dp))
+        if (suspended) {
+            // WDP mode: the button that matters first (on a phone the steps would push it off the screen), then the
+            // evening in the Planner, where nothing waits on PRINT
+            SuspendedState(ezInfo?.autoOnPrint == true)
+            Spacer(Modifier.height(12.dp))
+            GenerateAndPopulate(onOpenTab, onSetup)
+            Spacer(Modifier.height(14.dp))
+            androidx.compose.material3.HorizontalDivider(color = Hud.Outline.copy(alpha = 0.5f))
+            Spacer(Modifier.height(12.dp))
+            Text("BEFORE THE MISSION STARTS", style = LocalExtra.current.overline, color = Hud.TextFaint)
+            Spacer(Modifier.height(6.dp))
+            Step("1", "Open your flight in the Planner", "Open mission…, then pick your flight and seat. Weather of your own is picked and saved in BMS before this (Weather → Map Model, SAVE WTH or the campaign save). PRINT in BMS is optional.")
+            Step("2", "Save to DTC", "In the Planner. Then press LOAD in BMS's DTC window, so the jet has it.")
+            Step("3", MissionMode.POPULATE, "Fills the Mission section, on every device, from that flight and your cartridge as saved.")
+            Step("4", "Upd Kneeboard", "In the Planner: your DataCard and the pages you choose, on the cockpit kneeboard. Then commit and enter the cockpit.")
+            return@SectionCard
+        }
         KneeboardState(last, running, printed, info?.briefing?.generated, ezInfo?.autoOnPrint == true)
 
         Spacer(Modifier.height(14.dp))
-        Text("IN BMS, BEFORE THE MISSION STARTS", style = LocalExtra.current.overline, color = Hud.TextFaint)
+        Text("BEFORE THE MISSION STARTS", style = LocalExtra.current.overline, color = Hud.TextFaint)
         Spacer(Modifier.height(6.dp))
         // Only tell the pilot that PRINT does it by itself when it actually will. The setting lived on the PC and
         // defaults to off, so this page used to promise something that did not happen and gave no reason why.
+        // The order is the one docs/KNEEBOARDS.md gives: EZBoards reads the cartridge as well as the briefing, so
+        // the DTC is saved before PRINT, and a Planner save (which needs the printed briefing, so comes after it)
+        // has to be followed by another run.
         val auto = ezInfo?.autoOnPrint == true
         Step(
-            "1", "Print the briefing",
-            if (auto) {
-                "On the briefing screen press PRINT (top right). BMS Companion sees the printed briefing and generates " +
-                    "the kneeboards itself — you do not need to come back to this page."
-            } else {
-                "On the briefing screen press PRINT (top right). That is what writes the briefing BMS Companion reads. " +
-                    "It will not generate the kneeboards on its own until you switch that on below."
-            },
+            "1", "Save the DTC",
+            "On the DTC screen press SAVE. That supplies the steerpoints, radio presets, IFF and weapon target names, " +
+                "and your position before you are in the aircraft. Do it before PRINT: EZBoards reads it too.",
         )
         Step(
-            "2", "Save the DTC",
-            "On the DTC screen press SAVE. That supplies the steerpoints, radio presets, IFF and weapon target names, " +
-                "and your position before you are in the aircraft.",
+            "2", "Print the briefing",
+            (
+                if (auto) {
+                    "On the briefing screen press PRINT (top right). BMS Companion sees the printed briefing and generates " +
+                        "the kneeboards itself."
+                } else {
+                    "On the briefing screen press PRINT (top right). That is what writes the briefing BMS Companion reads. " +
+                        "It will not generate the kneeboards on its own until you switch that on below."
+                }
+            ) + " Weather of your own is picked and saved in BMS before this: the briefing words the weather loaded when you PRINT.",
+        )
+        Step(
+            "3", "After the cartridge changes, generate again",
+            "EZBoards reads the cartridge as it was when it ran, so kneeboards made before a later SAVE of the DTC do " +
+                "not show it. Press GENERATE NOW below, then commit and enter the cockpit.",
         )
 
         Spacer(Modifier.height(14.dp))
@@ -170,8 +212,8 @@ fun EzGenerateCard(onSetup: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
-                    "A manual fallback: use it only if the kneeboards were not produced on their own — the briefing was " +
-                        "printed before BMS Companion was running, or the print went unnoticed.",
+                    "Use it after the DTC was saved again, or if the kneeboards were not produced on their own — the " +
+                        "briefing was printed before BMS Companion was running, or the print went unnoticed.",
                     color = Hud.TextDim, fontSize = 12.sp,
                 )
                 when {
@@ -214,6 +256,102 @@ fun EzGenerateCard(onSetup: () -> Unit) {
         }
 
         last?.let { ResultBanner(it) }
+    }
+}
+
+/**
+ * WDP mode: GENERATE NOW greyed out with its reason inside it ([WdpPausedBox], [MissionMode.EZ_SUSPENDED]), **Open the
+ * Planner** and **Populate from Planner** beside it, and EZBoards' PRINT switch as the pilot left it, marked suspended rather than changed.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun GenerateAndPopulate(onOpenTab: ((MissionTab) -> Unit)?, onSetup: () -> Unit) {
+    val info by MissionLink.info.collectAsState()
+    val ezInfo = info?.ezBoards
+    androidx.compose.foundation.layout.FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // greyed out and unpressable, and says why in its own box: the PC refuses it in WDP mode anyway
+        WdpPausedBox("GENERATE NOW", MissionMode.EZ_SUSPENDED)
+        if (onOpenTab != null) OpenPlannerButton(onOpenTab)
+        PopulateButton(onOpenTab ?: { _ -> onSetup() }, showResult = false)
+    }
+    PlannerPopulate.current(info?.mission)?.let { r ->
+        Text(
+            PlannerPopulate.resultLine(r), color = if (r.ok) Hud.Green else Hud.Red, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+    if (ezInfo?.configured == true) {
+        val auto = ezInfo.autoOnPrint
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier.size(width = 38.dp, height = 22.dp).clip(RoundedCornerShape(11.dp)).background(Hud.Surface2)
+                    .border(1.dp, Hud.Outline.copy(alpha = 0.5f), RoundedCornerShape(11.dp)),
+                contentAlignment = if (auto) Alignment.CenterEnd else Alignment.CenterStart,
+            ) {
+                Box(Modifier.padding(horizontal = 3.dp).size(16.dp).clip(RoundedCornerShape(8.dp)).background(Hud.TextFaint.copy(alpha = 0.6f)))
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Generate them the moment you press PRINT", color = Hud.TextDim, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    (if (auto) "On" else "Off") + " — suspended in WDP mode. Your setting is kept, and applies again in EZBoards mode.",
+                    color = Hud.TextFaint, fontSize = 12.sp,
+                )
+            }
+        }
+    }
+}
+
+/**
+ * A button WDP mode greys out — GENERATE NOW (EZBoards writes cockpit page 1) and Run HTML Briefing (its export writes
+ * pages 1-3), either of which would overwrite the pages the Planner's Upd Kneeboard made: [label] faint, nothing to
+ * press, and [reason] inside the same box in plain words ([MissionMode.EZ_SUSPENDED], [MissionMode.HTML_BRIEF_SUSPENDED]).
+ */
+@Composable
+fun WdpPausedBox(label: String, reason: String) {
+    Column(
+        Modifier.widthIn(max = 460.dp).heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp)).background(Hud.Surface2)
+            .border(1.dp, Hud.Outline.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    ) {
+        Text(label, color = Hud.TextFaint.copy(alpha = 0.7f), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Text(reason, color = Hud.TextDim, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+    }
+}
+
+/** **Open the Planner** beside a [WdpPausedBox]: the Planner tab, where Upd Kneeboard makes the cockpit boards. */
+@Composable
+fun OpenPlannerButton(onOpenTab: (MissionTab) -> Unit) {
+    Box(
+        Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp)).background(Hud.Surface3)
+            .border(1.dp, modeInk(MissionMode.WDP).copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+            .clickable { onOpenTab(MissionTab.PLANNER) }.padding(horizontal = 16.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) { Text(MissionMode.OPEN_PLANNER, color = Hud.Text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1) }
+}
+
+/** WDP mode's line in place of [KneeboardState]: EZBoards is paused, and where the cockpit's kneeboards come from. */
+@Composable
+private fun SuspendedState(auto: Boolean) {
+    val col = modeInk(MissionMode.WDP)
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(col.copy(alpha = 0.08f))
+            .border(1.dp, col.copy(alpha = 0.4f), RoundedCornerShape(12.dp)).padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Default.PauseCircle, null, tint = col, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text("EZBoards is paused in WDP mode", color = col, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+            Text(
+                "The cockpit kneeboards come from the Planner's Upd Kneeboard." +
+                    if (auto) " Nothing runs when you press PRINT until you switch back to EZBoards mode." else "",
+                color = Hud.TextDim, fontSize = 12.sp,
+            )
+        }
     }
 }
 
@@ -349,3 +487,68 @@ private fun BoardTableCard(t: BoardTable) {
     }
 }
 
+
+/**
+ * Which kneeboard is which, and in what order to make them.
+ *
+ * Four things around BMS are called a kneeboard and only one of them is the one on your knee in the pit: BMS's own
+ * sixteen pages a knee (`KoreaObj/7982-7997.dds`). Three tools write those same files — EZBoards at every PRINT (page 1
+ * as it ships), the Planner's Upd Kneeboard (the pages the pilot picks; 1 and 2 unless told otherwise, EZBoards being
+ * paused in WDP mode; any half may be a picture of the pilot's own) and the
+ * HTML Briefing tool when it exports (its own pages, 1-3 by default) — and whichever wrote a page last is the one in
+ * the cockpit. The VR boards and this app's pages are read outside the sim. What also matters is the order, because
+ * all three writers take a snapshot of things the Planner and BMS's saved weather can change, and BMS reads the pages
+ * only as the pilot enters the cockpit. Weather comes first: a map from the Weather tab reaches a mission only once it
+ * is picked under Map Model and saved in BMS; the Planner's Open mission…, Populate and Upd Kneeboard read the weather
+ * BMS has saved, and PRINT words the weather loaded at that moment (docs/WEATHER.md).
+ *
+ * Folded shut, because it is a thing you read once. The long version is docs/KNEEBOARDS.md.
+ */
+@Composable
+private fun WhichKneeboard(wdp: Boolean) {
+    CollapsibleCard("Which kneeboard should I use?", initiallyOpen = false, accent = Hud.TextDim, rememberKey = "kb_which") {
+        KbLine(
+            "In the cockpit, on your knee",
+            "BMS's own pages, sixteen a knee. Three tools can write them: EZBoards, below, at every PRINT in EZBoards " +
+                "mode (page 1 as it is set up; paused in WDP mode); the Planner's Upd Kneeboard in WDP mode, on the " +
+                "pages you choose there (1 and 2 unless you pick others; Browse picture… puts a picture of your own " +
+                "on one); and the HTML Briefing tool when it exports " +
+                "(pages 1-3; in WDP mode it is not started from here, so it does not overwrite the Planner's pages). " +
+                "Whichever wrote a page last is what you see, and Upd Kneeboard shows who made each one.",
+        )
+        KbLine("In VR", "This app's VR boards, through OpenKneeboard. They are live and follow the jet, and a bound button turns the pages.")
+        KbLine("On a tablet beside you", "This app's own pages. Nothing to generate and nothing to go stale.")
+        KbLine("A PDF to print", "UOAF's HTML Briefing tool (a separate download), below. It reads the campaign save and your cartridge, not the printed briefing.")
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Order matters. Everything below takes a snapshot, so the weather comes first and the kneeboards last. " +
+                "Weather of your own: make it on the Weather tab, then in BMS pick it (Weather → Map Model) and save it " +
+                "(SAVE WTH in a TE, the campaign save in a campaign) before anything else reads it. " +
+                (if (wdp) "In WDP mode: in BMS pick your flight, SAVE the DTC and the mission, and PRINT; in the Planner " +
+                    "Open mission…, plan and Save to DTC; LOAD in BMS's DTC window; Populate from Planner, Upd " +
+                    "Kneeboard, then commit and enter the cockpit (EZBoards and HTML Briefing stay paused here: both " +
+                    "would write over the Planner's pages; the VR boards work as always). Weather " +
+                    "changed after that? Save it in BMS, Open mission… the same flight again, then Upd Kneeboard and " +
+                    "Populate from Planner."
+                else "In EZBoards mode: plan and SAVE the DTC in BMS, press PRINT (EZBoards runs if it is set to), " +
+                    "press GENERATE NOW if the DTC was saved again after it, export in HTML Briefing if you use it, " +
+                    "then commit and enter the cockpit. Weather changed after PRINT? Save it in BMS and PRINT again (and GENERATE NOW if kneeboards are not made at PRINT).") +
+                " BMS reads the pages as you enter it: anything printed while you are in the cockpit shows the next time you enter.",
+            color = Hud.TextDim, fontSize = 12.sp,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Leave HTML Briefings unticked in BMS. The HTML Briefing tool does not need it, and turning it on costs " +
+                "you the text briefing that EZBoards and this app both read.",
+            color = Hud.TextFaint, fontSize = 11.5.sp,
+        )
+    }
+}
+
+@Composable
+private fun KbLine(what: String, how: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        Text(what, Modifier.width(150.dp), color = Hud.Text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        Text(how, color = Hud.TextDim, fontSize = 12.sp)
+    }
+}

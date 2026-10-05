@@ -1,0 +1,127 @@
+[
+ {
+  "form": "cntDTC",
+  "controls": 1878,
+  "placed": 1878
+ },
+ {
+  "form": "cntDataCard",
+  "controls": 771,
+  "placed": 771
+ },
+ {
+  "form": "cntPopUp",
+  "controls": 209,
+  "placed": 209
+ },
+ {
+  "form": "cntHADB",
+  "controls": 202,
+  "placed": 202
+ },
+ {
+  "form": "cntTOSS",
+  "controls": 198,
+  "placed": 198
+ },
+ {
+  "form": "cntPerformance",
+  "controls": 144,
+  "placed": 144
+ },
+ {
+  "form": "fclsLoadout",
+  "controls": 92,
+  "placed": 92
+ },
+ {
+  "form": "fclsTargetSelection",
+  "controls": 21,
+  "placed": 21
+ },
+ {
+  "form": "fclsChangePPT",
+  "controls": 16,
+  "placed": 16
+ },
+ {
+  "form": "fclsChangeLine",
+  "controls": 15,
+  "placed": 15
+ },
+ {
+  "form": "fclsChangeSTPT",
+  "controls": 12,
+  "placed": 12
+ },
+ {
+  "form": "fclsNames",
+  "controls": 12,
+  "placed": 12
+ },
+ {
+  "form": "fclsChangeLineSTPT",
+  "controls": 11,
+  "placed": 11
+ },
+ {
+  "form": "fclsChangeTgt",
+  "controls": 11,
+  "placed": 11
+ },
+ {
+  "form": "fclsSelection",
+  "controls": 9,
+  "placed": 9
+ },
+ {
+  "form": "fclsChart",
+  "controls": 8,
+  "placed": 8
+ },
+ {
+  "form": "fclsAptToStpt",
+  "controls": 7,
+  "placed": 7
+ },
+ {
+  "form": "fclsPackageNr",
+  "controls": 7,
+  "placed": 7
+ },
+ {
+  "form": "fclsSelAPT",
+  "controls": 7,
+  "placed": 7
+ },
+ {
+  "form": "fclsChangeCOMM",
+  "controls": 6,
+  "placed": 6
+ },
+ {
+  "form": "fclsBrowseTo",
+  "controls": 5,
+  "placed": 5
+ },
+ {
+  "form": "fclsFormation",
+  "controls": 5,
+  "placed": 5
+ },
+ {
+  "form": "fclsAptSchedule",
+  "controls": 3,
+  "placed": 3
+ },
+ {
+  "form": "fclsInfo",
+  "controls": 2,
+  "placed": 2
+ },
+ {
+  "form": "fclsMilCodes",
+  "controls": 1,
+  "placed": 1
+ }
+]

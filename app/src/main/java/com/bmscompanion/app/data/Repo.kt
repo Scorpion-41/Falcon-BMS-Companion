@@ -110,6 +110,27 @@ object Repo {
 
     suspend fun geo(mapId: String): GeoLayers? = load<GeoLayers>("data/geo/$mapId.json").await()
 
+    /**
+     * One Weapon Delivery Planner page, as Falcas laid it out (see docs/WDP-PORT.md).
+     *
+     * Cached like every other asset, because a page is read once and then drawn many times — cntDTC alone is
+     * 1,878 controls and re-parsing it on every recomposition would be felt.
+     */
+    suspend fun wdpForm(form: String): com.bmscompanion.app.data.wdp.WdpForm? =
+        load<com.bmscompanion.app.data.wdp.WdpForm>("data/wdp/$form.json").await()
+
+    /**
+     * An asset as plain text, cached like every other: the Weapon Delivery Planner engine tables and databases,
+     * which are Falcas’s own formats and parsed by the ported code rather than by the JSON serializer.
+     */
+    suspend fun text(path: String): String? {
+        @Suppress("UNCHECKED_CAST")
+        val d = cache.getOrPut("text:$path") {
+            scope.async { runCatching { app.assets.open(path).use { it.readBytes().decodeToString() } }.getOrNull() }
+        } as Deferred<String?>
+        return d.await()
+    }
+
     // ---------- images ----------
     // a share of the heap this device allows (old tablets get ~64-128 MB in total), never more than 40 MB
     private val bitmaps = object : LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 8).coerceIn(8L * 1024 * 1024, 40L * 1024 * 1024).toInt()) {

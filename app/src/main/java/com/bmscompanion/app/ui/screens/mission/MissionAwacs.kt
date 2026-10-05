@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bmscompanion.app.data.Airport
 import com.bmscompanion.app.data.mission.Contact
+import com.bmscompanion.app.data.mission.HostileContacts
 import com.bmscompanion.app.data.mission.MissionLink
 import com.bmscompanion.app.ui.components.HudChip
 import com.bmscompanion.app.ui.components.MapProjection
@@ -216,8 +217,9 @@ private fun AwacsMap(
             }
             if (AwacsSettings.threats) ppts.forEach { t ->
                 val c = pr.toScreen(t.x, t.y)
-                drawCircle(Hostile.copy(alpha = 0.55f), (t.rangeNm * pr.pxPerNm).toFloat(), c, style = Stroke(1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))))
-                placeText(tm, t.name, c + Offset(6f, 2f), small.copy(color = Hostile), placed)
+                // the SAM red of every map, dashed: the picture's contacts stay the stronger marks here
+                drawSamRing(c, (t.rangeNm * pr.pxPerNm).toFloat(), SamRed, dashed = true, fill = RING_FILL * 0.6f)
+                placeText(tm, t.name, c + Offset(6f, 2f), small.copy(color = SamRed), placed)
             }
 
             // bullseye rings with bearing labels
@@ -310,7 +312,9 @@ private fun AwacsMap(
         ) {
             HudChip(if (aw.measuring) "Measure A→B" else "Select", aw.measuring) { aw.measuring = !aw.measuring; if (!aw.measuring) aw.selB = null }
             com.bmscompanion.app.ui.components.MapLookButton()
-            HudChip("Hostiles", AwacsSettings.hostiles) { AwacsSettings.hostiles = !AwacsSettings.hostiles; AwacsSettings.save() }
+            // a second filter: hostile contacts reach the device only while the PC's setting is on (HostileContacts)
+            if (rememberHostilesOn()) HudChip("Hostiles", AwacsSettings.hostiles) { AwacsSettings.hostiles = !AwacsSettings.hostiles; AwacsSettings.save() }
+            else Text(HostileContacts.OFF_SHORT, color = Hud.TextDim, fontSize = 11.sp, maxLines = 1)
             HudChip("Friendlies", AwacsSettings.friendlies) { AwacsSettings.friendlies = !AwacsSettings.friendlies; AwacsSettings.save() }
             HudChip("Trails", AwacsSettings.trails) { AwacsSettings.trails = !AwacsSettings.trails; AwacsSettings.save() }
             HudChip("Vectors ${if (AwacsSettings.vectorMin == 0) "off" else "${AwacsSettings.vectorMin}m"}", AwacsSettings.vectorMin > 0) {
@@ -418,6 +422,7 @@ private fun CallBox(title: String, text: String, accent: Color = Hud.Amber) {
 private fun PicturePanel(aw: AwacsState, all: List<Contact>, groups: List<AwGroup>, bull: Pair<Double, Double>?, ref: Contact?, focus: (Contact) -> Unit) {
     // nearest first: to the controlled flight when one is picked, otherwise to the bullseye
     val sorted = groups.sortedBy { g -> ref?.let { hypot(it.x - g.x, it.y - g.y) } ?: bull?.let { hypot(it.first - g.x, it.second - g.y) } ?: 0.0 }
+    if (!rememberHostilesOn()) { HostilesOffNote(); return }
     CallBox("PICTURE CALL", pictureCall(sorted, bull))
     SectionCard("Hostile groups", accent = Hostile, trailing = { Text("${groups.size} · within ${AwacsSettings.groupNm} nm", fontSize = 11.sp, color = Hud.TextDim) }) {
         if (sorted.isEmpty()) Text("Picture clean", color = Hud.Green, style = LocalExtra.current.mono)
@@ -508,6 +513,17 @@ private fun ContactPanel(aw: AwacsState, all: List<Contact>, tracks: List<Track>
     }
 }
 
+/** What the hostile half of the page says while the PC sends no hostile contacts ([HostileContacts], off by default). */
+@Composable
+private fun HostilesOffNote() {
+    SectionCard("Hostile groups", accent = Hostile) {
+        Text(
+            HostileContacts.OFF + ". The AWACS page shows your own side only: the enemy is what the briefing and the cockpit show.",
+            color = Hud.TextDim, fontSize = 13.sp,
+        )
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ControlPanel(aw: AwacsState, all: List<Contact>, groups: List<AwGroup>, bull: Pair<Double, Double>?, ref: Contact?, airports: List<Airport>, focus: (Contact) -> Unit) {
@@ -534,6 +550,7 @@ private fun ControlPanel(aw: AwacsState, all: List<Contact>, groups: List<AwGrou
     }
     if (ref == null) return
     val threats = groups.map { g -> g to hypot(g.x - ref.x, g.y - ref.y) / NM }.sortedBy { it.second }
+    if (!rememberHostilesOn()) { HostilesOffNote(); return }
     val nearest = threats.firstOrNull()?.first
     if (nearest != null) {
         CallBox("BRAA CALL", braaCall(ref, nearest))

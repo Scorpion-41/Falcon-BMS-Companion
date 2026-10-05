@@ -376,19 +376,32 @@ private fun MapOptions(options: Map<String, String>, onChange: (Map<String, Stri
         Text("The board opens at this zoom and stays there, centred on your jet.", fontSize = 11.sp, color = Hud.TextFaint)
         Text("LAYERS", style = LocalExtra.current.overline, color = Hud.TextFaint)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("route" to "Route", "sams" to "SAMs and threat rings", "traffic" to "Traffic", "hostiles" to "Hostiles").forEach { (key, label) ->
-                Choice(label, flag(key)) { set(key, if (flag(key)) "0" else "1") }
-            }
+            // hostile traffic is a choice only while the PC sends hostile contacts at all (HostileContacts, off by default)
+            val hostilesOn = rememberHostilesOn()
+            listOf("route" to "Route", "sams" to "SAMs and threat rings", "traffic" to "Friendly and neutral traffic", "hostiles" to "Hostile traffic")
+                .filter { it.first != "hostiles" || hostilesOn }.forEach { (key, label) ->
+                    Choice(label, flag(key)) { set(key, if (flag(key)) "0" else "1") }
+                }
         }
+        if (!rememberHostilesOn()) Text(com.bmscompanion.app.data.mission.HostileContacts.OFF + ": no hostile traffic on any board.", fontSize = 11.sp, color = Hud.TextFaint)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("support" to "Tanker/AWACS tracks").forEach { (key, label) ->
                 Choice(label, flag(key)) { set(key, if (flag(key)) "0" else "1") }
             }
         }
+        // what the mission puts on the map besides the route: the DTC's lines, the attack (WDP mode's populated one), and
+        // a plan a PC still lays over the briefing (off = the briefing and the cartridge as BMS has them)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            listOf("labels" to "Labels", "fields" to "Airfields", "borders" to "Borders").forEach { (key, label) ->
+            listOf("lines" to "Lines", "attack" to "Attack", "plan" to "Planner's plan").forEach { (key, label) ->
                 Choice(label, flag(key)) { set(key, if (flag(key)) "0" else "1") }
             }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("labels" to "Labels", "borders" to "Borders").forEach { (key, label) ->
+                Choice(label, flag(key)) { set(key, if (flag(key)) "0" else "1") }
+            }
+            // the flight's own fields are always drawn; this adds every other one
+            Choice("All airfields", flag("allfields", false)) { set("allfields", if (flag("allfields", false)) "0" else "1") }
             Choice("Follow the jet", flag("follow")) { set("follow", if (flag("follow")) "0" else "1") }
         }
         Text("TOWNS", style = LocalExtra.current.overline, color = Hud.TextFaint)

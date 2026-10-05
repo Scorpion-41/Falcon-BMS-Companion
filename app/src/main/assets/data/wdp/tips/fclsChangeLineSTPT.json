@@ -1,0 +1,10 @@
+{
+ "lblSTPT": "The line point being changed (31-54: six points for each of the four lines).",
+ "btnCancel": "Closes the window; the point stays as it was.",
+ "mxtSTPT_E":"Longitude as degrees,minutes (127,05.456) or decimal degrees; where the theater's map is not known, feet east.",
+ "mxtSTPT_N": "Latitude as degrees,minutes (37,24.123) or decimal degrees; where the theater's map is not known, feet north. 00,00.000 empties the point.",
+ "cboSTPT_NS": "North or south of the equator (greyed when the position is in feet).",
+ "cboSTPT_EW": "East or west of Greenwich (greyed when the position is in feet).",
+ "btnApply": "Apply: checks the position is inside the theater and puts it on the DTC page. Counts in Save to DTC.",
+ "btnClear": "Clear: position 00,00.000, so Apply empties this line point."
+}

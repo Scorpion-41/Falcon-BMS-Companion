@@ -4,9 +4,24 @@
  *   node src/apcverify.mjs
  *
  * A chart prints a latitude and longitude per spot; ours are in the field's own feet about an origin the campaign
- * places. The two are compared after centring both sets, so only the shape and the numbering are tested — which is
- * the point: the numbering is the thing that is easy to get wrong, and the only place it is written down.
+ * places. The two are compared after centring both sets, and each printed spot is matched to ours by position.
+ *
+ * Our numbers are BMS's own — what Ground says: a count of the network's parking points in storage order, read from
+ * the sim's code (see numberParking in airfields.mjs). Souda, Tirana and Skopje print exactly that. Araxos's chart is
+ * a drawing numbered another way (breadth first by ParkingPointGroup), and six of its spots differ from the count;
+ * those six are listed in KNOWN_CHART_NUMBER (chart number -> BMS's), and any other difference fails.
+ *
+ * The charts also print each spot's **size letter** — S for a small stand (an encircled number on the chart), L for
+ * one with no size limit (a boxed number) and Q for the alert cell (printed red) — so the same tables check what the
+ * app draws. Size is the point's own type, 11 or 12; the alert cell is ParkingPointGroup -1. Araxos 4 and 5 are the
+ * only disagreement in the four charts: the data types them small and the chart boxes them.
  */
+const KNOWN_SIZE_MISMATCH = new Set(['Araxos Airbase 36 4', 'Araxos Airbase 36 5']);
+/** Araxos 36's chart against BMS's count, '<field> <runway> <chart number>' -> the number Ground says */
+const KNOWN_CHART_NUMBER = new Map([
+  ['Araxos Airbase 36 12', 14], ['Araxos Airbase 36 13', 15], ['Araxos Airbase 36 14', 16],
+  ['Araxos Airbase 36 15', 17], ['Araxos Airbase 36 16', 12], ['Araxos Airbase 36 17', 13],
+]);
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,25 +50,51 @@ for (const file of fs.readdirSync(DIR).filter((f) => f.endsWith('.txt'))) {
     const m = line.trim().match(/^(\d+)\s+(\S+)\s+N(\d+),([\d.]+)\s+E(\d+),([\d.]+)/);
     if (!m) continue;
     const p = proj(Number(m[3]) + Number(m[4]) / 60, Number(m[5]) + Number(m[6]) / 60);
-    want.push({ n: Number(m[1]), north: p.x, east: p.y });
+    want.push({ n: Number(m[1]), letter: m[2], north: p.x, east: p.y });
   }
   const mine = route.parking.map((s) => ({ n: s.n, north: field.n + route.nodes[s.k].n, east: field.e + route.nodes[s.k].e }));
   const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
   const dn = mean(mine.map((m) => m.north)) - mean(want.map((w) => w.north));
   const de = mean(mine.map((m) => m.east)) - mean(want.map((w) => w.east));
 
+  // Each printed spot is matched to ours by position; then its number, its size and the alert cell are compared.
   const wrong = [];
+  const known = [];
+  const missing = [];
   let worst = 0;
+  const matched = new Map();
   for (const w of want) {
-    const m = mine.find((x) => x.n === w.n);
-    const d = m ? Math.hypot(m.north - dn - w.north, m.east - de - w.east) : Infinity;
-    worst = Math.max(worst, Number.isFinite(d) ? d : 0);
-    if (!(d < 120)) wrong.push(w.n);
+    let m = null;
+    let d = Infinity;
+    for (const x of mine) {
+      const dd = Math.hypot(x.north - dn - w.north, x.east - de - w.east);
+      if (dd < d) { d = dd; m = x; }
+    }
+    if (!(d < 120)) { missing.push(w.n); continue; }
+    worst = Math.max(worst, d);
+    matched.set(w.n, m.n);
+    if (m.n === w.n) continue;
+    const key = field.name + ' ' + runway + ' ' + w.n;
+    if (KNOWN_CHART_NUMBER.get(key) === m.n) known.push(w.n + '=' + m.n);
+    else wrong.push(w.n + ' (BMS ' + m.n + ')');
   }
-  const ok = wrong.length === 0 && mine.length === want.length;
+  // the size letter and the alert cell, against the same tables
+  const sizeWrong = [];
+  for (const w of want) {
+    const spot = route.parking.find((x) => x.n === matched.get(w.n));
+    if (!spot) continue;
+    const ours = spot.q ? 'Q' : spot.s ? 'S' : 'L';
+    if (ours !== w.letter && !KNOWN_SIZE_MISMATCH.has(field.name + ' ' + runway + ' ' + w.n)) {
+      sizeWrong.push(w.n + ':' + w.letter + '/' + ours);
+    }
+  }
+  const ok = wrong.length === 0 && missing.length === 0 && mine.length === want.length && sizeWrong.length === 0;
   if (!ok) failed++;
   console.log(`${ok ? 'OK  ' : 'BAD '} ${field.name} runway ${runway}: ${want.length} spots on the chart, ${mine.length} of ours, worst ${worst.toFixed(0)} ft` +
-    (wrong.length ? `, wrong numbers: ${wrong.join(',')}` : ''));
+    (known.length ? `, chart's own numbering (known, chart=BMS): ${known.join(',')}` : '') +
+    (wrong.length ? `, wrong numbers: ${wrong.join(',')}` : '') +
+    (missing.length ? `, no spot of ours within 120 ft: ${missing.join(',')}` : '') +
+    (sizeWrong.length ? `, chart/ours size: ${sizeWrong.join(',')}` : ''));
 }
 console.log(failed ? `\n${failed} chart(s) disagree` : '\nevery chart agrees, spot for spot');
 process.exit(failed ? 1 : 0);

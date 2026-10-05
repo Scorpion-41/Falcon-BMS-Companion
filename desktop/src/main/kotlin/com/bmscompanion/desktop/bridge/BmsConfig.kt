@@ -196,6 +196,67 @@ class BmsConfig(private val install: BmsInstall) {
         }
 
     /**
+     * Switches Falcon BMS's display export on or off, from anywhere in the app.
+     *
+     * This is the one setting the app asks for on its own behalf — the MFD, HUD and RWR pictures cannot be had
+     * without it — so it gets a shortcut rather than making a pilot hunt for `g_bExportRTTTextures` in a list of
+     * 219. It is not a back door: it goes through [set], into the **selected profile** like every other change, so
+     * it is listed on the Config page afterwards, switched off by clearing it, and undone wholesale by restoring
+     * the profile from the untouched original. It refuses until the backup has been taken.
+     */
+    fun enableRtt(on: Boolean): CfgState = attempt({ state(it) }) {
+        val kind = Kind.USER
+        if (original(kind)?.isFile != true) {
+            return@attempt state("Falcon BMS's config has not been backed up yet — open Config and press the backup button first.")
+        }
+        val file = set(kind, selected(kind), RttTextures.SETTING, if (on) "1" else null)
+        // Written, but not necessarily in force: the Launcher's own block comes after it and BMS reads the last
+        // line. Saying "done" there would send a pilot off to restart BMS for nothing.
+        val launcherSays = rttConfig()?.takeIf { it.launcher }?.on
+        state(
+            file.error ?: if (on && launcherSays == false) {
+                "Written to your Config profile, but the Falcon BMS Launcher has its own Export RTT Textures choice, " +
+                    "set to Disable, and it comes last in the file. Set it to Enable on the Launcher's main page."
+            } else null,
+        )
+    }
+
+    /**
+     * `g_bExportRTTTextures` as Falcon BMS will read it, and who decides it — read only, nothing is written.
+     *
+     * BMS reads its stock `Falcon BMS.cfg`, then `Falcon BMS User.cfg`, and the last line wins. The Launcher writes
+     * its **Export RTT Textures** choice into its own block at the foot of the user file on every launch, so when
+     * the value comes from below the mark it is the Launcher's to change, and a line this program adds above it
+     * changes nothing. Null when there is no BMS folder to read.
+     */
+    fun rttConfig(): com.bmscompanion.app.data.mission.RttConfig? = runCatching {
+        val dir = configDir() ?: return null
+        var on: Boolean? = null
+        var launcher = false
+        var fps: Int? = null
+        fun scan(f: File?, onLine: (key: String, value: String, belowMark: Boolean) -> Unit) {
+            if (f == null || !f.isFile) return
+            var below = false
+            for (raw in f.readLines()) {
+                if (LAUNCHER_MARK in raw) { below = true; continue }
+                val m = SET.matchEntire(raw.trim()) ?: continue
+                onLine(m.groupValues[1], m.groupValues[2].trim('"'), below)
+            }
+        }
+        val main: (String, String, Boolean) -> Unit = { k, v, below ->
+            when (k) {
+                RttTextures.SETTING -> { on = v == "1"; launcher = below }
+                RttTextures.FPS_SETTING -> fps = v.toIntOrNull() ?: fps
+            }
+        }
+        scan(File(dir, "Falcon BMS.cfg"), main)
+        scan(active(Kind.USER), main)
+        var vr: Boolean? = null
+        scan(active(Kind.VR)) { k, v, _ -> if (k == RttTextures.SETTING) vr = v == "1" }
+        com.bmscompanion.app.data.mission.RttConfig(on = on, launcher = launcher, vrOn = vr, fps = fps)
+    }.getOrNull()
+
+    /**
      * Writes a settings file somewhere else first and moves it into place.
      *
      * Writing over a file truncates it before the new text goes in, so a write that fails half way — a full disk, a

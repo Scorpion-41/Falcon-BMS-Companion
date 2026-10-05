@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { DATA, parseRecords, findFileCI, readText } from './util.mjs';
 import { loadDb } from './db.mjs';
+import { terrainSampler, groundUnder } from './elevation.mjs';
 
 const OBJ_TYPES = { 1: 'Airbase', 2: 'Airstrip' };
 const PLACE_TYPES = { 8: 'city', 28: 'town', 29: 'village' };
@@ -26,17 +27,41 @@ export function parseStations(file) {
     const f = line.split(/\s+/);
     if (f.length < 12 || !/^\d+$/.test(f[0])) continue;
     const id = +f[0];
-    out.set(id, {
+    const rec = {
       campId: id,
       label: lastComment,
       tacan: +f[1] > 0 && !(+f[1] === 1 && +f[4] === 0) ? { channel: +f[1], band: f[2], callsignIdx: +f[3], rangeNm: +f[4], type: +f[5] } : null,
       towerUhf: fmtUhf(f[6]), towerVhf: fmtUhf(f[7]),
       ils: [fmtIls(f[8]), fmtIls(f[9]), fmtIls(f[10]), fmtIls(f[11])],
       opsUhf: fmtUhf(f[12]), groundUhf: fmtUhf(f[13]), approachUhf: fmtUhf(f[14]), lsoUhf: fmtUhf(f[15]), atisVhf: fmtUhf(f[16]),
-    });
+    };
+    // A theater's file can give one campaign ID twice (Israel 1545, 2734; Balkans and EF2000 2677): the last is kept
+    // as before, with the earlier ones beside it for stationFor to choose between.
+    const prev = out.get(id);
+    if (prev) rec.alternatives = [...(prev.alternatives || []), { ...prev, alternatives: undefined }];
+    out.set(id, rec);
     lastComment = null;
   }
   return out;
+}
+
+/**
+ * The station record for an objective, where the theater's file lists its campaign ID more than once. Israel's gives
+ * 2734 twice: first "USS CARL VINSON CVN70" (TACAN 10X, UHF 270.2), then "Chinese Carrier - CV-16 Liaoning" (14X,
+ * 272.2), a copy of the line meant for the Liaoning's own objective (2733 "Carrier Type 001", which has none). Keeping
+ * the last, as a plain map does, gave the Vinson the Liaoning's name and radios. So the record whose own comment names
+ * the objective wins; when none or several do (Balkans' two Wasps, 2677), the last is kept, as it always was.
+ * Which of two records Falcon BMS itself uses for one ID is NOT TESTED (it needs the sim running); the theater's own
+ * navaid list prints both under the Vinson's name, with the 10X line first.
+ */
+export function stationFor(st, objectiveName) {
+  if (!st?.alternatives?.length) return st || null;
+  const generic = new Set(['CARRIER', 'AIRBASE', 'AIRFIELD', 'AIRPORT', 'AIRSTRIP', 'INTL', 'INTERNATIONAL', 'BASE', 'USS', 'THE']);
+  const words = (s) => (s || '').toUpperCase().split(/[^A-Z]+/).filter((w) => w.length >= 3 && !generic.has(w));
+  const own = new Set(words(objectiveName));
+  const all = [...st.alternatives, { ...st, alternatives: undefined }];
+  const naming = all.filter((r) => words(r.label).some((w) => own.has(w)));
+  return naming.length === 1 ? naming[0] : st;
 }
 
 /** ATC .dat: values are positional but always preceded by a descriptive comment. */
@@ -123,7 +148,12 @@ function runwayGeometry(th, db, ocdIdx) {
     const lateral = p2 ? +p2.OffsetX * r[0] + +p2.OffsetY * r[1] : 0;
     return { order, hdg: norm360(+h.Data), rwyNo: +h.RunwayNumber, lateral, f, r, p2: p2 ? { e: +p2.OffsetX, n: +p2.OffsetY } : null };
   });
-  return { headers, feats };
+  // each runway's rectangle (a point header of type 8, its first four runway-edge points: one end's pair, then the
+  // other's), as airfields.mjs draws it: where the field's elevation is read when its ATC file gives none
+  const rects = phd.filter((h) => h && +h.Type === 8).map((h) => pd.slice(+h.FirstPtIdx, +h.FirstPtIdx + +h.PointCount)
+    .filter((p) => p && +p.Type === 8).slice(0, 4).map((p) => ({ e: +p.OffsetX, n: +p.OffsetY })))
+    .filter((c) => c.length === 4);
+  return { headers, feats, rects };
 }
 
 function designatorFor(h, geo) {
@@ -169,6 +199,8 @@ export function buildAirports(th) {
   void camp;
   const stations = parseStations(findFileCI(th.campaignDir, 'Stations+Ils.dat'));
   const atcByCamp = loadAtcDir(th);
+  // BMS's own terrain, for the fields whose ATC file gives no elevation (elevation.mjs)
+  const terrain = terrainSampler(th);
 
   const ocdType = (ocd) => {
     const ocdDir = findFileCI(path.join(th.data3dDir, 'ObjectiveRelatedData'), `OCD_${String(ocd).padStart(5, '0')}`)
@@ -194,7 +226,7 @@ export function buildAirports(th) {
     const t = typeCache.get(o.ocd);
     const placeKind = t && PLACE_TYPES[t.type];
     if (placeKind && o.name) placeRaw.push({ n: o.name.replace(/&amp;/g, '&').trim(), t: placeKind, x: o.x, y: o.y });
-    const st = stations.get(o.campId);
+    const st = stationFor(stations.get(o.campId), o.name);
     const isAirfield = t && OBJ_TYPES[t.type];
     if (!isAirfield) {
       if (st?.tacan && !st.towerUhf) navaids.push({ campId: o.campId, name: st.label || o.name, objective: o.name, x: Math.round(o.x), y: Math.round(o.y), tacan: st.tacan });
@@ -271,7 +303,10 @@ export function buildAirports(th) {
       icao,
       type: isCarrier ? 'Carrier' : OBJ_TYPES[t.type],
       x: Math.round(o.x), y: Math.round(o.y),
-      elevationFt: atc?.elevationFt ?? null,
+      // the ATC file's figure; where it has none, or 0 (Hellas's placeholder: Kasteli is 1,180 ft up), the ground BMS
+      // puts the jet on, its height map under the runways (elevation.mjs). A ship has none: it is told by having no
+      // features at all, as the ground charts tell it (the Falklands type their whole fleet "Airbase")
+      elevationFt: (isCarrier || !geo?.feats?.length || (atc?.elevationFt ?? 0) !== 0 ? null : groundUnder(terrain, o.x, o.y, geo.rects)) ?? atc?.elevationFt ?? null,
       tacan: st?.tacan ? { channel: st.tacan.channel, band: st.tacan.band, rangeNm: st.tacan.rangeNm || null } : null,
       freqs: st ? { towerUhf: st.towerUhf, towerVhf: st.towerVhf, groundUhf: st.groundUhf, approachUhf: st.approachUhf, opsUhf: st.opsUhf, lsoUhf: st.lsoUhf, atisVhf: st.atisVhf } : null,
       atc: atc ? { activeRunways: atc.activeRunways ?? null, shortPattern: atc.shortPattern ?? false, ifrMinVisM: atc.ifrMinVisM ?? null, ifrMinCloudFt: atc.ifrMinCloudFt ?? null, vfrMinVisM: atc.vfrMinVisM ?? null, vfrMinCloudFt: atc.vfrMinCloudFt ?? null } : null,
@@ -310,5 +345,6 @@ export function buildAirports(th) {
   }
   const placeList = places.map((p) => ({ n: p.n, t: p.t, x: Math.round(p.x), y: Math.round(p.y) }))
     .sort((a, b) => rank[a.t] - rank[b.t] || a.n.localeCompare(b.n));
+  terrain?.close();
   return { airports, navaids, radio, places: placeList, geo: geoByCamp };
 }

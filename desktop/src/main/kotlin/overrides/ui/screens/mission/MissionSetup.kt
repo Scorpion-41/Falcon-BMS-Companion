@@ -55,6 +55,7 @@ import com.bmscompanion.desktop.PcConfig
 import com.bmscompanion.desktop.ui.BmsSettingsCard
 import com.bmscompanion.desktop.ui.ConnectDevicesCard
 import com.bmscompanion.desktop.ui.DataSourceCard
+import com.bmscompanion.desktop.ui.GraphicsCard
 import com.bmscompanion.desktop.ui.PcStatusCard
 import com.bmscompanion.desktop.ui.SetupChecklistCard
 import com.bmscompanion.desktop.ui.StartupCard
@@ -72,11 +73,16 @@ fun MissionSetupPane(onConnected: () -> Unit) {
         Masonry(minColumn = 440.dp, maxColumns = 2) {
             DataSourceCard(onSwitchToServer = actions.switchToServer)
             PcStatusCard(status)
+            MissionSourceCard()
+            HostilesCard()
             if (!PcConfig.bmsOnThisPc) RemoteConnectionCard(onConnected)
             if (PcConfig.bmsOnThisPc) SetupChecklistCard(status)
             ConnectDevicesCard(status)
             TabsCard()
+            MfdSetupCard()
+            RadioLogCard()
             if (PcConfig.bmsOnThisPc) BmsSettingsCard()
+            GraphicsCard()
             StartupCard()
             GuideStep(1, "Which devices, which files", Hud.Amber) {
                 Bullet("**PC with Falcon BMS**: install **BMS Companion** (this program). Use the full app here, or the light **server page** when it only serves other devices.")
@@ -117,10 +123,10 @@ fun MissionSetupPane(onConnected: () -> Unit) {
                 Para("Other aircraft come from BMS's built-in **Tacview real-time telemetry** (the Tacview program is not needed). Add to **User\\Config\\Falcon BMS User.cfg** (the checklist has an edit button):")
                 Code("set g_bTacviewRealTime 1\nset g_bTacviewAcmi 1")
                 Para("The stream only runs while **ACMI recording** is on: start it in the cockpit (default key **F**) or enable recording in the Launcher.")
-                Para("Multiplayer: the host must allow it (**g_bMPTacviewRtAllowedByServer 1**). If you set **g_sTacviewPassword**, enter the same password in the settings. Prefer not to see hostiles? Turn off the feed, or use the Hostiles switch on the map.")
+                Para("Multiplayer: the host must allow it (**g_bMPTacviewRtAllowedByServer 1**). If you set **g_sTacviewPassword**, enter the same password in the settings. Hostile contacts from the feed are **off** unless you turn on **Show hostile contacts (live)** (the Live picture card): only your own side's traffic is shown.")
             }
             GuideStep(9, "EZBoards kneeboards", Hud.Magenta) {
-                Para("EZBoards ships with BMS 4.38 in **Tools\\EZBoards** and needs the **.NET 8 runtime**. BMS Companion finds it automatically; otherwise pick the folder in the settings.")
+                Para("EZBoards is a separate tool by Logic, available from the Falcon BMS forum, and needs the **.NET 8 runtime**. BMS Companion finds it in **Tools\\EZBoards**; otherwise pick the folder in the settings.")
                 Para("After PRINT, click **Generate kneeboards** on the Boards tab (or a Dashboard card). Tick **Generate kneeboards automatically** to run it on every PRINT.")
                 Para("To see the kneeboards in the cockpit, enable the 3D pilot model (Setup → Graphics → Pilot Model).")
             }

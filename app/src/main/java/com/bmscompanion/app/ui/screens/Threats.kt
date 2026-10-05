@@ -2,7 +2,9 @@ package com.bmscompanion.app.ui.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +28,6 @@ import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -94,8 +95,13 @@ fun Threat.maxRange(): Double? = num("maxRangeNm") ?: num("typicalRangeNm")
 fun Threat.rwrSymbol(): String? = rwr["alr56m"]?.takeIf { it.isNotBlank() } ?: rwr["alr93"]?.takeIf { it.isNotBlank() }
 fun sideColor(side: String) = if (side.equals("BLUEFOR", true)) Hud.Blue else Hud.Red
 
+/** The `threats` route: the Reference section, open on Threats. */
 @Composable
-fun ThreatsScreen(nav: NavHostController) {
+fun ThreatsScreen(nav: NavHostController) = ReferenceScreen(nav, ReferenceTab.THREATS)
+
+/** The Threats page of the Reference section: every threat BMS models, searchable, grouped or as a range chart. */
+@Composable
+internal fun ThreatsPage(nav: NavHostController) {
     val threats by produceState<List<Threat>?>(null) { value = Repo.threats() }
     var q by rememberSaveable { mutableStateOf("") }
     var cat by rememberSaveable { mutableStateOf<String?>(null) }
@@ -110,11 +116,15 @@ fun ThreatsScreen(nav: NavHostController) {
         listWidth = 420.dp,
         list = {
             Column(Modifier.fillMaxSize()) {
-                BmsTopBar("Threat Guide", "BMS 4.38 threat reference", actions = {
-                    IconButton({ nav.go(Routes.HARM) }) { Icon(Icons.Default.Warning, "HARM & RWR", tint = Hud.Green) }
-                    IconButton({ nav.go(Routes.ENCY) }) { Icon(Icons.Default.MenuBook, "Encyclopedia", tint = Hud.Cyan) }
-                    IconButton({ chart = !chart }) { Icon(if (chart) Icons.Default.ViewList else Icons.Default.BarChart, "Chart") }
-                })
+                // the section's own bar names the page; what the title bar's icons did is spelled out here instead
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ThreatTool("HARM & RWR", Icons.Default.Warning, Hud.Green) { nav.go(Routes.HARM) }
+                    ThreatTool("Encyclopedia", Icons.Default.MenuBook, Hud.Cyan) { nav.go(Routes.ENCY) }
+                    ThreatTool(if (chart) "List" else "Range chart", if (chart) Icons.Default.ViewList else Icons.Default.BarChart, Hud.Amber, on = chart) { chart = !chart }
+                }
                 val all = threats ?: run { LoadingBox(); return@Column }
                 val cats = remember(all) { Labels.threatCategory.keys.filter { k -> all.any { it.category == k } } }
                 val filtered = remember(all, q, cat, side) {
@@ -167,6 +177,22 @@ fun ThreatsScreen(nav: NavHostController) {
         },
         detail = { selected?.let { ThreatDetail(nav, it, null) } },
     )
+}
+
+/** One of the Threats page's three tools: a small outlined button with its name on it. */
+@Composable
+private fun ThreatTool(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: androidx.compose.ui.graphics.Color, on: Boolean = false, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(10.dp)
+    Row(
+        Modifier.clip(shape).background(if (on) tint.copy(alpha = 0.16f) else Hud.Surface2)
+            .border(1.dp, if (on) tint.copy(alpha = 0.8f) else Hud.Outline, shape)
+            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = tint, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = if (on) tint else Hud.Text, maxLines = 1)
+    }
 }
 
 @Composable

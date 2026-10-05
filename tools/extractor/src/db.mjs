@@ -140,6 +140,11 @@ export function readAcdata(db, name) {
     lengthFt: scalar('length_ft'),
     spanFt: scalar('span_ft'),
     maxRollDeg: scalar('max_roll_deg'),
+    // conformal fuel tanks: whether the jet can carry them, and what they weigh, hold and drag when it does
+    hasCft: /^\s*has_cft:\s*true/m.test(t),
+    cftEmptyLbs: scalar('cft_empty_weight'),
+    cftFuelLbs: scalar('cft_fuel'),
+    cftDrag: scalar('cft_drag'),
     chaff: chaff.reduce((a, b) => a + b, 0) || null,
     flares: flare.reduce((a, b) => a + b, 0) || null,
     hardpointGroups: hp,

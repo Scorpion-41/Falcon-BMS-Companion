@@ -1,0 +1,18 @@
+{
+ "lblPPT": "The pre-planned threat (PPT 56-70) being changed.",
+ "btnCancel": "Closes the window; the PPT stays as it was.",
+ "btnClear":"Clear: position 00,00.000 and elevation 0, so Apply empties the PPT (no type, no ring).",
+ "btnApply": "Apply: checks the position is inside the theater and puts the PPT on the DTC page. Counts in Save to DTC.",
+ "lblelv": "Elevation in feet; anything that is not a number becomes 0.",
+ "lblelv2": "Elevation in feet; anything that is not a number becomes 0.",
+ "mxtPPT_E": "Longitude as degrees,minutes (127,05.456) or decimal degrees; where the theater's map is not known, feet east.",
+ "mxtPPT_N": "Latitude as degrees,minutes (37,24.123) or decimal degrees; where the theater's map is not known, feet north. 00,00.000 empties the point.",
+ "cboPPT_NS": "North or south of the equator (greyed when the position is in feet).",
+ "cboPPT_EW": "East or west of Greenwich (greyed when the position is in feet).",
+ "lblType": "The PPT's type, from the PPT table (the PPT management tab). The type sets the code and the ring's range.",
+ "lblRange": "The ring's range in nm, from the type.",
+ "cboName": "The PPT's type, from the PPT table (the PPT management tab). The type sets the code and the ring's range.",
+ "lblRNG": "The ring's range in nm, from the type.",
+ "lblCode": "The code the HSD shows for this type.",
+ "txtPPT_elv": "Elevation in feet; anything that is not a number becomes 0."
+}

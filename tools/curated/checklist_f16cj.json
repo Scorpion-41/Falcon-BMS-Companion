@@ -4834,168 +4834,786 @@
       "title": "Warning/Caution Light Index",
       "items": [
         {
-          "type": "table",
-          "title": "Caution Lights",
-          "columns": [
-            "Light",
-            "Page"
-          ],
-          "rows": [
-            [
-              "FLCS FAULT",
-              "B-2"
-            ],
-            [
-              "ENGINE FAULT",
-              "C-29"
-            ],
-            [
-              "AVIONICS FAULT",
-              "F-38"
-            ],
-            [
-              "SEAT NOT ARMED",
-              "F-37"
-            ],
-            [
-              "ELEC SYS",
-              "TAB A"
-            ],
-            [
-              "SEC",
-              "C-29"
-            ],
-            [
-              "EQUIP HOT",
-              "F-19"
-            ],
-            [
-              "NWS FAIL",
-              "F-17"
-            ],
-            [
-              "PROBE HEAT",
-              "F-38"
-            ],
-            [
-              "FUEL/OIL HOT",
-              "D-13"
-            ],
-            [
-              "RADAR ALT",
-              "F-37"
-            ],
-            [
-              "ANTI SKID",
-              "F-9/-11"
-            ],
-            [
-              "CADC",
-              "B-7"
-            ],
-            [
-              "INLET ICING",
-              "F-37"
-            ],
-            [
-              "IFF",
-              "F-37"
-            ],
-            [
-              "HOOK",
-              "F-37"
-            ],
-            [
-              "STORES CONFIG",
-              "F-37"
-            ],
-            [
-              "OVERHEAT",
-              "C-17"
-            ],
-            [
-              "NUCLEAR",
-              "F-38"
-            ],
-            [
-              "OBOGS",
-              "F-38"
-            ],
-            [
-              "ATF NOT ENGAGED",
-              "F-37"
-            ],
-            [
-              "EEC",
-              "F-37"
-            ],
-            [
-              "CABIN PRESS",
-              "F-23"
-            ],
-            [
-              "FYD FUEL LOW",
-              "D-7"
-            ],
-            [
-              "BUC",
-              "F-37"
-            ],
-            [
-              "AFT FUEL LOW",
-              "D-7"
-            ]
-          ]
+          "type": "subhead",
+          "text": "Warning lights"
         },
         {
-          "type": "table",
-          "title": "Warning Lights",
-          "columns": [
-            "Light",
-            "Page"
+          "type": "note",
+          "text": "Red, on the glareshield. Any of them also flashes WARN in the HUD and, 1.5 seconds later, says WARNING-WARNING in the headset."
+        },
+        {
+          "type": "light",
+          "title": "ENG FIRE",
+          "panel": "warning",
+          "text": "Fire detected in the engine compartment. A fire in the afterburner or nozzle area is behind the detection circuit and may not light it.",
+          "action": "On takeoff: abort if you can, otherwise climb and jettison stores if required. At a safe altitude: throttle to minimum practical; if the light goes off, press FIRE & OHEAT DETECT. Fire persists (light stays on, smoke, high FTIT, OVERHEAT, engine response): eject; indications cease: land as soon as possible.",
+          "refs": [
+            "ep-eng-engine-fire",
+            "ep-eng-fire-overheat-fuel-leak-ground"
           ],
-          "rows": [
-            [
-              "CANOPY",
-              "F-27"
-            ],
-            [
-              "ENG FIRE",
-              "C-15"
-            ],
-            [
-              "TF FAIL",
-              "B-21"
-            ],
-            [
-              "DBU ON",
-              "B-7"
-            ],
-            [
-              "FLCS",
-              "B-2"
-            ],
-            [
-              "TO/LDG CONFIG",
-              "F-38"
-            ],
-            [
-              "ENGINE",
-              "C-2"
-            ],
-            [
-              "HYD/OIL PRESS",
-              "TAB C, TAB D"
-            ],
-            [
-              "OXY LOW",
-              "F-19"
-            ]
-          ]
+          "note": "Checklist page C-15"
+        },
+        {
+          "type": "light",
+          "title": "ENGINE",
+          "panel": "warning",
+          "text": "RPM or FTIT show a flameout, stall (stagnation) or overtemperature: RPM below 55%, or FTIT above 1000°C for about 2 seconds. It also lights for an engine alternator failure, and can for a failed RPM or FTIT indicator or warning circuit.",
+          "action": "Check RPM and FTIT. Low RPM but not zero: flameout, airstart. Zero or erroneously low RPM with normal thrust: alternator failure, keep the engine running. High FTIT: land as soon as possible. Both normal: indication failure, land as soon as practical.",
+          "refs": [
+            "ep-eng-airstart-procedures",
+            "ep-eng-zero-rpm-erroneous-rpm-indication",
+            "ep-eng-engine-stall-recovery",
+            "ep-eng-low-altitude-engine-failure-or-flameout"
+          ],
+          "note": "Checklist page C-2"
+        },
+        {
+          "type": "light",
+          "title": "HYD/OIL PRESS",
+          "panel": "warning",
+          "text": "Hydraulic system A or B is below 1000 psi, or engine oil pressure has been below about 10 psi for 30 seconds (it goes out above about 20 psi).",
+          "action": "Check the OIL and HYD PRESS gauges. Oil low: about 80% RPM, EPU ON, then leave the throttle alone and land as soon as possible. One HYD system low: single hydraulic failure; B low with the EPU running: dual hydraulic failure, or PTO shaft failure if ELEC SYS is on too.",
+          "refs": [
+            "ep-eng-oil-system-malfunction",
+            "ep-fuelhyd-single-hydraulic-failure",
+            "ep-fuelhyd-dual-hydraulic-failure",
+            "ep-fuelhyd-system-b-and-generator-failure-pto-shaft"
+          ],
+          "note": "Checklist tabs C and D"
+        },
+        {
+          "type": "light",
+          "title": "FLCS",
+          "panel": "warning",
+          "text": "Dual failure in the flight control computer (processors, power supplies, commands or sensors, AOA or air data), locked LEFs, or a failed FLCS BIT. It stays on until an FLCS reset clears the failure.",
+          "action": "Press F-ACK and read the PFL, then fly its procedure: FLCS AOA WARN, AOA malfunction; STBY GAIN, air data malfunctions; FLCS LEF LOCK, LEF malfunction; FLCS DUAL FAIL, dual electronic failure.",
+          "refs": [
+            "ep-pfl-pilot-fault-list-flcs-flcs-warning-light",
+            "ep-flt-aoa-malfunction",
+            "ep-flt-air-data-malfunctions",
+            "ep-flt-lef-malfunction-symmetric",
+            "ep-flt-lef-malfunction-asymmetric",
+            "ep-flt-aircraft-non-responsive-in-pitch-or-flcs-dual-electronic-failure"
+          ],
+          "note": "Checklist page B-2"
+        },
+        {
+          "type": "light",
+          "title": "DBU ON",
+          "panel": "warning",
+          "text": "The flight control computer is running its digital backup software. The BMS training manual says that in BMS this is mostly visual and happens only in the DBU test.",
+          "action": "1g, 500 kt / 0.9 Mach max, DIGITAL BACKUP switch to BACKUP then OFF. Goes off: FLCS RESET if needed, land as soon as practical. Stays on: DIGITAL BACKUP to BACKUP, check controllability, land as soon as possible, straight in.",
+          "refs": [
+            "ep-flt-dbu-on-warning-light"
+          ],
+          "note": "Checklist page B-7"
+        },
+        {
+          "type": "light",
+          "title": "TO/LDG CONFIG",
+          "panel": "warning",
+          "text": "Not configured to land: below 10,000 ft, slower than 190 kt and descending more than 250 fpm with a gear not down and locked or the TEFs not fully down. On the ground: the TEFs are not fully down.",
+          "action": "Gear handle up: increase airspeed, reduce the sink rate or lower the gear. Gear handle down: check the three green WHEELS lights; one missing, LG fails to extend; all green, TEF problem, land at normal AOA about 20 kt faster. On the ground: abort.",
+          "refs": [
+            "ep-lg-lg-fails-to-extend-abnormal-indications",
+            "ep-lg-alternate-lg-extension",
+            "ep-misc-warning-caution-lights"
+          ],
+          "note": "Checklist page F-38"
+        },
+        {
+          "type": "light",
+          "title": "CANOPY",
+          "panel": "warning",
+          "text": "The canopy hooks or lock are not secure.",
+          "action": "Push the canopy handle outboard, fully into locked (on the ground, tell maintenance). If the light stays on, go to canopy damage/loss in flight.",
+          "refs": [
+            "ep-misc-canopy-malfunctions"
+          ],
+          "note": "Checklist page F-27"
+        },
+        {
+          "type": "light",
+          "title": "OXY LOW",
+          "panel": "warning",
+          "text": "OBOGS oxygen is failing: partial pressure of oxygen low, the OBOGS BIT found a fault, or regulator pressure below 5 psi. It does not work with the main, standby and EPU generators all failed.",
+          "action": "Diluter lever 100%, check regulator pressure and cockpit altitude. If needed, EOS on and descend below 10,000 ft cockpit altitude, land as soon as practical. Goes off within 10 s: stay on 100% for 15 minutes, then NORM.",
+          "refs": [
+            "ep-misc-obogs-malfunction",
+            "ep-misc-hypoxia"
+          ],
+          "note": "Checklist page F-19"
+        },
+        {
+          "type": "light",
+          "title": "TF FAIL",
+          "panel": "warning",
+          "text": "The terrain-following radar has failed (found by the NVP or the FLCS): WARN in the HUD, PULL UP in the headset, a fly-up in automatic TF, and a SWIM PFL below 4500 ft AGL. The Dash-1 fault tree still lists this light as not used; the Dash-34 describes it with the TFR.",
+          "action": "Climb as required; paddle switch to stop the fly-up if needed; check the PFLD, CARA, EGI and MMC. Release the paddle; if the SWIM PFL does not clear or comes back, or was SWIM ATTD or VEL FAIL, stop TF operations.",
+          "refs": [
+            "ep-flt-tf-fail-warning-light",
+            "ep-pfl-pilot-fault-list-flcs-tf-fail-warning-light"
+          ],
+          "note": "Checklist page B-21"
+        },
+        {
+          "type": "light",
+          "title": "LG HANDLE",
+          "panel": "warning",
+          "text": "Red light in the gear handle: the gear or gear doors are in transit or not locked where the handle commands. It also lights when a gear is not down and locked below 10,000 ft and 190 kt, descending more than 250 fpm.",
+          "action": "Normal while the gear is moving. Stays on after UP: 300 kt max, handle DN (LG fails to retract). Stays on after DN: check the WHEELS lights and go to LG fails to extend.",
+          "refs": [
+            "ep-lg-lg-fails-to-retract",
+            "ep-lg-lg-fails-to-extend-abnormal-indications"
+          ],
+          "note": "Checklist pages E-7 and E-11"
+        },
+        {
+          "type": "subhead",
+          "text": "Caution lights"
+        },
+        {
+          "type": "note",
+          "text": "Amber, on the caution panel on the right auxiliary console. Each one lights MASTER CAUTION (except IFF) and, 7 seconds later, says CAUTION-CAUTION unless MASTER CAUTION has been reset."
+        },
+        {
+          "type": "light",
+          "title": "MASTER CAUTION",
+          "panel": "caution",
+          "text": "Comes on shortly after any caution panel light except IFF, and stays on while that light is on. It does not come on for the warning lights.",
+          "action": "Find the lit caution light and follow it, then press MASTER CAUTION so the next caution can show. ELEC SYS holds it on until ELEC CAUTION RESET; FLCS, ENGINE and AVIONICS FAULT also reset with F-ACK.",
+          "refs": [],
+          "note": "Checklist page EP-6"
         },
         {
           "type": "note",
           "text": "Illumination of the MASTER CAUTION light which is not extinguished with fault acknowledgement, and a light illuminated on the caution light panel (ENGINE FAULT, AVIONICS FAULT) with no accompany WING PFL displayed may indicate that the MFD TEST page is full. Clearing the MFLs on the TEST page will in most cases result in the display of the PFL triggering the caution indications and enable the reset of the MASTER CAUTION light with fault acknowledgement."
+        },
+        {
+          "type": "light",
+          "title": "FLCS FAULT",
+          "panel": "caution",
+          "text": "The flight control computer reports a caution-level fault that needs pilot action. It goes off when the fault is acknowledged or an FLCS reset clears it.",
+          "action": "Press F-ACK, note the PFL and follow the FLCS pilot fault list for it (for example FLCS AOA FAIL, AOA malfunction; BRK PWR DEGR, FLCS single electronic failure).",
+          "refs": [
+            "ep-pfl-pilot-fault-list-flcs-flcs-fault-caution-light",
+            "ep-pfl-pilot-fault-list-flcs-flcs-fault-caution-light-except-flcs-bus-fail",
+            "ep-pfl-pilot-fault-list-flcs-flcs-fault-caution-light-2"
+          ],
+          "note": "Checklist page B-2"
+        },
+        {
+          "type": "light",
+          "title": "ENGINE FAULT",
+          "panel": "caution",
+          "text": "The engine has reported a fault (an ENG PFL on the PFLD). It goes off when the fault is acknowledged.",
+          "action": "Note the PFL, press F-ACK. Will not reset: throttle 85% RPM or less, land as soon as possible. Resets: follow the engine pilot fault list, AB RESET then NORM, F-ACK again to recall.",
+          "refs": [
+            "ep-eng-engine-fault-caution-light",
+            "ep-pfl-pilot-fault-list-engine"
+          ],
+          "note": "Checklist page C-29"
+        },
+        {
+          "type": "light",
+          "title": "AVIONICS FAULT",
+          "panel": "caution",
+          "text": "An avionics system has reported a fault (AV on the PFLD). ENG BUS FAIL and FLCS BUS FAIL also light it.",
+          "action": "Note the PFL, press F-ACK to acknowledge and reset the light, then F-ACK again to recall and see whether the fault is still there. After FLCS BUS FAIL, read the FLCS faults on the MFD FLCS page.",
+          "refs": [
+            "ep-misc-warning-caution-lights",
+            "ep-pfl-pilot-fault-list-flcs-flcs-fault-caution-light-except-flcs-bus-fail"
+          ],
+          "note": "Checklist page F-38"
+        },
+        {
+          "type": "light",
+          "title": "SEAT NOT ARMED",
+          "panel": "caution",
+          "text": "The ejection safety lever is up: the seat is safe.",
+          "action": "Arm the seat (safety lever down) and the light goes out. It is expected on the ground before you arm.",
+          "refs": [
+            "ep-misc-warning-caution-lights"
+          ],
+          "note": "Checklist page F-37"
+        },
+        {
+          "type": "light",
+          "title": "ELEC SYS",
+          "panel": "caution",
+          "text": "Comes on with any fault light on the ELEC control panel (generators, EPU, battery, FLCS power). MASTER CAUTION cannot reset it.",
+          "action": "Look at the ELEC panel lights and press ELEC CAUTION RESET. Power restored: land as soon as practical. Not restored: find which buses are lost (EPU ON if an emergency ac bus is unpowered) and follow the procedure for the lit ELEC lights.",
+          "refs": [
+            "ep-elec-electrical-system-failures-index",
+            "ep-elec-partial-electrical-power-loss",
+            "ep-elec-single-generator-failures-in-flight"
+          ],
+          "note": "Checklist tab A"
+        },
+        {
+          "type": "light",
+          "title": "SEC",
+          "panel": "caution",
+          "text": "The engine is running on its secondary engine control, or main fuel pump pressure is low. Afterburner is inhibited and the nozzle stays closed. The BMS training manual says the automatic transfer to SEC is not implemented in BMS.",
+          "action": "Supersonic: do not retard below MIL until subsonic. Then check the engine follows the throttle from IDLE to MIL, ENG CONT switch SEC, ANTI ICE OFF (conditions permitting), land as soon as practical.",
+          "refs": [
+            "ep-eng-sec-caution-light"
+          ],
+          "note": "Checklist page C-29"
+        },
+        {
+          "type": "light",
+          "title": "EQUIP HOT",
+          "panel": "caution",
+          "text": "Avionics cooling air is too hot or too low in pressure. The radar loses power automatically and other equipment may degrade.",
+          "action": "AIR SOURCE knob NORM (if there is no smoke or fumes), 80% RPM minimum. Still on after 1 minute: nonessential avionics off, land as soon as practical.",
+          "refs": [
+            "ep-misc-equip-hot-caution-light"
+          ],
+          "note": "Checklist page F-19"
+        },
+        {
+          "type": "light",
+          "title": "NWS FAIL",
+          "panel": "caution",
+          "text": "A nosewheel steering failure has switched its power off. The NWS light may still be on, but steering does not work.",
+          "action": "Disengage NWS, check the AR/NWS light is off, steer with rudder and brakes.",
+          "refs": [
+            "ep-misc-nws-failure-hardover"
+          ],
+          "note": "Checklist page F-17"
+        },
+        {
+          "type": "light",
+          "title": "PROBE HEAT",
+          "panel": "caution",
+          "text": "Current to the pitot, air data or AOA probe heaters has dropped: a heater or its monitor has failed (monitored whenever airborne). It flashes during the PROBE HEAT test.",
+          "action": "In flight: PROBE HEAT switch on if required and avoid known or suspected icing. On the ground: switch OFF for 1 minute, then on again; if it comes straight back, a heater or the monitor has failed.",
+          "refs": [
+            "ep-misc-warning-caution-lights",
+            "ep-flt-aoa-probe-icing"
+          ],
+          "note": "Checklist page F-38"
+        },
+        {
+          "type": "light",
+          "title": "FUEL/OIL HOT",
+          "panel": "caution",
+          "text": "Fuel going to the engine is too hot. Its oil-hot function does not work on the PW engine (on the GE engines it also means hot oil).",
+          "action": "AIR REFUEL switch CLOSE, TANK INERTING OFF, 10,000 ft max if practical, 4000 pph fuel flow minimum. Goes off: land as soon as practical; stays on: land as soon as possible.",
+          "refs": [
+            "ep-fuelhyd-hot-fuel-oil-or-gravity-feed"
+          ],
+          "note": "Checklist page D-13"
+        },
+        {
+          "type": "light",
+          "title": "RADAR ALT",
+          "panel": "caution",
+          "text": "Malfunction of the radar altimeter (CARA).",
+          "action": "The BMS training manual says RDR ALT switch OFF, after which ALOW is not available. A frozen CARA (RALT DATA FAIL) is cleared by cycling its power (Dash-34).",
+          "refs": [
+            "ep-misc-warning-caution-lights"
+          ],
+          "note": "Checklist page F-37"
+        },
+        {
+          "type": "light",
+          "title": "ANTI SKID",
+          "panel": "caution",
+          "text": "A brake or antiskid fault affecting braking above 5 kt (a loss of redundancy only shows below 5 kt), or the ANTI-SKID switch is OFF with the gear handle down. Flashing: braking is lost on one or both sides.",
+          "action": "ANTI-SKID switch to ANTI-SKID if it was OFF. Lit after the gear goes down: steady, BRAKES channel CHAN 1, reduce weight, drag chute on landing if required; flashing, plan an approach-end cable arrestment. On the ground: steady, release the brakes and change BRAKES channel, then use maximum symmetric pedal pressure (about half the normal braking if it stays on); flashing, HOOK DN and NWS engaged.",
+          "refs": [
+            "ep-misc-antiskid-malfunction-landing",
+            "ep-misc-antiskid-malfunction-ground"
+          ],
+          "note": "Checklist pages F-9 and F-11"
+        },
+        {
+          "type": "light",
+          "title": "CADC",
+          "panel": "caution",
+          "text": "Malfunction in the central air data computer; a Mach signal failure also lights ENGINE FAULT (ENG MACH FAIL). The BMS training manual says this light is not implemented and only lights in the lamp test.",
+          "action": "FLCS RESET. Goes off: check for ENG MACH FAIL (no throttle below MIL while supersonic). Stays on: cross-check AOA against airspeed, land as soon as practical.",
+          "refs": [
+            "ep-flt-cadc-malfunction"
+          ],
+          "note": "Checklist page B-7"
+        },
+        {
+          "type": "light",
+          "title": "INLET ICING",
+          "panel": "caution",
+          "text": "The inlet ice detector has found ice, or the detection system has failed. It stays on about 70 seconds after the last ice is detected.",
+          "action": "In known or suspected icing: engine ANTI ICE switch ON (see AOA probe icing). If the anti-ice system has failed: leave the icing, cycle the ANTI ICE switch, land as soon as practicable if it persists.",
+          "refs": [
+            "ep-misc-warning-caution-lights",
+            "ep-flt-aoa-probe-icing"
+          ],
+          "note": "Checklist page F-37"
+        },
+        {
+          "type": "light",
+          "title": "IFF",
+          "panel": "caution",
+          "text": "The IFF was interrogated on Mode 4 and could not reply: codes zeroized or not loaded, Mode 4 not enabled, wrong code (A or B), or the RF switch in QUIET or SILENT. It does not light MASTER CAUTION.",
+          "action": "Check Mode 4 is enabled with the right code (A or B), MODE 4 REPLY not OUT, and the RF switch out of QUIET and SILENT.",
+          "refs": [
+            "ep-misc-warning-caution-lights"
+          ],
+          "note": "Checklist page F-37"
+        },
+        {
+          "type": "light",
+          "title": "HOOK",
+          "panel": "caution",
+          "text": "The arresting hook is not up and locked.",
+          "action": "HOOK switch UP (both hook switches must be UP to raise it), unless you want the hook down for a cable.",
+          "refs": [
+            "ep-misc-warning-caution-lights"
+          ],
+          "note": "Checklist page F-37"
+        },
+        {
+          "type": "light",
+          "title": "STORES CONFIG",
+          "panel": "caution",
+          "text": "The STORES CONFIG switch on the gear panel does not match the loading category the SMS sees for the stores carried.",
+          "action": "Set the STORES CONFIG switch to the right category for the load, CAT I or CAT III.",
+          "refs": [
+            "ep-misc-warning-caution-lights"
+          ],
+          "note": "Checklist page F-37"
+        },
+        {
+          "type": "light",
+          "title": "OVERHEAT",
+          "panel": "caution",
+          "text": "Overheat detected in the engine compartment, ECS bay, main gear wells or EPU bay.",
+          "action": "Throttle minimum practical, press FIRE & OHEAT DETECT. Goes off and the circuit tests good: land as soon as possible. Stays on: EPU off if you turned it on, 100% oxygen, AIR SOURCE OFF, below 25,000 ft and 500 kt.",
+          "refs": [
+            "ep-eng-overheat-caution-light"
+          ],
+          "note": "Checklist page C-17"
+        },
+        {
+          "type": "light",
+          "title": "NUCLEAR",
+          "panel": "caution",
+          "text": "Malfunction in the nuclear weapons circuitry. The BMS training manual says it is advisory and has no consequence in BMS.",
+          "action": "Nothing to do in BMS.",
+          "refs": [
+            "ep-misc-warning-caution-lights"
+          ],
+          "note": "Checklist page F-38"
+        },
+        {
+          "type": "light",
+          "title": "OBOGS",
+          "panel": "caution",
+          "text": "ECS air pressure has dropped below 10 psi, so the OBOGS has stopped making oxygen. Brief lights while the ECS cycles are normal, and it is always on with AIR SOURCE OFF.",
+          "action": "Raise ECS pressure: more throttle, more airspeed or lower altitude. Watch for OXY LOW; if it comes on, go to OBOGS malfunction.",
+          "refs": [
+            "ep-misc-warning-caution-lights",
+            "ep-misc-obogs-malfunction"
+          ],
+          "note": "Checklist page F-38"
+        },
+        {
+          "type": "light",
+          "title": "ATF NOT ENGAGED",
+          "panel": "caution",
+          "text": "Automatic terrain following cannot engage or has dropped out (gear down, AR door open, low speed, AOA over 29°, TRIM/AP DISC, CADC failure). The BMS training manual says it only lights in the lamp test; the Dash-34 lists these triggers.",
+          "action": "If in ATF, climb to a safe altitude and check AIR REFUEL CLOSE, ALT FLAPS NORM, TRIM/AP DISC NORM and no CADC failure. Leave ATF off until the cause is found.",
+          "refs": [
+            "ep-misc-warning-caution-lights"
+          ],
+          "note": "Checklist page F-37"
+        },
+        {
+          "type": "light",
+          "title": "EEC",
+          "panel": "caution",
+          "text": "Deactivated (Dash-1). The BMS training manual says it is not used in the real Block 50 and not used in BMS.",
+          "action": "None.",
+          "refs": [],
+          "note": "Checklist page F-37"
+        },
+        {
+          "type": "light",
+          "title": "CABIN PRESS",
+          "panel": "caution",
+          "text": "Cockpit pressure altitude is above 27,000 ft.",
+          "action": "AIR SOURCE NORM. Still on: 100% oxygen, 25,000 ft max (18,000 ft if possible), 500 kt max, AIR SOURCE OFF for 10-15 s then NORM. Flight can continue below 25,000 ft.",
+          "refs": [
+            "ep-misc-cockpit-pressure-temperature-malfunction"
+          ],
+          "note": "Checklist page F-23"
+        },
+        {
+          "type": "light",
+          "title": "FWD FUEL LOW",
+          "panel": "caution",
+          "text": "The forward reservoir holds less than 400 lb (250 lb in the F-16D), or its level sensing has failed. It works independently of the fuel gauges.",
+          "action": "Fuel flow to the minimum needed (below 6000 pph), no negative g, ENG FEED NORM, FUEL QTY SEL RSVR. Reservoir low: land as soon as possible, then look for a leak, trapped fuel or an imbalance.",
+          "refs": [
+            "ep-fuelhyd-fuel-low"
+          ],
+          "note": "Checklist page D-7"
+        },
+        {
+          "type": "light",
+          "title": "BUC",
+          "panel": "caution",
+          "text": "Deactivated (Dash-1). The BMS training manual says it is not used in the real Block 50 and not used in BMS.",
+          "action": "None.",
+          "refs": [],
+          "note": "Checklist page F-37"
+        },
+        {
+          "type": "light",
+          "title": "AFT FUEL LOW",
+          "panel": "caution",
+          "text": "The aft reservoir holds less than 250 lb (400 lb in the F-16D), or its level sensing has failed. It works independently of the fuel gauges.",
+          "action": "Fuel flow to the minimum needed (below 6000 pph), no negative g, ENG FEED NORM, FUEL QTY SEL RSVR. Reservoir low: land as soon as possible, then look for a leak, trapped fuel or an imbalance.",
+          "refs": [
+            "ep-fuelhyd-fuel-low"
+          ],
+          "note": "Checklist page D-7"
+        },
+        {
+          "type": "subhead",
+          "text": "Voice messages"
+        },
+        {
+          "type": "note",
+          "text": "Spoken in the headset, never with weight on wheels, in this priority: PULLUP, ALTITUDE, WARNING, JAMMER, COUNTER, CHAFF-FLARE, LOW, OUT, LOCK, CAUTION, BINGO, DATA, IFF. The VOICE MESSAGE switch to INHIBIT silences them all; use it only for a message that repeats abnormally."
+        },
+        {
+          "type": "light",
+          "title": "PULLUP",
+          "panel": "warning",
+          "text": "Ground collision predicted (with a flashing break-X in the HUD), or a terrain-following fly-up.",
+          "action": "Recover at once: pull up until the break-X goes away (the prediction assumes a wings-level 4g pull-up). With the TFR, the first response to any PULL UP is to fly up.",
+          "refs": []
+        },
+        {
+          "type": "light",
+          "title": "ALTITUDE",
+          "panel": "caution",
+          "text": "Descending after takeoff (first 3 minutes), radar altitude below the ALOW setting (flashing AL in the HUD), or barometric altitude below the MSL floor set on the ALOW page.",
+          "action": "Stop the descent and climb. The ALOW warning stops above the setting or when climbing at more than 1200 fpm.",
+          "refs": []
+        },
+        {
+          "type": "light",
+          "title": "WARNING",
+          "panel": "warning",
+          "text": "A red glareshield warning light came on 1.5 seconds ago.",
+          "action": "Find the red light and follow it. WARN RESET on the ICP re-arms the message.",
+          "refs": []
+        },
+        {
+          "type": "light",
+          "title": "JAMMER",
+          "panel": "indicator",
+          "text": "The Dash-1 says it is not operable in flight and is heard only in the ground test. The Dash-34 says that with the IDIAS it repeats every 8 seconds while a threat that needs jamming is not being jammed.",
+          "action": "Get the flashing >< threat jammed. REQCTR on the EWS page (LIST 7) turns the message off.",
+          "refs": []
+        },
+        {
+          "type": "light",
+          "title": "COUNTER",
+          "panel": "indicator",
+          "text": "Semi-automatic countermeasures want to dispense (REQCTR option on).",
+          "action": "CMS switch aft to consent: one program dispenses.",
+          "refs": []
+        },
+        {
+          "type": "light",
+          "title": "CHAFF-FLARE",
+          "panel": "indicator",
+          "text": "The countermeasures set has started a dispense program (FDBK option on).",
+          "refs": []
+        },
+        {
+          "type": "light",
+          "title": "LOW",
+          "panel": "indicator",
+          "text": "An expendable has reached its bingo quantity (BINGO option on, set on the EWS BINGO page).",
+          "refs": []
+        },
+        {
+          "type": "light",
+          "title": "OUT",
+          "panel": "indicator",
+          "text": "An expendable type is used up (BINGO option on).",
+          "refs": []
+        },
+        {
+          "type": "light",
+          "title": "LOCK",
+          "panel": "indicator",
+          "text": "The radar has locked on to a target.",
+          "refs": []
+        },
+        {
+          "type": "light",
+          "title": "CAUTION",
+          "panel": "caution",
+          "text": "A caution panel light came on 7 seconds ago and MASTER CAUTION was not reset.",
+          "action": "Check the caution panel. Resetting MASTER CAUTION re-arms the message.",
+          "refs": []
+        },
+        {
+          "type": "light",
+          "title": "BINGO",
+          "panel": "caution",
+          "text": "Fuel is below the bingo value you set (fuselage or total fuel, with FUEL QTY SEL in NORM); FUEL flashes in the HUD.",
+          "action": "Check the fuel. WARN RESET stops the flashing FUEL and the voice.",
+          "refs": []
+        },
+        {
+          "type": "light",
+          "title": "DATA",
+          "panel": "indicator",
+          "text": "A data link message has arrived (for example a target from the IDM); DATA also shows in the HUD.",
+          "action": "Look at the HSD. WARN RESET clears the HUD message.",
+          "refs": []
+        },
+        {
+          "type": "light",
+          "title": "IFF",
+          "panel": "indicator",
+          "text": "Not operable in flight; heard only during the ground test.",
+          "refs": []
+        },
+        {
+          "type": "subhead",
+          "text": "HUD warnings"
+        },
+        {
+          "type": "light",
+          "title": "WARN",
+          "panel": "warning",
+          "text": "Flashes in the HUD whenever a red glareshield warning light is on.",
+          "action": "Find the lit warning light and follow it. WARN RESET on the ICP clears WARN.",
+          "refs": [
+            "ep-misc-warning-caution-lights"
+          ],
+          "note": "Checklist page F-39"
+        },
+        {
+          "type": "light",
+          "title": "TRP FUEL",
+          "panel": "warning",
+          "text": "Flashing TRP FUEL and FUEL: external fuel is not transferring (fuselage fuel 500 lb below full while total fuel is 500 lb more than fuselage fuel, for 30 s). A leak or long afterburner use can trigger it falsely.",
+          "action": "Check tank quantities and fly trapped external fuel without delay, starting with minimum fuel flow; suspect a leak if the totalizer drops fast. WARN RESET clears FUEL; TRP FUEL clears once fuel transfers.",
+          "refs": [
+            "ep-fuelhyd-trapped-external-fuel",
+            "ep-fuelhyd-fuel-leak",
+            "ep-misc-warning-caution-lights"
+          ],
+          "note": "Checklist page F-39"
+        },
+        {
+          "type": "light",
+          "title": "FUEL",
+          "panel": "caution",
+          "text": "Flashing FUEL in the middle of the HUD: fuel is below your bingo value, or less than 800 lb is predicted at the home point.",
+          "action": "Check the fuel against your plan. WARN RESET stops the flashing.",
+          "refs": []
+        },
+        {
+          "type": "light",
+          "title": "FUEL SW",
+          "panel": "caution",
+          "text": "The FUEL QTY SEL knob has been out of NORM in flight for 5 minutes or 500 lb of fuel burn; FUEL also flashes. With the knob out of NORM, bingo only watches total fuel.",
+          "action": "FUEL QTY SEL knob back to NORM. WARN RESET only stops the flashing.",
+          "refs": []
+        },
+        {
+          "type": "subhead",
+          "text": "Warning tones"
+        },
+        {
+          "type": "light",
+          "title": "LG WARNING HORN",
+          "panel": "warning",
+          "text": "Intermittent horn: a gear is not down and locked while below 190 kt and 10,000 ft and descending more than 250 fpm.",
+          "action": "Lower the gear, or increase airspeed or reduce the sink rate if you are not landing. HORN SILENCER stops it until the next time the condition occurs.",
+          "refs": [
+            "ep-lg-lg-fails-to-extend-abnormal-indications"
+          ]
+        },
+        {
+          "type": "light",
+          "title": "LOW SPEED TONE",
+          "panel": "warning",
+          "text": "Steady tone: AOA 15° or more with the gear handle down or ALT FLAPS EXTEND, or airspeed too low for the pitch attitude with the gear up.",
+          "action": "Get out of the low-speed condition. HORN SILENCER silences the tone until the condition has gone and comes back.",
+          "refs": []
+        },
+        {
+          "type": "subhead",
+          "text": "ELEC panel lights"
+        },
+        {
+          "type": "note",
+          "text": "Amber, on the ELEC control panel; any of them also lights ELEC SYS. The Electrical System Failures index matches each combination to its procedure."
+        },
+        {
+          "type": "light",
+          "title": "FLCS PMG",
+          "panel": "caution",
+          "text": "In flight: no flight control branch is getting power from the FLCS PMG. On the ground: PMG power is missing on one or more branches (60 s after nose gear WOW).",
+          "action": "Land as soon as practical.",
+          "refs": [
+            "ep-elec-flcs-pmg-failure"
+          ],
+          "note": "Checklist page A-9"
+        },
+        {
+          "type": "light",
+          "title": "MAIN GEN",
+          "panel": "caution",
+          "text": "External power or the main generator is not connected to one or both nonessential ac buses. The BMS training manual says single generator failures are not coded in BMS.",
+          "action": "Alone: ELEC CAUTION RESET, land as soon as practical (after a 2-3 s blank of the HUD and MFDs, the checklist just lands). With STBY GEN: main and standby generator failure.",
+          "refs": [
+            "ep-elec-single-generator-failures-in-flight",
+            "ep-elec-main-and-standby-generator-failure-in-flight",
+            "ep-elec-main-and-standby-generator-failure-ground",
+            "ep-elec-emergency-power-distribution-main-generator-failed"
+          ],
+          "note": "Checklist pages A-5, A-11 and A-15"
+        },
+        {
+          "type": "light",
+          "title": "STBY GEN",
+          "panel": "caution",
+          "text": "Standby generator power is not available. The BMS training manual says single generator failures are not coded in BMS.",
+          "action": "Alone: ELEC CAUTION RESET, land as soon as practical. With MAIN GEN: EPU ON if not running, no throttle below MIL while supersonic, ELEC CAUTION RESET; still on: land as soon as possible.",
+          "refs": [
+            "ep-elec-single-generator-failures-in-flight",
+            "ep-elec-main-and-standby-generator-failure-in-flight",
+            "ep-elec-main-and-standby-generator-failure-ground"
+          ],
+          "note": "Checklist pages A-5, A-11 and A-15"
+        },
+        {
+          "type": "light",
+          "title": "EPU GEN",
+          "panel": "caution",
+          "text": "The EPU has been commanded on but its generator is not powering both emergency ac buses. Not shown with the EPU switch OFF on the ground with the engine running.",
+          "action": "With MAIN and STBY GEN also on: 12° AOA max (200 kt min), EPU ON, throttle to put the HYDRAZN light out, ELEC CAUTION RESET, land as soon as possible.",
+          "refs": [
+            "ep-elec-main-standby-and-epu-generator-failure"
+          ],
+          "note": "Checklist page A-13"
+        },
+        {
+          "type": "light",
+          "title": "EPU PMG",
+          "panel": "caution",
+          "text": "The EPU has been commanded on but EPU PMG power is not reaching all the flight control branches.",
+          "action": "With FLCS PMG and ACFT BATT TO FLCS also on, the battery alone powers the flight controls (about 3-14 minutes): at the first sign of degraded control, slow down, climb to a safe ejection altitude and eject before control is lost.",
+          "refs": [
+            "ep-elec-main-standby-and-epu-generator-failure"
+          ],
+          "note": "Checklist page A-13"
+        },
+        {
+          "type": "light",
+          "title": "ACFT BATT FAIL",
+          "panel": "caution",
+          "text": "In flight: the aircraft battery is at 20 V or less. On the ground: battery or battery charger failure (60 s after WOW).",
+          "action": "EPU ON, land as soon as practical; if the EPU runs abnormally, EPU OFF then NORM and land as soon as possible. On the ground, do not taxi except to clear the runway.",
+          "refs": [
+            "ep-elec-aircraft-battery-failure"
+          ],
+          "note": "Checklist page A-9"
+        },
+        {
+          "type": "light",
+          "title": "ACFT BATT TO FLCS",
+          "panel": "caution",
+          "text": "The battery is feeding one or more flight control branches (in flight, at 25 V or less). Normal during engine start on battery power and during shutdown.",
+          "action": "In flight with FLCS PMG and EPU PMG also on, the battery alone powers the flight controls (about 3-14 minutes): be ready to climb and eject at the first sign of degraded control.",
+          "refs": [
+            "ep-elec-main-standby-and-epu-generator-failure"
+          ],
+          "note": "Checklist page A-13"
+        },
+        {
+          "type": "light",
+          "title": "FLCS RLY",
+          "panel": "caution",
+          "text": "A flight control branch connected to the battery is below 20 V, or one or more branches are not connected to the battery. Normal before engine start.",
+          "action": "FLCS PWR TEST switch to TEST momentarily. Goes off: land as soon as practical. Stays on: EPU ON, land as soon as practical.",
+          "refs": [
+            "ep-elec-flcs-rly-light"
+          ],
+          "note": "Checklist page A-11"
+        },
+        {
+          "type": "subhead",
+          "text": "EPU and FLCS panel lights"
+        },
+        {
+          "type": "light",
+          "title": "EPU RUN",
+          "panel": "indicator",
+          "text": "The EPU turbine is at proper speed and its hydraulic pump is above 2000 psi. The EPU starts by itself when both the main and standby generators fail or both hydraulic systems drop below 1000 psi, and can be switched on by hand.",
+          "action": "Running without being commanded: see EPU malfunctions. Before landing, check it stays on with the throttle at IDLE; after landing, activated EPU.",
+          "refs": [
+            "ep-elec-epu-malfunctions",
+            "ep-misc-activated-epu-hydrazine-leak"
+          ],
+          "note": "Checklist page A-17"
+        },
+        {
+          "type": "light",
+          "title": "HYDRAZN",
+          "panel": "caution",
+          "text": "The EPU is commanding hydrazine (whether any is left or not), or its primary speed control has failed.",
+          "action": "Throttle up (about 75-80% RPM) so the EPU runs on bleed air and saves hydrazine, watch EPU FUEL, and land as soon as possible.",
+          "refs": [
+            "ep-elec-epu-malfunctions"
+          ],
+          "note": "Checklist page A-17"
+        },
+        {
+          "type": "light",
+          "title": "AIR",
+          "panel": "caution",
+          "text": "The EPU has been commanded to run (safety pin removed). It stays on when hydrazine is helping.",
+          "action": "Uncommanded EPU with AIR on: leave it running, land as soon as possible. With AIR off (bleed air valve failure): minimum practical thrust, land as soon as possible.",
+          "refs": [
+            "ep-elec-epu-malfunctions"
+          ],
+          "note": "Checklist page A-17"
+        },
+        {
+          "type": "light",
+          "title": "FLCS PWR",
+          "panel": "indicator",
+          "text": "A, B, C and D (green, on the TEST panel): each lights when that flight control branch has good power output during an FLCS power test.",
+          "action": "Hold the FLCS PWR TEST switch to TEST when a procedure asks. If A, B or C does not light, use 11° AOA max for approach, landing and aerobraking.",
+          "refs": [
+            "ep-flt-dbu-on-warning-light",
+            "ep-flt-flcs-single-electronic-failure"
+          ],
+          "note": "Checklist page B-8"
+        },
+        {
+          "type": "light",
+          "title": "BIT FAIL",
+          "panel": "warning",
+          "text": "Red FAIL light beside the BIT switch on the FLT CONTROL panel: the FLCS BIT has failed (with the FLCS warning light and a FLCS BIT FAIL PFL). It stays on until a BIT passes; ground only.",
+          "action": "Run a second FLCS BIT; if it fails again, notify maintenance.",
+          "refs": [
+            "ep-pfl-pilot-fault-list-flcs-flcs-warning-light"
+          ]
         }
       ]
     },

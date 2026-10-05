@@ -1,0 +1,17 @@
+{
+ "lblLine": "Change Area: choose what each of the four HSD lines becomes, then Apply.",
+ "lblLine1": "Line 1 (points 31-36): pick in the box beside it what it becomes.",
+ "lblLine2": "Line 2 (points 37-42): pick in the box beside it what it becomes.",
+ "lblLine3": "Line 3 (points 43-48): pick in the box beside it what it becomes.",
+ "lblLine4": "Line 4 (points 49-54): pick in the box beside it what it becomes.",
+ "btnCancel": "Closes the window; the four lines stay as they are.",
+ "btnApply":"Apply: sets the four lines as chosen, asking first before it replaces a line that holds other points. Counts in Save to DTC.",
+ "cboArea1": "What line 1 becomes: (as it is) keeps it, No Line clears it, or a track the mission knows (tanker, AWACS, JSTARS, CAP, part of your route) lays its six points along it.",
+ "cboArea2": "What line 2 becomes: (as it is) keeps it, No Line clears it, or a track the mission knows (tanker, AWACS, JSTARS, CAP, part of your route) lays its six points along it.",
+ "cboArea3": "What line 3 becomes: (as it is) keeps it, No Line clears it, or a track the mission knows (tanker, AWACS, JSTARS, CAP, part of your route) lays its six points along it.",
+ "cboArea4": "What line 4 becomes: (as it is) keeps it, No Line clears it, or a track the mission knows (tanker, AWACS, JSTARS, CAP, part of your route) lays its six points along it.",
+ "btnClearLine1": "Clear Line: sets line 1 to No Line, so Apply clears it.",
+ "btnClearLine2": "Clear Line: sets line 2 to No Line, so Apply clears it.",
+ "btnClearLine3": "Clear Line: sets line 3 to No Line, so Apply clears it.",
+ "btnClearLine4": "Clear Line: sets line 4 to No Line, so Apply clears it."
+}

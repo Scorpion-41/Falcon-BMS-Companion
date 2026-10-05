@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
 /**
- * Runs the EZBoards tool (by "Logic", shipped in <BMS>\Tools\EZBoards) without a console window.
+ * Runs the EZBoards tool (by "Logic", a separate download from the Falcon BMS forum, usually kept in <BMS>\Tools\EZBoards) without a console window.
  * EZBOARDS.BAT skips its PAUSE when given any argument and ends with "SUCCESS." / "### ERROR ###", but a pilot may
  * have rewritten it: the exit code decides whether a run worked, and those two lines only colour the message.
  */

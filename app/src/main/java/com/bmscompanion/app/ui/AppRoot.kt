@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.safeDrawing
+import com.bmscompanion.app.ui.components.keyboardLift
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.FlightLand
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.LocalContentColor
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.ui.platform.LocalDensity
@@ -98,6 +100,7 @@ object Routes {
     const val ARSENAL = "arsenal"
     const val THREATS = "threats"
     const val AIRPORTS = "airports"
+    const val REFERENCE = "reference"
     const val COCKPIT = "cockpit"
     const val MISSION = "mission"
     const val MEDIA = "media"
@@ -135,9 +138,9 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 private val allTabs = listOf(
     Tab(Routes.HOME, "Home", Icons.Default.Home),
     Tab(Routes.MISSION, "Mission", Icons.Default.MyLocation),
-    Tab(Routes.ARSENAL, "Arsenal", Icons.Default.RocketLaunch),
-    Tab(Routes.THREATS, "Threats", Icons.Default.Radar),
-    Tab(Routes.AIRPORTS, "Airfields", Icons.Default.FlightLand),
+    // Arsenal, Threats and Airfields are one section: all three are reference rather than anything live, and three
+    // rail entries for them crowded out the sections that do change. See ReferenceScreen.
+    Tab(Routes.REFERENCE, "Reference", Icons.Default.MenuBook),
     Tab(Routes.COCKPIT, "Cockpit", Icons.Default.Speed),
     Tab(Routes.MEDIA, "Media", Icons.Default.PhotoLibrary),
     Tab(Routes.SETUP, "Setup", Icons.Default.Settings),
@@ -146,15 +149,17 @@ private val allTabs = listOf(
 
 /**
  * The sections this pilot has. Config edits Falcon BMS's own settings files, so it is off until it is asked for on
- * Setup → Mission pages: nobody meets it by wandering into it.
+ * Setup → Mission pages: nobody meets it by wandering into it. (The weather and the data cartridge live on the
+ * Mission section's Editor tab instead, each behind its own backup.)
  */
 private val tabs: List<Tab>
     get() = allTabs.filter { it.route != Routes.CONFIG || com.bmscompanion.app.ui.screens.mission.MissionTabPrefs.showConfig }
 
 private val tabOwner = mapOf(
-    "aircraft" to Routes.ARSENAL, "weapon" to Routes.ARSENAL,
-    "threat" to Routes.THREATS, "harm" to Routes.THREATS, "encyclopedia" to Routes.THREATS, "ency" to Routes.THREATS,
-    "airport" to Routes.AIRPORTS, "groundchart" to Routes.AIRPORTS,
+    "aircraft" to Routes.REFERENCE, "weapon" to Routes.REFERENCE, "arsenal" to Routes.REFERENCE,
+    "threat" to Routes.REFERENCE, "harm" to Routes.REFERENCE, "encyclopedia" to Routes.REFERENCE,
+    "ency" to Routes.REFERENCE, "threats" to Routes.REFERENCE,
+    "airport" to Routes.REFERENCE, "groundchart" to Routes.REFERENCE, "airports" to Routes.REFERENCE,
     "hotas" to Routes.COCKPIT, "checklists" to Routes.COCKPIT, "checklist" to Routes.COCKPIT, "comms" to Routes.COCKPIT,
     "bullseye" to Routes.COCKPIT, "tools" to Routes.COCKPIT,
     // "m/..." = reference pages opened from the Mission section; they stay under the Mission tab
@@ -169,11 +174,15 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
     // Ask once, quietly, when the app starts. Nothing is shown unless there is a newer version, and nothing is
     // downloaded: the pilot decides that on the About page.
     androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { com.bmscompanion.app.data.update.Updates.check() } }
+    // a new mission or a switch of mode starts this device's view of the mission afresh (MissionEpoch)
+    com.bmscompanion.app.ui.screens.mission.MissionEpochWatcher()
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: Routes.HOME
     val head = route.substringBefore('/').substringBefore('?')
     val currentTab = tabs.firstOrNull { it.route == head }?.route ?: tabOwner[head] ?: Routes.HOME
-    val immersive = head == "bullseye" || head == "chart" || route.startsWith("media/view")
+    // (the MFDs' full page takes the rail's width too: two bezels side by side are bounded by the width)
+    val immersive = head == "bullseye" || head == "chart" || route.startsWith("media/view") ||
+        (com.bmscompanion.app.ui.screens.mission.MfdFull.on && head == Routes.MISSION)
     // A screen that took the keyboard (chart viewer, bullseye) can leave focus on a composable that is gone,
     // and then a search field cannot be clicked into. Clearing focus on every navigation keeps the fields clickable.
     val focusManager = LocalFocusManager.current
@@ -237,7 +246,11 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
     // How wide the board really is, measured before anything is scaled. On a board the page is then laid out at a
     // few hundred points however many pixels that is (Kneeboard.densityFor), which is what makes the print readable
     // through a headset; everywhere else the platform's own density is used untouched.
-    BoxWithConstraints(Modifier.fillMaxSize()) {
+    // The system's bars and the camera cut-out, but never the on-screen keyboard (which safeDrawing includes): the
+    // keyboard is laid over the app instead of shrinking it, and a field it would cover lifts the app (keyboardLift).
+    // (held as they were while the keyboard is up: Android shows its navigation bar with it, rememberSteadyBars)
+    val noKeyboard = com.bmscompanion.app.ui.components.rememberSteadyBars()
+    BoxWithConstraints(Modifier.fillMaxSize().keyboardLift()) {
     val boardPx = with(density) { maxWidth.toPx() }
     CompositionLocalProvider(
         LocalContentColor provides Hud.Text,
@@ -247,7 +260,9 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
         if (rail) {
             NavigationRail(
                 containerColor = Hud.Surface,
-                modifier = Modifier.fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical)),
+                // the insets are this padding's alone: the rail's own would follow the bar the keyboard brings with it
+                windowInsets = WindowInsets(0, 0, 0, 0),
+                modifier = Modifier.fillMaxHeight().windowInsetsPadding(noKeyboard.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical)),
             ) {
                 // What the window itself offers, kept apart from the sections: full screen at the top, where it is
                 // out of the way of the list, and the server page at the foot. Neither is a place to navigate to,
@@ -294,8 +309,8 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
         }
         Column(Modifier.weight(1f)) {
             Box(
-                Modifier.weight(1f).windowInsetsPadding(WindowInsets.statusBars.union(WindowInsets.displayCutout).only(WindowInsetsSides.Top))
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(if (rail || immersive) WindowInsetsSides.End + WindowInsetsSides.Bottom + (if (immersive) WindowInsetsSides.Start else WindowInsetsSides.End) else WindowInsetsSides.Horizontal)),
+                Modifier.weight(1f).windowInsetsPadding(noKeyboard.only(WindowInsetsSides.Top))
+                    .windowInsetsPadding(noKeyboard.only(if (rail || immersive) WindowInsetsSides.End + WindowInsetsSides.Bottom + (if (immersive) WindowInsetsSides.Start else WindowInsetsSides.End) else WindowInsetsSides.Horizontal)),
             ) {
               // On a kneeboard the page gets the whole board: the â° sections button and the page's own â¯ options
               // float over it and fade out with the mouse. Everywhere else this just draws the page.
@@ -320,6 +335,8 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
                     popExitTransition = { ExitTransition.None },
                 ) {
                     composable(Routes.HOME) { HomeScreen(nav) }
+                    composable(Routes.REFERENCE) { com.bmscompanion.app.ui.screens.ReferenceScreen(nav) }
+                    // still their own routes, so every link that opens an aircraft, a threat or an airfield works
                     composable(Routes.ARSENAL) { ArsenalScreen(nav) }
                     composable(Routes.THREATS) { ThreatsScreen(nav) }
                     composable(Routes.AIRPORTS) { AirportsScreen(nav) }
@@ -398,7 +415,7 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
               }
             }
             if (!rail && !immersive && !knee) {
-                NavigationBar(containerColor = Hud.Surface, tonalElevation = 0.dp) {
+                NavigationBar(containerColor = Hud.Surface, tonalElevation = 0.dp, windowInsets = noKeyboard.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)) {
                     tabs.forEach { t ->
                         NavigationBarItem(
                             selected = currentTab == t.route,
@@ -415,6 +432,8 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
             }
         }
     }
+    // the Planner's file windows on a device that is not the BMS PC's own window: the PC's folders, over everything
+    com.bmscompanion.app.ui.screens.wdp.PcFileWindowHost()
 }
 }
 }

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <Nullable>disable</Nullable>
+    <AssemblyName>wdpref</AssemblyName>
+    <RootNamespace>wdpref</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <PlatformTarget>x86</PlatformTarget>
+    <!-- the TOSS reference drives a Windows Forms control of WDP's, which needs the forms assembly to load -->
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+</Project>

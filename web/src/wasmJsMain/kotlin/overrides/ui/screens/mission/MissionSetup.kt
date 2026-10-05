@@ -70,6 +70,10 @@ fun MissionSetupPane(onConnected: () -> Unit) {
                 Spacer(Modifier.padding(4.dp))
                 Para("The whole app runs in this browser; BMS Companion on the PC provides the data. Settings (BMS folders, AWACS feed, EZBoards) are changed on the PC.")
             }
+            MissionSourceCard()
+            HostilesCard()
+            MfdSetupCard()
+            RadioLogCard()
             GuideStep(1, "Use it like an app", Hud.Amber) {
                 Para("**iPhone/iPad (Safari):** Share → **Add to Home Screen**. It opens full screen with its own icon.")
                 Para("**Android (Chrome):** menu ⋮ → **Add to Home screen** or **Install app**.")

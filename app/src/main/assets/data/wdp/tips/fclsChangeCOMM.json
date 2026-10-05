@@ -1,0 +1,8 @@
+{
+ "lblComm": "The radio preset being changed, by its number.",
+ "lblType": "The radio this preset belongs to: UHF (225.000-399.975 MHz) or VHF (108.000-151.975 MHz).",
+ "btnCancel": "Closes the window; the preset keeps its frequency.",
+ "mxtFreq":"The frequency in MHz: UHF 225.000-399.975, VHF 108.000-151.975.",
+ "btnClear": "Clear: empties the box, to type a new frequency.",
+ "btnApply": "Apply: checks the frequency is in the band and puts it in the preset. Counts in Save to DTC."
+}

@@ -294,7 +294,7 @@ private fun GripDiagram(nav: NavHostController, aircraft: String, control: Hotas
                 style = MaterialTheme.typography.bodySmall, color = Hud.TextFaint, modifier = Modifier.padding(top = 6.dp),
             )
             Text(
-                if (grip.full != null) "⤢ Open labelled manual drawing" else "⤢ Open full screen to zoom",
+                if (grip.full != null) "Open labelled manual drawing" else "Open full screen to zoom",
                 Modifier.padding(top = 6.dp).clip(RoundedCornerShape(8.dp)).clickable { nav.go(chartRoute(grip.full ?: grip.path, (if (aircraft == "f16") "F-16" else "F-15C") + " HOTAS · " + control.name)) }.padding(vertical = 4.dp),
                 color = Hud.Cyan, style = MaterialTheme.typography.labelLarge,
             )

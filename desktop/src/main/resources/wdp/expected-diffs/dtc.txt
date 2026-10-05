@@ -1,0 +1,51 @@
+﻿# Where the Planner's DTC page differs from Weapon Delivery Planner on purpose, for `--wdppagetest dtc`.
+# One line each: <D-number> <column> <property, or Section/Key of the saved file; * = the whole column> <why>
+# Columns: p / p_load / p_ui / p_save are the page, out_text the saved file (compared key by key), the rest the model.
+# Globs: * any run of characters, ? one. The D- and A-numbers are the plan's (WDP438-PLAN.md, sections A and D).
+
+A1  p*        cboTbl?_Thr?.L   the HARM lists are the app's curated/harm.json (Dash-34 4.38, Training Manual 4.38.1), not WDP's HarmList.ini
+A1  p*        cboTbl?_Thr?.I   (the same: an index into the app's list)
+A1  p*        cboTbl?_Thr?.T   (the same: the system's name as the app's list gives it)
+D12 p*        lblTbl?_Thr?.T   HARM symbols from the app's list; a code in no list shows its number, not "Not in List"
+D11 p*        mxtILS_FREQ.T    ILS frequencies from 108.10 are kept (WDP raised them to 109.00)
+D11 out_text  COMMS/ILS?Frequency   (the same, in the file)
+D13 out_text  IFF/*Code        IFF codes keep their leading zeros (WDP wrote 0554 as 554)
+D13 out_text  IFF/TIME*Criteria   an IFF time criteria is HHMM with four digits, -1 as -1 (WDP: 18446744073709551615)
+N0  out_text  NAV?OFFSETS/OA?-0   no offset aim point on steerpoint 0 (WDP wrote OA1-0 / OA2-0 for offsets nobody set)
+D11 cart.?_comm  *             (the same, in the model: a frequency under 108.10 goes to 108.10, not to 109.00)
+D14 p*        cbo*?_Left.?     one rule for the MFD selectors: another box of the same master mode showing the page is blanked (WDP: 11 of 72 handlers compared the wrong boxes)
+D14 p*        cbo*?_Center.?   (the same)
+D14 p*        cbo*?_Right.?    (the same)
+D14 cart.?_mfd   *             (the same, in the model)
+D14 out_text  MFD/*            (the same, in the file)
+D17 out_text  (numbers)        positions written from the exact float; WDP printed seven significant digits (counted by the file comparison itself)
+# Fixes the port made before the 4.38.1 plan, each in the KDoc of DtcCartridge.kt / DtcPage.kt ("Quirks put right"):
+P1  out_text  (names)          the steerpoint lines keep the name BMS gave them; WDP wrote four fields (counted by the file comparison itself)
+P2  cart.?_hpn   *             Open 2 is read from target_89..98, where it is written (WDP read one key late)
+P2  p*        lblHpn*          (the same, on the page)
+P2  out_text  STPT/target_89   (the same, in the file)
+P2  out_text  STPT/target_9?   (the same)
+P3  cart.?_stpt  *             the steerpoint and Open readers clear their own target names, not the weapon targets'
+P3  cart.?_tgt   *             (the same: the weapon targets keep theirs)
+P3  cart.?_open  *             (the same)
+P3  p*        lblSTPT_*        (the same, on the page: a table WDP left partly read shows)
+P3  p*        lblElv_*         (the same)
+P3  p*        lblAction*       (the same)
+P3  p*        lblOpen*         (the same)
+P3  p*        dgvTargets.G     (the same)
+P4  cart.?_nav   *             the second OA2-n goes into OA2_2 (WDP assigned OA1_2 twice)
+P4  p*        numV?P*          (the same, on the page)
+P4  out_text  NAV?OFFSETS/*    (the same, in the file)
+P5  cart.?_iff   *             IFF code digits are read from the right (WDP read 0012 as 0022)
+P5  p*        numMode*         (the same, on the page)
+P6  cart.?_fcc   *             an empty Profile 1 ripple box is 1, as the box then shows (WDP's Leave took Profile 2's number into Profile 1)
+P6  out_text  FCC_AGB/Profile1_Release_Pulse   (the same, in the file)
+# The 4.38.1 page has no version branches and opens on the cartridge's own offsets:
+V1  p*        grpSJ*.V         the S-J MFD boxes always show (WDP hid them for a BMS before 4.36 build 23170, and never showed them again)
+V1  p*        tabNavOffsets.V  (the same: WDP hid the NAV OFFSETS tab for an older BMS and left it hidden for the next cartridge)
+N1  p*        lblNotice.T      a loaded cartridge's offsets are its own ("Data from DTC"); WDP kept the last attack page's choice, which zeroed or replaced them on the next save
+N1  p*        btnNone.E        (the same: which profile button is greyed follows it)
+N1  p*        btnPopUp.E       (the same)
+N1  p*        btnHADB.E        (the same)
+N1  p*        btnTOSS.E        (the same)
+N1  p*        pnlRef*.V        (the same: the Reference knob shows the cartridge's own Modesel, which WDP's kept attack page overwrote)

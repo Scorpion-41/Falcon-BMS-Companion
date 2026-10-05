@@ -1,0 +1,5 @@
+{
+ "btnClose": "Closes the window.",
+ "pnlSchedule":"Airport Schedule: every flight of your save leaving your field, by departure time, yours underlined. For a steerpoint (a tap on a flight-plan row): what the mission says of it, and where it is.",
+ "btnSaveJpg": "Saves the schedule as a picture (<field>Schedule.jpg) on the BMS PC, in DataCards\\<mission>\\<package>\\<callsign>, after asking the mission name and package number."
+}

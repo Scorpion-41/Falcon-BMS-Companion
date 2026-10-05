@@ -7,6 +7,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import com.bmscompanion.app.data.ImageAction
 import com.bmscompanion.app.data.Platform
 import com.bmscompanion.app.data.Repo
@@ -63,6 +65,34 @@ private fun imageActions(activity: android.app.Activity): List<ImageAction> = bu
     })
 }
 
+/**
+ * A page the app drew, as PNG bytes (Platform.encodePng: the Planner's Upd Kneeboard). A picture captured from
+ * a graphics layer may be a hardware bitmap, whose pixels only the GPU holds, so it is copied into memory first.
+ */
+private fun pngOf(image: androidx.compose.ui.graphics.ImageBitmap): ByteArray? = runCatching {
+    var bmp = image.asAndroidBitmap()
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && bmp.config == android.graphics.Bitmap.Config.HARDWARE) {
+        bmp = bmp.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+    }
+    val out = java.io.ByteArrayOutputStream()
+    if (!bmp.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)) null else out.toByteArray()
+}.getOrNull()
+
+/** A picture as JPEG bytes (Platform.encodeJpeg: the Planner's Save Map and the airport schedule, as WDP saves them). */
+private fun jpegOf(image: androidx.compose.ui.graphics.ImageBitmap, quality: Int): ByteArray? = runCatching {
+    var bmp = image.asAndroidBitmap()
+    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O && bmp.config == android.graphics.Bitmap.Config.HARDWARE) {
+        bmp = bmp.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+    }
+    val out = java.io.ByteArrayOutputStream()
+    if (!bmp.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality.coerceIn(0, 100), out)) null else out.toByteArray()
+}.getOrNull()
+
+/** A picture file's bytes as a picture (Platform.decodeImage: a plan picture picked on the BMS PC). */
+private fun imageOf(bytes: ByteArray): androidx.compose.ui.graphics.ImageBitmap? = runCatching {
+    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+}.getOrNull()
+
 class MainActivity : ComponentActivity() {
     /** Old tablets run out of heap quickly: hand the cached images back when Android asks for memory. */
     override fun onTrimMemory(level: Int) {
@@ -83,6 +113,10 @@ class MainActivity : ComponentActivity() {
         Platform.fetchText = { url -> fetchTextFromWeb(url) }
         Platform.installer = AndroidInstaller(this)
         Platform.nowMillis = { System.currentTimeMillis() }
+        Platform.encodePng = ::pngOf
+        Platform.encodeJpeg = ::jpegOf
+        Platform.decodeImage = ::imageOf
+        Platform.touchFirst = packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_TOUCHSCREEN)
         // an installer left behind by an update that has already happened is a few hundred megabytes of nothing
         com.bmscompanion.app.data.update.Updates.tidyCache()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {

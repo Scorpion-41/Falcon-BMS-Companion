@@ -1,0 +1,6 @@
+{
+ "btnCancel": "Closes the window; the row keeps its formation.",
+ "btnOK": "Puts the formation in the flight plan's formation column. It changes the card, not BMS's mission.",
+ "cboFormation": "The formation to fly from this steerpoint, by BMS's own names (Spread, Wedge, Trail, Ladder…); empty for none.",
+ "chbAllStpts": "Gives every steerpoint that shows a formation this one, not only the row you tapped."
+}

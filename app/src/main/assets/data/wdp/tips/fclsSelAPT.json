@@ -1,0 +1,6 @@
+{
+ "btnSelect": "Takes the airfield picked. On the DataCard it fills the row: TACAN, elevation, tower frequencies, the runway into the wind and its ILS. On the DTC page, the RADIO/NAV airport.",
+ "btnCancel": "Closes the window; the airport stays as it was.",
+ "cboCountry": "Narrows the list below. On the DataCard: the theater's fields by kind (All airfields, airbases, airstrips…). From the DTC page: the theater Falcon BMS is on.",
+ "cboAirports": "The airfield to use, by name, from the app's airport data for the theater."
+}

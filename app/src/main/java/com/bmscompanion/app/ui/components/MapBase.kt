@@ -43,6 +43,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -174,23 +176,31 @@ fun rememberMapBase(imagePath: String?): MapBaseState {
     return state
 }
 
-/** Draws the style's overview image and, when zoomed in, the sharper tiles of the visible area. */
-fun DrawScope.drawMapBase(pr: MapProjection, base: MapBaseState, fallbackImage: ImageBitmap?) {
+/**
+ * Draws the style's overview image and, when zoomed in, the sharper tiles of the visible area.
+ *
+ * [styleOverride] is for a map that is part of a tool rather than part of the app’s own map: the weather editor
+ * wants BMS's own light 2D look whatever the pilot has chosen for the mission map, and must not change it for them.
+ */
+fun DrawScope.drawMapBase(pr: MapProjection, base: MapBaseState, fallbackImage: ImageBitmap?, styleOverride: String? = null) {
     val id = base.mapId
-    val style = MapLook.style
+    val style = styleOverride?.takeIf { s -> MapLook.styles.any { it.first == s } } ?: MapLook.style
     val overviewKey = if (id != null) "maps/$id/$style.webp" else null
     val wanted = base.wanted
     wanted.clear()
     val overview = overviewKey?.let { base.images[it] } ?: base.lastOverview ?: fallbackImage
     if (overviewKey != null && overviewKey !in base.images) wanted += overviewKey
-    overview?.let {
-        if (overviewKey != null && base.images[overviewKey] != null) base.lastOverview = it
+    val tiled = id != null && pr.side >= 1300f && !(pr.left + pr.side < 0 || pr.top + pr.side < 0 || pr.left > size.width || pr.top > size.height)
+    val target = ceil(ln(pr.side / TILE.toDouble()) / ln(2.0)).toInt().coerceIn(MIN_Z, MAX_Z)
+    // Once the sharpest level's tiles cover the view, the coarser ones under them are never seen: drawing them anyway
+    // filled the whole screen up to four times a frame, and a tablet's GPU spent most of a pan's frame on that.
+    val covered = tiled && targetCovered(pr, base, id!!, style, target)
+    if (!covered) overview?.let {
         drawImage(it, dstOffset = IntOffset(pr.left.roundToInt(), pr.top.roundToInt()), dstSize = IntSize(pr.side.roundToInt(), pr.side.roundToInt()))
     }
-    if (id == null || pr.side < 1300f) return
-    if (pr.left + pr.side < 0 || pr.top + pr.side < 0 || pr.left > size.width || pr.top > size.height) return
-    val target = ceil(ln(pr.side / TILE.toDouble()) / ln(2.0)).toInt().coerceIn(MIN_Z, MAX_Z)
-    for (z in MIN_Z..target) {
+    overview?.let { if (overviewKey != null && base.images[overviewKey] != null) base.lastOverview = it }
+    if (!tiled) return
+    for (z in (if (covered) target else MIN_Z)..target) {
         val count = 1 shl z
         val ts = pr.side / count
         val c0 = floor((-pr.left) / ts).toInt().coerceIn(0, count - 1)
@@ -209,21 +219,67 @@ fun DrawScope.drawMapBase(pr: MapProjection, base: MapBaseState, fallbackImage: 
     }
 }
 
+/** True when every tile of level [z] that the view shows is loaded. */
+private fun DrawScope.targetCovered(pr: MapProjection, base: MapBaseState, id: String, style: String, z: Int): Boolean {
+    val count = 1 shl z
+    val ts = pr.side / count
+    // the view must lie inside the theater square, or the overview's background shows round it anyway
+    if (pr.left > 0f || pr.top > 0f || pr.left + pr.side < size.width || pr.top + pr.side < size.height) return false
+    val c0 = floor((-pr.left) / ts).toInt().coerceIn(0, count - 1)
+    val c1 = floor((size.width - pr.left) / ts).toInt().coerceIn(0, count - 1)
+    val r0 = floor((-pr.top) / ts).toInt().coerceIn(0, count - 1)
+    val r1 = floor((size.height - pr.top) / ts).toInt().coerceIn(0, count - 1)
+    for (r in r0..r1) for (c in c0..c1) if (base.images["maps/$id/$style/$z/${r}_$c.webp"] == null) return false
+    return true
+}
+
 // ------------------------------------------------------------------ landmarks
+
+/**
+ * One set of lines in unit space: [whole] for a view of most of the theater, and the same lines cut into a [GRID] x
+ * [GRID] of cells for a view zoomed in, so a frame strokes — and above all dashes — only the cells it shows. Stroking
+ * the whole theater's provinces dashed at a close zoom was most of a frame's cost on a tablet: Skia lays every dash of
+ * every line, on screen or not.
+ */
+class GeoLines(val whole: Path, val cells: Array<Path?>) {
+    companion object { const val GRID = 16 }
+}
 
 /** Border and province lines as paths in unit space (0..1 across the theater, y down), built once per map. */
 class GeoPaths(val mapId: String?, val geo: GeoLayers, private val sizeFt: Double) {
-    private fun path(lines: List<GeoLine>, hi: Boolean, filter: (GeoLine) -> Boolean = { true }) = Path().apply {
+    private fun path(lines: List<GeoLine>, hi: Boolean, filter: (GeoLine) -> Boolean = { true }): GeoLines {
+        val whole = Path()
+        val grid = GeoLines.GRID
+        val cells = arrayOfNulls<Path>(grid * grid)
+        // the number of the point each cell's path last ended on, so a run of segments in one cell stays one line
+        val lastEnd = IntArray(grid * grid) { -1 }
+        var n = 0
         for (l in lines) {
             if (!filter(l)) continue
             val pts = if (hi) l.hi else l.lo
             if (pts.size < 4) continue
+            var pu = 0f
+            var pv = 0f
             for (i in pts.indices step 2) {
                 val u = (pts[i + 1] / sizeFt).toFloat()
                 val v = (1 - pts[i] / sizeFt).toFloat()
-                if (i == 0) moveTo(u, v) else lineTo(u, v)
+                n++
+                if (i == 0) whole.moveTo(u, v) else {
+                    whole.lineTo(u, v)
+                    // each segment goes to the cell of its middle
+                    val cu = (((pu + u) / 2) * grid).toInt().coerceIn(0, grid - 1)
+                    val cv = (((pv + v) / 2) * grid).toInt().coerceIn(0, grid - 1)
+                    val k = cv * grid + cu
+                    val p = cells[k] ?: Path().also { cells[k] = it }
+                    if (lastEnd[k] != n - 1) p.moveTo(pu, pv)
+                    p.lineTo(u, v)
+                    lastEnd[k] = n
+                }
+                pu = u
+                pv = v
             }
         }
+        return GeoLines(whole, cells)
     }
     val bordersLo = path(geo.borders, false) { it.d == 0 }
     val bordersHi = path(geo.borders, true) { it.d == 0 }
@@ -273,8 +329,13 @@ class GeoPaths(val mapId: String?, val geo: GeoLayers, private val sizeFt: Doubl
         if (flags.none { it == PLACE_TARGET }) m.targets.forEach { (x, y) -> nearest(x, y).takeIf { it >= 0 }?.let { flags[it] = PLACE_TARGET } }
         relevantFor = m
         relevantFlags = flags
+        relevantOrder = places.indices.sortedByDescending { flags[it] }
         return flags
     }
+
+    /** [places]' indices with the target towns first, then the mission's, for the flags [relevant] last answered. */
+    var relevantOrder: List<Int> = emptyList()
+        private set
 }
 
 private fun words(s: String) = buildString {
@@ -302,67 +363,74 @@ fun rememberGeo(imagePath: String?, sizeFt: Double): GeoPaths? {
 
 private val labelShadow = Shadow(Color.Black.copy(alpha = 0.85f), blurRadius = 4f)
 
-/** Country and province borders, country and region names, and towns, drawn faintly so the map stays readable. */
-fun DrawScope.drawLandmarks(pr: MapProjection, g: GeoPaths, tm: TextMeasurer) {
+/**
+ * Borders, provinces, region names and towns.
+ *
+ * [mission] is false for a map that is a tool rather than the mission map — the weather editor draws a theater
+ * the pilot picked, which is often not the one they are flying, and the target ring of a briefing for somewhere
+ * else is worse than no landmark at all.
+ */
+fun DrawScope.drawLandmarks(pr: MapProjection, g: GeoPaths, tm: TextMeasurer, mission: Boolean = true, lineLayer: LandmarkLayer? = null) {
     val light = MapLook.light
     val photo = MapLook.style == "satellite" // busy imagery: a little more contrast for the faint layers
-    val hi = pr.side > 3200f
-    val unit = 1f / pr.side
     val dp = density
-    fun lines(path: Path, color: Color, widthDp: Float, dash: FloatArray? = null) = withTransform({ translate(pr.left, pr.top); scale(pr.side, pr.side, Offset.Zero) }) {
-        drawPath(path, color, style = Stroke(widthDp * dp * unit, pathEffect = dash?.let { d -> PathEffect.dashPathEffect(FloatArray(d.size) { d[it] * dp * unit }) }))
-    }
+    // borders and provinces: from the map's cached layer when it keeps one ([LandmarkLayer]), else stroked here
+    if (lineLayer == null || !lineLayer.draw(this, pr, g)) drawLandmarkLines(pr, g)
     val placed = ArrayList<Rect>()
     /** Draws a label unless it would leave the view or crowd a label already placed (with some breathing room). */
     fun label(text: String, center: Offset, style: TextStyle, maxWidthPx: Int = Int.MAX_VALUE, gapDp: Float = 6f): Boolean {
         if (center.x < 0 || center.y < 0 || center.x > size.width || center.y > size.height) return false
-        val layout = tm.measure(text, style, constraints = androidx.compose.ui.unit.Constraints(maxWidth = maxWidthPx.coerceAtLeast(40)))
-        val r = Rect(center.x - layout.size.width / 2f, center.y - layout.size.height / 2f, center.x + layout.size.width / 2f, center.y + layout.size.height / 2f)
+        // laid out once and kept (MapText): a pan draws the same labels on every frame
+        val l = MapText.label(this, tm, text, style, maxWidthPx.coerceAtLeast(40))
+        val r = Rect(center.x - l.width / 2f, center.y - l.height / 2f, center.x + l.width / 2f, center.y + l.height / 2f)
         if (r.left < 0 || r.top < 0 || r.right > size.width || r.bottom > size.height) return false
         val gap = gapDp * dp
         val padded = Rect(r.left - gap, r.top - gap / 2, r.right + gap, r.bottom + gap / 2)
-        if (placed.any { it.overlaps(padded) }) return false
+        for (k in placed.indices) if (placed[k].overlaps(padded)) return false
         placed += r
-        drawText(layout, topLeft = r.topLeft)
+        MapText.draw(this, l, r.topLeft)
         return true
-    }
-
-    // provinces: thin, dashed, faint, and only once zoomed in a little
-    if (MapLook.provinces && pr.side >= 1400f) {
-        lines(if (hi) g.provincesHi else g.provincesLo, if (light) Color(0xFF6E5D78).copy(alpha = 0.5f) else Color.White.copy(alpha = if (photo) 0.42f else 0.28f), if (photo) 1.2f else 1f, floatArrayOf(5f, 4f))
-    }
-    // international borders: a casing for contrast, then a clear line; disputed lines dashed
-    if (MapLook.borders) {
-        val casing = if (light) Color.White.copy(alpha = 0.75f) else Color.Black.copy(alpha = 0.5f)
-        val main = if (light) Color(0xFF5B3F6B) else Color(0xFFF7E7C6).copy(alpha = 0.9f)
-        lines(if (hi) g.bordersHi else g.bordersLo, casing, 4.6f)
-        lines(if (hi) g.bordersHi else g.bordersLo, main, 2.2f)
-        lines(if (hi) g.disputedHi else g.disputedLo, casing, 3.6f, floatArrayOf(7f, 5f))
-        lines(if (hi) g.disputedHi else g.disputedLo, main, 1.6f, floatArrayOf(7f, 5f))
     }
 
     // country names: large, spaced, faint
     if (MapLook.borders) for (cn in g.geo.countries) {
         val onScreenPx = cn.r * pr.pxPerNm
         if (onScreenPx < 70f) continue
-        val sp = (onScreenPx / 22f).coerceIn(12f, 22f)
+        // whole sizes and widths in steps: a zoom would otherwise lay the name out afresh on every frame (MapText)
+        val sp = (onScreenPx / 22f).coerceIn(12f, 22f).roundToInt().toFloat()
         label(cn.n.uppercase(), pr.toScreen(cn.x, cn.y), TextStyle(
             color = (if (light) Color(0xFF4A3A55) else Color.White).copy(alpha = if (light) 0.5f else 0.45f),
             fontSize = sp.sp, fontWeight = FontWeight.Bold, letterSpacing = (sp / 5f).sp, textAlign = TextAlign.Center, shadow = if (light) null else labelShadow,
-        ), maxWidthPx = (onScreenPx * 1.2f).toInt())
+        ), maxWidthPx = widthStep(onScreenPx * 1.2f))
     }
 
     // towns: a faint dashed ring with a transparent fill, names by importance as you zoom in
     // (Mission: only the mission's towns, at every zoom; without a mission for this map it shows cities)
     val placeColor = if (light) Color(0xFF3F3122) else Color(0xFFFFE6A8)
+    // one dashed stroke for every town's ring, not one made for each town on each frame
+    val townRing = Stroke((if (photo) 1.3f else 1f) * dp, pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f * dp, 3f * dp)))
+    val townRingSolid = Stroke((if (photo) 1.1f else 0.8f) * dp)
+    val ringFill = placeColor.copy(alpha = if (light) 0.06f else if (photo) 0.1f else 0.07f)
+    val ringInk = placeColor.copy(alpha = if (light) 0.4f else if (photo) 0.55f else 0.32f)
+    // made once a frame, not once a label: the label cache (MapText) is keyed by the style
+    val townStyles = Array(3) { k ->
+        val level = k + 1
+        TextStyle(
+            color = placeColor.copy(alpha = when (level) { 1 -> 0.92f; 2 -> 0.8f; else -> 0.7f }),
+            fontSize = when (level) { 1 -> 11.sp; 2 -> 10.sp; else -> 9.sp },
+            fontWeight = if (level == 1) FontWeight.SemiBold else FontWeight.Normal,
+            shadow = if (light) null else labelShadow,
+        )
+    }
     if (MapLook.places > 0) {
         var labels = 0
         val maxLabels = 90
-        val relevant = if (MapLook.places == MapLook.MISSION) MapFocus.mission?.takeIf { it.mapId == g.mapId }?.let { g.relevant(it) } else null
+        val relevant = if (mission && MapLook.places == MapLook.MISSION) MapFocus.mission?.takeIf { it.mapId == g.mapId }?.let { g.relevant(it) } else null
         val maxLevel = if (MapLook.places == MapLook.MISSION) 1 else MapLook.places
         val targetColor = if (light) Color(0xFFB4441A) else Hud.Amber
         // target towns first, so their names always get a place
-        val order = if (relevant == null) g.places.indices.toList() else g.places.indices.sortedByDescending { relevant[it] }
+        // (worked out with the flags, once per mission, not sorted again on every frame)
+        val order: Iterable<Int> = if (relevant == null) g.places.indices else g.relevantOrder
         for (i in order) {
             val p = g.places[i]
             val level = placeLevel(p.t)
@@ -399,16 +467,13 @@ fun DrawScope.drawLandmarks(pr: MapProjection, g: GeoPaths, tm: TextMeasurer) {
             val rPx = (radiusFt / 6076.12 * pr.pxPerNm).toFloat()
             val ring = rPx >= 5f
             if (ring) {
-                drawCircle(placeColor.copy(alpha = if (light) 0.06f else if (photo) 0.1f else 0.07f), rPx, c)
-                drawCircle(placeColor.copy(alpha = if (light) 0.4f else if (photo) 0.55f else 0.32f), rPx, c, style = Stroke((if (photo) 1.3f else 1f) * dp, pathEffect = PathEffect.dashPathEffect(floatArrayOf(3f * dp, 3f * dp))))
+                drawCircle(ringFill, rPx, c)
+                // A dashed circle is stroked and dashed on the processor every frame (the GPU draws only a plain one
+                // itself), and a small one has room for a handful of dashes anyway: under 14 dp it is drawn plain.
+                drawCircle(ringInk, rPx, c, style = if (rPx < 14f * dp) townRingSolid else townRing)
             }
             if (labels < maxLabels) {
-                val style = TextStyle(
-                    color = placeColor.copy(alpha = when (level) { 1 -> 0.92f; 2 -> 0.8f; else -> 0.7f }),
-                    fontSize = when (level) { 1 -> 11.sp; 2 -> 10.sp; else -> 9.sp },
-                    fontWeight = if (level == 1) FontWeight.SemiBold else FontWeight.Normal,
-                    shadow = if (light) null else labelShadow,
-                )
+                val style = townStyles[level - 1]
                 if (label(p.n, c + Offset(0f, max(rPx, 4f * dp) + 7f * dp), style, gapDp = if (ring) 4f else 10f)) {
                     labels++
                     if (!ring) drawCircle(placeColor.copy(alpha = 0.6f), (if (level == 1) 2.6f else 1.8f) * dp, c)
@@ -424,8 +489,129 @@ fun DrawScope.drawLandmarks(pr: MapProjection, g: GeoPaths, tm: TextMeasurer) {
         label(r.n, pr.toScreen(r.x, r.y), TextStyle(
             color = (if (light) Color(0xFF5F5066) else Color.White).copy(alpha = if (light) 0.55f else 0.42f),
             fontSize = 10.sp, fontStyle = FontStyle.Italic, textAlign = TextAlign.Center, shadow = if (light) null else labelShadow,
-        ), maxWidthPx = (onScreenPx * 0.8f).toInt())
+        ), maxWidthPx = widthStep(onScreenPx * 0.8f))
     }
+}
+
+/** The province and border lines of [drawLandmarks], stroked (the expensive part of a map's frame on a phone's GPU). */
+internal fun DrawScope.drawLandmarkLines(pr: MapProjection, g: GeoPaths) {
+    val light = MapLook.light
+    val photo = MapLook.style == "satellite"
+    val hi = pr.side > 3200f
+    val unit = 1f / pr.side
+    val dp = density
+    // the cells of the unit square the view shows (one cell of margin: a segment belongs to the cell of its middle)
+    val grid = GeoLines.GRID
+    val cu0 = (floor(-pr.left / pr.side * grid).toInt() - 1).coerceIn(0, grid - 1)
+    val cu1 = (floor((size.width - pr.left) / pr.side * grid).toInt() + 1).coerceIn(0, grid - 1)
+    val cv0 = (floor(-pr.top / pr.side * grid).toInt() - 1).coerceIn(0, grid - 1)
+    val cv1 = (floor((size.height - pr.top) / pr.side * grid).toInt() + 1).coerceIn(0, grid - 1)
+    val fewCells = (cu1 - cu0 + 1) * (cv1 - cv0 + 1) <= grid * grid / 3
+    fun lines(path: GeoLines, color: Color, widthDp: Float, dash: FloatArray? = null) = withTransform({ translate(pr.left, pr.top); scale(pr.side, pr.side, Offset.Zero) }) {
+        // The path is drawn in the unit square, so every length is divided by the side of the theater on screen.
+        // Zoomed far enough in that divides the dash intervals to zero, and Skia answers a dash of nothing with a
+        // null effect — which Compose then tries to wrap, and the window dies with "Can't wrap nullptr". A dash
+        // nobody could see is not worth a crash: below that, the line is simply drawn solid.
+        val effect = dash?.let { d ->
+            val lengths = FloatArray(d.size) { d[it] * dp * unit }
+            if (lengths.any { it > 0f } && lengths.all { it.isFinite() && it >= 0f }) PathEffect.dashPathEffect(lengths) else null
+        }
+        val stroke = Stroke(widthDp * dp * unit, pathEffect = effect)
+        // zoomed in, only the cells on screen: the rest of the theater is neither stroked nor dashed
+        if (fewCells) for (cv in cv0..cv1) for (cu in cu0..cu1) path.cells[cv * grid + cu]?.let { drawPath(it, color, style = stroke) }
+        else drawPath(path.whole, color, style = stroke)
+    }
+    // provinces: thin, dashed, faint, and only once zoomed in a little
+    if (MapLook.provinces && pr.side >= 1400f) {
+        lines(if (hi) g.provincesHi else g.provincesLo, if (light) Color(0xFF6E5D78).copy(alpha = 0.5f) else Color.White.copy(alpha = if (photo) 0.42f else 0.28f), if (photo) 1.2f else 1f, floatArrayOf(5f, 4f))
+    }
+    // international borders: a casing for contrast, then a clear line; disputed lines dashed
+    if (MapLook.borders) {
+        val casing = if (light) Color.White.copy(alpha = 0.75f) else Color.Black.copy(alpha = 0.5f)
+        val main = if (light) Color(0xFF5B3F6B) else Color(0xFFF7E7C6).copy(alpha = 0.9f)
+        lines(if (hi) g.bordersHi else g.bordersLo, casing, 4.6f)
+        lines(if (hi) g.bordersHi else g.bordersLo, main, 2.2f)
+        lines(if (hi) g.disputedHi else g.disputedLo, casing, 3.6f, floatArrayOf(7f, 5f))
+        lines(if (hi) g.disputedHi else g.disputedLo, main, 1.6f, floatArrayOf(7f, 5f))
+    }
+}
+
+/**
+ * The border and province lines kept as a picture on the GPU between frames ([drawLandmarkLines] recorded into an
+ * offscreen [layer] a margin larger than the view). A phone's GPU strokes a long line in software — a mask the size
+ * of the screen, made and uploaded again on every frame — and that was most of what was left of a pan's frame on a
+ * tablet once the labels were cached. A pan now only moves the picture; it is drawn again when the view leaves it.
+ * A zoom draws it scaled until the scale is a quarter off, and again at the exact scale once the zoom rests
+ * ([settled], bumped by the map a moment after the last change of scale). Android only: the PC and the browser
+ * (Skia) draw the lines directly.
+ */
+class LandmarkLayer(private val layer: androidx.compose.ui.graphics.layer.GraphicsLayer) {
+    init { layer.compositingStrategy = androidx.compose.ui.graphics.layer.CompositingStrategy.Offscreen }
+
+    /** bumped by the map when a zoom has come to rest */
+    var settled = 0
+    private var seenSettled = 0
+    private var key: Any? = null
+    private var side = 0f
+    private var ox = 0f
+    private var oy = 0f
+    private var w = 0
+    private var h = 0
+    private var empty = true
+
+    private data class Key(val g: GeoPaths, val style: String, val borders: Boolean, val provinces: Boolean, val density: Float, val provBand: Boolean, val hi: Boolean)
+
+    /** Draws the lines for [pr]; false when it cannot (too large a view), and the caller strokes them itself. */
+    fun draw(scope: DrawScope, pr: MapProjection, g: GeoPaths): Boolean = with(scope) {
+        if (!MapLook.borders && !(MapLook.provinces && pr.side >= 1400f)) return true
+        val k = Key(g, MapLook.style, MapLook.borders, MapLook.provinces, density, pr.side >= 1400f, pr.side > 3200f)
+        val f = if (side > 0f) pr.side / side else 0f
+        val rest = settled != seenSettled
+        seenSettled = settled
+        // the part of the theater square the view shows, in the square's pixels at the current scale
+        val vx0 = max(0f, -pr.left); val vy0 = max(0f, -pr.top)
+        val vx1 = min(pr.side, size.width - pr.left); val vy1 = min(pr.side, size.height - pr.top)
+        val covers = if (empty) vx1 <= vx0 || vy1 <= vy0 else (f * ox <= vx0 + 0.5f && f * oy <= vy0 + 0.5f && f * (ox + w) >= vx1 - 0.5f && f * (oy + h) >= vy1 - 0.5f)
+        val fresh = k == key && f in 0.8f..1.25f && covers && !(rest && f != 1f)
+        if (!fresh) {
+            if (!record(this, pr, g)) { key = null; return false }
+            key = k
+        }
+        if (empty) return true
+        val s = pr.side / side
+        val tx = pr.left + s * ox
+        val ty = pr.top + s * oy
+        if (s == 1f) {
+            // whole pixels, as the map's tiles are placed: a picture moved by a fraction of one is resampled, and blurs
+            translate(kotlin.math.round(tx), kotlin.math.round(ty)) { drawLayer(layer) }
+        } else {
+            withTransform({ translate(tx, ty); scale(s, s, Offset.Zero) }) { drawLayer(layer) }
+        }
+        true
+    }
+
+    private fun record(scope: DrawScope, pr: MapProjection, g: GeoPaths): Boolean = with(scope) {
+        val m = if (com.bmscompanion.app.data.Repo.lowMemory) 128f else 256f
+        val x0 = max(0f, -pr.left - m); val y0 = max(0f, -pr.top - m)
+        val x1 = min(pr.side, size.width - pr.left + m); val y1 = min(pr.side, size.height - pr.top + m)
+        side = pr.side
+        if (x1 <= x0 || y1 <= y0) { empty = true; return true }
+        ox = floor(x0); oy = floor(y0)
+        w = ceil(x1 - ox).toInt(); h = ceil(y1 - oy).toInt()
+        if (w > 4096 || h > 4096) { empty = true; return false }
+        empty = false
+        val p0 = MapProjection(-ox, -oy, pr.side, pr.sizeFt, pr.scale)
+        layer.record(androidx.compose.ui.unit.Density(density, fontScale), layoutDirection, IntSize(w, h)) { drawLandmarkLines(p0, g) }
+        true
+    }
+}
+
+/** A label's width allowance in steps of a sixteenth to an eighth, so a zoom reuses the label laid out a frame before (MapText). */
+private fun widthStep(px: Float): Int {
+    if (px >= 4096f) return Int.MAX_VALUE
+    var step = 16
+    while (step * 16 < px) step *= 2
+    return ((px / step).toInt() + 1) * step
 }
 
 // ------------------------------------------------------------------ controls
@@ -436,9 +622,9 @@ fun MapZoomButtons(onZoom: (Float) -> Unit, modifier: Modifier = Modifier) {
     Column(
         modifier.clip(RoundedCornerShape(12.dp)).background(Hud.Surface.copy(alpha = 0.92f)).border(1.dp, Hud.Outline.copy(alpha = 0.7f), RoundedCornerShape(12.dp)),
     ) {
-        ZoomKey("+", "Zoom in") { onZoom(1.6f) }
+        ZoomKey("+", "Zoom in") { onZoom(ZoomMath.BUTTON) }
         Box(Modifier.width(36.dp).height(1.dp).background(Hud.Outline.copy(alpha = 0.7f)))
-        ZoomKey("−", "Zoom out") { onZoom(1 / 1.6f) }
+        ZoomKey("−", "Zoom out") { onZoom(1f / ZoomMath.BUTTON) }
     }
 }
 

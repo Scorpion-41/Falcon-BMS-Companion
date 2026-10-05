@@ -1,0 +1,1 @@
+{"form":"fclsAptSchedule","roots":[{"name":"pnlSchedule","kind":"panel","winKind":"Panel","bg":"White","x":12,"y":13,"w":450,"h":675},{"name":"btnClose","kind":"button","winKind":"Button","x":387,"y":694,"w":75,"h":24,"text":"Close"},{"name":"btnSaveJpg","kind":"button","winKind":"Button","x":12,"y":694,"w":118,"h":24,"text":"Save JPG"}],"clientW":478,"clientH":726}

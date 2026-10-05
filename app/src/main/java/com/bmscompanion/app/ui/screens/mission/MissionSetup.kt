@@ -60,7 +60,11 @@ fun MissionSetupPane(onConnected: () -> Unit) {
         Masonry(minColumn = 440.dp, maxColumns = 2) {
             ConnectionCard(onConnected)
             StatusCard()
+            MissionSourceCard()
+            HostilesCard()
             TabsCard()
+            MfdSetupCard()
+            RadioLogCard()
             GuideStep(1, "Run BMS Companion on the BMS PC", Hud.Amber) {
                 Para("Install **BMS Companion for Windows** (BMS-Companion-PC.msi or the portable zip) from the project's GitHub Releases page on the PC that runs Falcon BMS.")
                 Para("It opens on its **server page** (or the full app, if you use it there too). Either way it reads Falcon BMS and serves this device.")
@@ -91,7 +95,7 @@ fun MissionSetupPane(onConnected: () -> Unit) {
                 Para("Multiplayer: the host must allow it (**g_bMPTacviewRtAllowedByServer 1**). If you set **g_sTacviewPassword**, enter the same password in the Falcon BMS settings on the PC.")
             }
             GuideStep(7, "EZBoards kneeboards", Hud.Magenta) {
-                Para("EZBoards ships with BMS 4.38 in **Tools\\EZBoards** and needs the **.NET 8 runtime**. BMS Companion finds it automatically; if you keep it elsewhere, pick the folder in its settings on the PC.")
+                Para("EZBoards is a separate tool by Logic, available from the Falcon BMS forum, and needs the **.NET 8 runtime**. BMS Companion finds it in **Tools\\EZBoards**; if you keep it elsewhere, pick the folder in its settings on the PC.")
                 Para("After PRINT, tap **Generate kneeboards** on the Boards tab (or its Dashboard card). The console runs hidden on the PC and you get a success or error message here. You can also turn on **Generate kneeboards automatically** on the PC.")
                 Para("To see the kneeboards in the cockpit, enable the 3D pilot model (Setup → Graphics → Pilot Model).")
             }

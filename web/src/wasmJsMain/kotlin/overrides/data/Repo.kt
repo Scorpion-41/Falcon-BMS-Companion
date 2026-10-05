@@ -114,6 +114,22 @@ object Repo {
 
     suspend fun geo(mapId: String): GeoLayers? = load<GeoLayers>("data/geo/$mapId.json").await()
 
+    /** One Weapon Delivery Planner page as Falcas laid it out (docs/WDP-PORT.md); the shared Repo has the same. */
+    suspend fun wdpForm(form: String): com.bmscompanion.app.data.wdp.WdpForm? =
+        load<com.bmscompanion.app.data.wdp.WdpForm>("data/wdp/$form.json").await()
+
+    /**
+     * An asset as plain text, cached like every other: the Weapon Delivery Planner engine tables and databases,
+     * which are Falcas’s own formats and parsed by the ported code rather than by the JSON serializer.
+     */
+    suspend fun text(path: String): String? {
+        @Suppress("UNCHECKED_CAST")
+        val d = cache.getOrPut("text:$path") {
+            scope.async { runCatching { open(path) }.getOrNull() }
+        } as Deferred<String?>
+        return d.await()
+    }
+
     // ---------- images ----------
     /** Browsers get full-size map tiles; the page would otherwise look soft on high-resolution screens. */
     const val lowMemory = false

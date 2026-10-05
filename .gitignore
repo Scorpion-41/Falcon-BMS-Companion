@@ -31,3 +31,11 @@ posts/
 
 # Downloaded open data used by the extractor (Natural Earth, OurAirports)
 tools/extractor/cache/
+
+# The WDP reference harness's build output (it carries absolute paths of the machine that built it)
+tools/wdpref/bin/
+tools/wdpref/obj/
+tools/wdpref/out/
+
+# Claude Code local permissions (this machine only)
+.claude/settings.local.json

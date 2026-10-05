@@ -17,8 +17,56 @@ enum class PcMode {
     APP,
 }
 
+/**
+ * How the window is drawn.
+ *
+ * Compose draws through Skia, which on Windows picks Direct3D 12 by default. That is right for anything current and
+ * wrong for a graphics chip of the sort still sitting in a perfectly serviceable office PC beside a flying rig: an
+ * older Intel HD has no D3D12 driver at all, Skia falls back to drawing every frame on the processor, and the window
+ * becomes a slide show. Those chips do have OpenGL, which Skia can use, so the choice is offered rather than guessed.
+ *
+ * [prop] is what Skiko reads out of the system properties; it has to be set before the first window is built.
+ */
+enum class PcRenderer(val label: String, val prop: String?, val note: String) {
+    AUTO("Automatic", null, "Direct3D on anything recent. The right choice unless the window is slow."),
+    OPENGL("OpenGL", "OPENGL", "For an older graphics chip — an Intel HD, or anything without Direct3D 12."),
+    SOFTWARE("Software", "SOFTWARE", "Drawn entirely on the processor. Slowest, but it works everywhere."),
+    DIRECT3D("Direct3D", "DIRECT3D", "Forced on, in case the automatic choice picks something else."),
+}
+
 /** PC program settings (in %APPDATA%\BMS Companion\pc-app.properties). */
 object PcConfig {
+    /**
+     * Which way the window is drawn. Read once at start-up by [applyRenderer] and not again: Skia builds its
+     * context with the first window, so changing this takes effect the next time BMS Companion starts.
+     */
+    var renderer by mutableStateOf(
+        runCatching { PcRenderer.valueOf(Repo.getString("pc_render") ?: "") }.getOrDefault(PcRenderer.AUTO),
+    )
+        private set
+
+    /** What was actually in force when this copy started, so the page can say a restart is needed and mean it. */
+    var rendererInUse = renderer
+        private set
+
+    fun useRenderer(r: PcRenderer) {
+        renderer = r
+        Repo.putString("pc_render", r.name)
+    }
+
+    /**
+     * Hands the chosen renderer to Skiko, before anything has drawn.
+     *
+     * Only ever sets the property when the pilot has chosen something: an unset property is what lets Skiko make its
+     * own choice, and writing "DIRECT3D" into it by default would take that away. A property already set by hand on
+     * the command line wins, so a machine that cannot start at all can be talked into starting.
+     */
+    fun applyRenderer() {
+        rendererInUse = renderer
+        val want = renderer.prop ?: return
+        if (System.getProperty("skiko.renderApi").isNullOrBlank()) System.setProperty("skiko.renderApi", want)
+    }
+
     /** Last used mode; a first start opens the server page. */
     var mode by mutableStateOf(if (Repo.getString("pc_mode") == PcMode.APP.name) PcMode.APP else PcMode.SERVER)
         private set

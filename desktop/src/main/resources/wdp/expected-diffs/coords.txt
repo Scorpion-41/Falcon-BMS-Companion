@@ -1,0 +1,20 @@
+# Latitude and longitude against Weapon Delivery Planner (--wdppagetest coords): where the Planner prints something
+# else on purpose. One fix per line: <D-number>  <labels, * = any characters>  [when <fact><op><value> && ...]
+# Labels: "coords" is FeetToCoordsBoth's whole string for a point of a real theater; lbl* are the TOSS page's labels
+# (".visible" for whether it shows them). Facts: theater (the theater's name). Any difference no line names fails.
+# The verdict on what the Planner prints is not here: the test checks every print against the latitude and longitude
+# BMS itself gives (its ACMI recordings, its AIPs) and an independent copy of the projection (sections 1-3).
+#
+# On every 1,024 km theater the Planner prints WDP's own grid, which is BMS's own latitude and longitude (within the
+# print's thousandth of a minute on 148,441 positions of BMS's own recordings and 125 of its AIP airports),
+# so nothing differs there.
+
+# D26 the Falklands (2,048 km): WDP's grid counts 1,024 km whatever the size and puts every latitude about 9 degrees
+#     north of the theater's own centre; no BMS figure for this theater has been checked, and the Planner prints its
+#     projection string (Theater.txt's transverse Mercator), south and west as sign and magnitude.
+D26  coords,lblTGT_N,lblTGT_E,lblIP_N,lblIP_E  when theater~^Falklands$
+
+# D26 Korea TvT: WDP found no terrain for it (its .tdf has no terraindir), printed no position ("00,00.000") and hid
+#     the TOSS labels; BMS flies it on KTO's terrain (Terrdata/korea), and the Planner prints BMS's grid of that
+#     terrain, the same as KTO's.
+D26  coords,lblTGT_N.visible,lblTGT_E.visible,lblIP_N.visible,lblIP_E.visible  when theater~^Korea.TvT$

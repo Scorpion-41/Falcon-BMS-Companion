@@ -7,6 +7,8 @@ import kotlinx.serialization.json.JsonElement
 @Serializable
 data class DataIndex(
     val bmsVersion: String = "",
+    /** the version of `Falcon BMS.exe` the data was read from, e.g. "4.38.1.3315"; empty in data older than 1.3.8 */
+    val bmsBuild: String = "",
     val generated: String = "",
     val theaters: List<Theater> = emptyList(),
     val curated: List<String> = emptyList(),
@@ -36,6 +38,132 @@ data class Theater(
     val mainTheater: String? = null,
     /** add-on theaters grouped under this main theater */
     val includes: List<String> = emptyList(),
+    /** what Weapon Delivery Planner reads from this theater's terrain to print lat/lon; null where it finds none */
+    val wdpTerrain: WdpTerrain? = null,
+    /** the terrain BMS flies this theater on, from which its latitude and longitude come; null where there is none */
+    val projection: TheaterProjection? = null,
+    /** the theater's PPT type table (`Campaign/Ppt.ini`) in data/ppt, read with [pptTable]; null where it has none */
+    val pptSet: String? = null,
+    /** whether the extractor could build everything the Planner reads for this theater; null in older data */
+    val planner: PlannerReadiness? = null,
+)
+
+/**
+ * The terrain BMS flies a theater on, as its `NewTerrain` folder describes it (`tools/extractor/src/projection.mjs`):
+ * `Theater.txt`'s size, centre and projection string, and the length of `Heightmaps/HeightMap.raw`.
+ *
+ * **The latitude and longitude BMS itself gives** (its ACMI recordings, its AIPs' "BMS coord") come from [sizeKm],
+ * [centerLat]/[centerLon] and [heightmapBytes] alone, as Weapon Delivery Planner's grid computes them
+ * (`WdpCoords.coordData`, D26): metres are feet ÷ 3.28084, the false origin is the centre's forward projection less
+ * half the theater, and a point's northing is one heightmap sample (31.25 m) more.
+ *
+ * **The projection string** (`+proj=tmerc +lon_0 +k +x_0 +y_0`, WGS84, metres, [ftPerM] 3.27998) is what the maps,
+ * towns and ground charts were drawn on. Theater feet are x north and y east:
+ *
+ *     easting  = y ft / ftPerM - x0      northing = x ft / ftPerM - y0      (metres about lon0, scale k0)
+ *
+ * It is not where BMS says a point is: on every theater checked it lies 140-220 m from BMS's own figure on average (up to 290 m), never within 2 m. The Planner
+ * prints with it only where BMS's grid is not established (the Falklands' 2,048 km). [proj] is the file's own
+ * string, kept so a reader that meets a parameter this class does not carry can refuse rather than print a wrong
+ * position.
+ */
+@Serializable
+data class TheaterProjection(
+    val type: String = "tmerc",
+    val ellps: String? = "WGS84",
+    val lat0: Double = 0.0,
+    val lon0: Double = 0.0,
+    val k0: Double = 0.9996,
+    val x0: Double = 0.0,
+    val y0: Double = 0.0,
+    /** feet per metre the maps lay the projection string out at: 3.27998 (a campaign kilometre); BMS's own lat/lon uses 3.28084 */
+    val ftPerM: Double = 3.27998,
+    val sizeKm: Double = 1024.0,
+    val centerLat: Double? = null,
+    val centerLon: Double? = null,
+    val proj: String = "",
+    /** the length of the terrain's `NewTerrain/Heightmaps/HeightMap.raw` (samples a side = sqrt(bytes / 2)); null in older data */
+    val heightmapBytes: Long? = null,
+)
+
+/**
+ * What the extractor could build of what the Planner reads for one theater. [missing] names each part it could not
+ * ("airports", "radio", "airfields", "map", "projection", "ppt"); `tools/extractor/src/plannercheck.mjs` fails
+ * while any theater's list is not empty, which is how a new theater is known to need no code change.
+ */
+@Serializable
+data class PlannerReadiness(val ok: Boolean = false, val missing: List<String> = emptyList())
+
+/**
+ * One row of a theater's `Campaign/Ppt.ini`, the PPT types BMS's DTC offers: `SA2 164055.12 SA-2`,
+ * `AWC 0.1 AWACS`. [radiusFt] is the ring BMS draws when the cartridge gives none (0.1 = a point, not a threat).
+ * Rows come in the file's order, repeats and "---" separator rows included, because that is the list the pilot
+ * sees in BMS.
+ */
+@Serializable
+data class PptType(val code: String, val radiusFt: Double = 0.0, val name: String = "")
+
+/** A theater's PPT type table ([Theater.pptSet]); empty when it has none. */
+suspend fun Repo.pptTable(set: String?): List<PptType> {
+    if (set.isNullOrBlank()) return emptyList()
+    val text = text("data/ppt/$set.json") ?: return emptyList()
+    return runCatching { json.decodeFromString(kotlinx.serialization.builtins.ListSerializer(PptType.serializer()), text) }.getOrDefault(emptyList())
+}
+
+/**
+ * BMS's own defaults for the cartridge pages, `User/Config/{EWS,HARM,IFF,MFD}_Def.ini`, as the PC reads them
+ * (`GET /api/cfg/defaults`, read only: these files belong to BMS and are never written). [available] is false when
+ * the PC has no BMS install; a file that is not there is left out of [files] and named in [error].
+ */
+@Serializable
+data class BmsDefaults(
+    val available: Boolean = false,
+    val files: List<BmsDefaultsFile> = emptyList(),
+    val error: String? = null,
+) {
+    companion object {
+        /** Asks the PC; null when it cannot be reached or answers something else. */
+        suspend fun fetch(): BmsDefaults? {
+            val bytes = com.bmscompanion.app.data.mission.MissionLink.fetchBytes("/api/cfg/defaults") ?: return null
+            return runCatching { Repo.json.decodeFromString(serializer(), bytes.decodeToString()) }.getOrNull()
+        }
+    }
+}
+
+/**
+ * One `*_Def.ini`: its name ("HARM_Def.ini"), its sections in the file's order ("MFD", "Bullseye": MFD_Def.ini
+ * holds two) and every key with the section it sits in, also in the file's order.
+ */
+@Serializable
+data class BmsDefaultsFile(
+    val name: String,
+    val sections: List<String> = emptyList(),
+    val values: List<BmsDefaultsValue> = emptyList(),
+) {
+    /** The value of [key] (case as BMS ignores it), in [section] when one is named, else in any section. */
+    fun value(key: String, section: String? = null): String? = values.firstOrNull {
+        it.key.equals(key, ignoreCase = true) && (section == null || it.section.equals(section, ignoreCase = true))
+    }?.value
+}
+
+@Serializable
+data class BmsDefaultsValue(val section: String, val key: String, val value: String)
+
+/**
+ * The raw figures Weapon Delivery Planner sets its map projection up from (`fclsMain.InitNewTerrain` and
+ * `InitTransverseMercator`), as the files in the theater's `NewTerrain` folder give them; the arithmetic is the
+ * port's (`data/wdp/WdpCoords.kt`). Written by `tools/extractor/src/wdpterrain.mjs`.
+ */
+@Serializable
+data class WdpTerrain(
+    /** the length of `Heightmaps/HeightMap.raw` (WDP reads nothing else of it); null when there is none */
+    val heightmapBytes: Long? = null,
+    /** whether `Theater.txt` is there at all */
+    val theaterTxt: Boolean = false,
+    /** `Theater.txt`'s "Theater size in KM", "Center latitude" and "Center longitude"; null where it has none */
+    val sizeKm: Double? = null,
+    val centerLat: Double? = null,
+    val centerLon: Double? = null,
 )
 
 // ---------- aircraft ----------
@@ -347,6 +475,13 @@ data class ChecklistItem(
     val title: String? = null,
     val columns: List<String> = emptyList(),
     val rows: List<List<String>> = emptyList(),
+    /**
+     * A cockpit light (type "light"): "warning", "caution" or "indicator" — what colour its lamp is drawn in. The
+     * light's legend is [title], what it means [text], what to do [action], where the paper checklist has it [note].
+     */
+    val panel: String? = null,
+    /** Sections of the same checklist holding the full procedure, opened with a tap (one per engine where they differ). */
+    val refs: List<String> = emptyList(),
 )
 
 // ---------- HARM / RWR ----------

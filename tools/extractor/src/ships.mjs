@@ -1,17 +1,19 @@
 /**
  * Carriers, drawn as ships.
  *
- * BMS gives a carrier no feature list, no model and no outline — only its deck points, and those run well past the
- * bow because the same list carries the approach path (Hermes' points span 1,867 ft against a real ship of 744).
- * Its "runways" are no better: the Carl Vinson's longest is 2,805 ft against a 1,094 ft ship, and two of the others
- * are a catapult and a rectangle of no width at all. Nothing worth drawing can be traced from any of it.
+ * **Each ship is drawn from its own BMS 3D model** (`tools/curated/carriers.json`, `decks`). A carrier's deck
+ * points in `ObjectiveRelatedData` are in the frame of the ship's model — east is the model's starboard, north its
+ * bow, and the origin is the model's — so a deck laid in that frame with no turning and no offset puts every BMS
+ * spot, every launch point and the jet itself exactly where the sim has them. The Vinson's angled-deck corner, its
+ * landing centre line, both bow launch points and its ramp spots all land on model 1844 within a few feet; the Queen
+ * Elizabeth's runway corners are her model's port deck corners within two. What each deck carries — the outline
+ * with every step and sponson, the structures below the deck edge, the landing area and its lines, the wires, the
+ * catapults and their deflectors, the lifts, the ski jump, the islands, the hull number — is measured from the model
+ * (outline and paint) or placed from a published figure, and `_src` on each deck says which.
  *
- * So the deck is **built** from the published dimensions of the real ship (`tools/curated/carriers.json`): the
- * flight-deck outline with its angled-deck sponson, the landing area at its real angle, the catapults, the ski jump
- * where there is one, and the island. What BMS supplies is the one thing only BMS knows — **which ramp spots there
- * are and what they are numbered** — and each of those is matched to the nearest place a real deck parks an
- * aircraft, so the numbering keeps the meaning it has in the sim while the chart stops looking like a scatter of
- * boxes at random angles.
+ * A class with no deck falls back on the old way: a deck **built** from the published dimensions of the real ship,
+ * laid on the axis its parking spots give ([bestFrame]). BMS's spot numbering is never drawn on a ship either way —
+ * a carrier steams into wind, and the runway it names and the numbers on its deck turn with it.
  *
  * Everything comes back in the field's own feet, ready to draw.
  */
@@ -22,7 +24,15 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const table = JSON.parse(fs.readFileSync(path.resolve(HERE, '../../curated/carriers.json'), 'utf8'));
 
-/** The class whose deck to draw, by name. */
+/**
+ * The class whose deck to draw, by name — the field's name and its full name together, specific ships first.
+ *
+ * BMS's Falklands "HMS CAUSEWAY" is the Wasp-class LHD renamed (same model, same deck data), its "HMS ARC ROYAL" is
+ * the 1970s R09 with an angled deck and catapults rather than the Invincible-class ship, and "Carrier Wasp" is LHD-2
+ * only by its full name ("US LHD 2 - WASP"). Israel's "Carrier CVN-70 Vinson" once carried the full name "Chinese
+ * Carrier - CV-16 Liaoning" (its Stations+Ils.dat gives the Vinson's campaign ID twice: airports.mjs stationFor) with the
+ * Vinson's own deck data; the Vinson entries still come before the Liaoning's, so a name that mixes the two is the Vinson.
+ */
 export function carrierClass(name) {
   const up = (name || '').toUpperCase();
   for (const c of table.classes) {
@@ -195,17 +205,91 @@ function frameFor(cls, ue, un, points, all, c0) {
   };
 }
 
+// ---------------------------------------------------------------- a deck from its own model
+
+/** [along, across] in the model's frame to [east, north] in the field's: the bow is north, starboard east. */
+const fieldPt = ([a, c]) => [Math.round(c), Math.round(a)];
+const flatRing = (pts) => pts.flatMap(fieldPt);
+
+/** Where a line square across the deck at [along] crosses a ring: the ends of a ski jump's contour, say. */
+function acrossRing(ring, along) {
+  const xs = [];
+  for (let i = 0; i < ring.length; i++) {
+    const [a0, c0] = ring[i], [a1, c1] = ring[(i + 1) % ring.length];
+    if ((a0 <= along) !== (a1 <= along)) xs.push(c0 + ((along - a0) / (a1 - a0)) * (c1 - c0));
+  }
+  return xs.length >= 2 ? [Math.min(...xs), Math.max(...xs)] : null;
+}
+
+/**
+ * One deck, as the marks the chart draws, in the order it draws them: the structures below the deck edge first,
+ * then everything painted on the deck, then the islands standing on it.
+ *
+ * Each mark is { k, p } with [p] east,north pairs in field feet; a circle or a number is its middle, with [r] its
+ * radius or height in feet and [t] the text. See AfDeckMark in the app for what each kind looks like.
+ */
+function deckMarks(d, cls) {
+  const marks = [];
+  const put = (k, pts, extra = {}) => marks.push({ k, p: pts.flatMap(fieldPt), ...extra });
+  for (const r of d.structures || []) put('edge', r);
+  if (d.lane) put('lane', d.lane);
+  for (const l of d.lifts || []) put(l.est ? 'lift?' : 'lift', l.p);
+  for (const h of d.hatches || []) put('hatch', h);
+  if (d.ski) {
+    put('ski', d.ski.p);
+    for (const a of d.ski.steps || []) {
+      const x = acrossRing(d.ski.p, a);
+      if (x) put('step', [[a, x[0] + 2], [a, x[1] - 2]]);
+    }
+  }
+  for (const l of d.lines || []) put(l.k, l.p);
+  for (const w of d.wires || []) put('wire', w);
+  for (const c of d.cats || []) {
+    if (c.jbd) put('jbd', c.jbd);
+    if (c.track) put('cat', c.track);
+  }
+  for (const sp of d.spots || []) put(sp.tee ? 'tee' : 'spot', [sp.p], { r: sp.r || 15, ...(sp.t ? { t: sp.t } : {}) });
+  // the ship's own hull number where the class shares a deck, or the one the deck's paint carries (the Liaoning's 16)
+  const number = cls.number ?? d.number;
+  if (number && d.numberAt) put('text', [d.numberAt.p], { r: d.numberAt.ft, t: number });
+  for (const i of d.islands || []) put('island', i);
+  for (const q of d.parts || []) put('part', q);
+  return marks;
+}
+
+/** The ship drawn from its own model: nothing is fitted, because BMS's deck points are already in its frame. */
+function modelShip(cls, d) {
+  const centre = (d.lines || []).find((l) => l.k === 'ydash' || l.k === 'dash');
+  const cats = (d.cats || []).filter((c) => c.track).map((c) => c.track.flatMap(fieldPt));
+  return {
+    cls: cls.name,
+    model: d.model || '',
+    tone: d.tone || 0,
+    skiDeg: d.skiDeg ?? null,
+    hull: flatRing(d.outline),
+    strip: d.lane ? flatRing(d.lane) : [],
+    stripLine: centre ? centre.p.flatMap(fieldPt) : [],
+    cats,
+    ski: d.ski ? flatRing(d.ski.p) : [],
+    islands: (d.islands || []).map(flatRing),
+    marks: deckMarks(d, cls),
+  };
+}
+
 // ---------------------------------------------------------------- putting it together
 
 /**
  * The deck of one ship, in the field's own feet.
  *
- * [points] are BMS's own ramp spots (with their numbers), [all] every deck point it has, [courseDeg] the heading
+ * [name] is the field's name and full name; a class with a deck of its own is drawn from it and needs nothing else.
+ * For one without, [points] are BMS's own ramp spots (with their numbers), [all] every deck point it has, [courseDeg] the heading
  * of its longest strip, which is only used to decide which end is the bow.
  */
 export function shipShapes(name, points, all = points, courseDeg = null) {
-  if (!points.length) return null;
   const cls = carrierClass(name);
+  const deck = cls.deck && table.decks?.[cls.deck];
+  if (deck) return modelShip(cls, deck);
+  if (!points.length) return null;
   const f = bestFrame(cls, points, all);
 
   // Which way the bow points. A measured axis has no sign, so it comes from the deck's own course: a carrier

@@ -24,6 +24,13 @@
 #    closes the running app, which would otherwise be holding the files, one clears the runtime files that copy leaves
 #    behind (its lock and port files, and the update cache) while keeping every setting the pilot made, and one clears
 #    any BMS Companion shortcut already sitting on a desktop so installing again cannot leave a second icon behind.
+#
+# 4. The version on every page. WiX's dialogs name the product as [ProductName] ("Welcome to the [ProductName] Setup
+#    Wizard", "[ProductName] Setup" in every title bar) and jpackage sets it to the bare name, so nothing said which
+#    version was being installed. ProductName becomes "BMS Companion <ProductVersion>" (the version jpackage wrote,
+#    which is AppVersion.kt's NAME), which is also the name Installed apps shows. Nothing else in the package reads
+#    ProductName — the folders, shortcuts and registry keys are literal — and an upgrade is found by the UpgradeCode,
+#    never by the name, so an installed copy under the old name is still replaced.
 param(
     [Parameter(Mandatory = $true)][string]$Msi,
     [Parameter(Mandatory = $true)][string]$Banner,
@@ -189,6 +196,22 @@ Add-Action 'JpTidyRuntimeFiles' 'cmd.exe /c del /q /f "%APPDATA%\BMS Companion\a
 # a profile whose desktop OneDrive has taken over — is cleared here, and the install then puts exactly one back.
 Add-Action 'JpRemoveOldShortcuts' 'cmd.exe /c del /q "%PUBLIC%\Desktop\BMS Companion.lnk" "%USERPROFILE%\Desktop\BMS Companion.lnk" "%OneDrive%\Desktop\BMS Companion.lnk"' 1470
 
+# ---------------- 5. the version in the installer's own words ----------------
+function Get-Property($name) {
+    $view = Invoke-Sql "SELECT Value FROM Property WHERE Property = '$name'" $null
+    $rec = Invoke-Com $view 'Fetch' 'InvokeMethod' $null
+    $value = if ($null -ne $rec) { Invoke-Com $rec 'StringData' 'GetProperty' @(1) } else { $null }
+    Invoke-Com $view 'Close' 'InvokeMethod' $null | Out-Null
+    return $value
+}
+$productVersion = Get-Property 'ProductVersion'
+if ($productVersion -notmatch '^\d+\.\d+\.\d+$') { throw "the installer's ProductVersion is not a version: $productVersion" }
+$productName = Get-Property 'ProductName'
+if (-not $productName) { throw "the installer has no ProductName" }
+# the same MSI can reach this script twice: append the version once
+if (-not $productName.EndsWith(" $productVersion")) { $productName = "$productName $productVersion" }
+Set-Property 'ProductName' $productName
+
 Invoke-Com $db 'Commit' 'InvokeMethod' $null | Out-Null
 
 # ---------------- read it all back, so a silent no-op cannot pass for success ----------------
@@ -252,3 +275,13 @@ $si = Invoke-Com $db 'SummaryInformation' 'GetProperty' @(0)   # through the ope
 $wordCount = Invoke-Com $si 'Property' 'GetProperty' @(15)
 if ($wordCount -band 8) { throw "the package is built per user (Word Count $wordCount) and cannot install for the machine: set perUserInstall = false" }
 Write-Host "installer upgrade: installs for the machine (ALLUSERS=1), and asks for consent by itself"
+
+# the version the dialogs show: ProductName, and the welcome page that quotes it
+$shownName = Get-Property 'ProductName'
+if (-not $shownName.EndsWith(" $productVersion")) { throw "the installer's ProductName does not carry the version: $shownName" }
+$view = Invoke-Sql "SELECT Text FROM Control WHERE Dialog_ = 'WelcomeDlg' AND Control = 'Title'" $null
+$rec = Invoke-Com $view 'Fetch' 'InvokeMethod' $null
+$welcome = if ($null -ne $rec) { Invoke-Com $rec 'StringData' 'GetProperty' @(1) } else { '' }
+Invoke-Com $view 'Close' 'InvokeMethod' $null | Out-Null
+if ($welcome -notmatch '\[ProductName\]') { throw "the welcome page does not name the product: $welcome" }
+Write-Host "installer version: the dialogs say `"$(($welcome -replace '\{[^}]*\}', '') -replace '\[ProductName\]', $shownName)`" and `"$shownName Setup`""

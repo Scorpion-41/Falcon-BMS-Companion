@@ -42,6 +42,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bmscompanion.app.data.mission.Live
+import com.bmscompanion.app.data.mission.MfdKey
 import com.bmscompanion.app.data.mission.MissionLink
 import com.bmscompanion.app.ui.components.Masonry
 import com.bmscompanion.app.ui.components.SectionCard
@@ -53,6 +54,16 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.math.cos
 import kotlin.math.sin
+import androidx.compose.runtime.rememberCoroutineScope
+import com.bmscompanion.app.ui.components.RttView
+import com.bmscompanion.app.ui.components.rememberRttState
+import com.bmscompanion.app.ui.components.isMedium
+import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
 
 /*
  * There is no Flight pane any more. Ownship, the RWR scope, the DED and the picture were each a Dashboard card as
@@ -262,3 +273,8 @@ fun DedPanel(l: Live) {
     }
 }
 
+
+// The MFD bezels and their card live in MissionMfd.kt.
+
+@Composable
+private fun NotFlyingHere() = Text("Not in 3D", color = Hud.TextDim, fontSize = 12.sp)

@@ -110,6 +110,7 @@ fun ServerScreen(onOpenApp: () -> Unit, onOpenAbout: () -> Unit, onUseAsClient: 
                 BmsSettingsCard()
                 ClientHintCard(onUseAsClient)
                 ActivityCard(status)
+                GraphicsCard()
                 StartupCard()
             }
             if (narrow) {

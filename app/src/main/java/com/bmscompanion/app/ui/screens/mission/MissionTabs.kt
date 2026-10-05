@@ -1,5 +1,6 @@
 package com.bmscompanion.app.ui.screens.mission
 
+import com.bmscompanion.app.data.mission.ownFlight
 import androidx.compose.foundation.background
 import com.bmscompanion.app.ui.theme.LocalExtra
 import com.bmscompanion.app.data.mission.LinkState
@@ -28,8 +29,12 @@ import androidx.compose.material.icons.filled.AltRoute
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.Dashboard
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.Headset
+import androidx.compose.material.icons.filled.Radio
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Radar
 import androidx.compose.material.icons.filled.Settings
@@ -44,6 +49,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.LaunchedEffect
+import com.bmscompanion.app.data.mission.MissionMode
 import com.bmscompanion.app.ui.components.MapFocus
 import com.bmscompanion.app.ui.components.MapMission
 import com.bmscompanion.app.ui.components.mapIdOf
@@ -90,8 +97,37 @@ enum class MissionTab(val label: String, val icon: ImageVector) {
     AWACS("AWACS", Icons.Default.Radar),
     BRIEF("Briefing", Icons.Default.Description),
     COMMS("Comms", Icons.Default.Headset),
+
+    /**
+     * The radio calls BMS subtitled, read from its debug log on the PC (1.3.8, `MissionRadio.kt`). Shown by itself while
+     * the PC has that log, or always when the pilot asks ([RadioTabPrefs]): without BMS's debug mode it has nothing to show.
+     */
+    RADIO("Radio", Icons.Default.Radio),
     BOARDS("Kneeboards", Icons.Default.Assignment),
+
+    /**
+     * The one page that changes Falcon BMS's own files rather than reading them: the weather it flies.
+     *
+     * It was briefly an "Editor" tab holding a cartridge editor and an attack planner as well. Those were the app
+     * re-making Weapon Delivery Planner, badly and for years; the planner itself is now brought into the app on
+     * the Kneeboards page instead, and this is what is left — which is a weather page, so it says so.
+     */
+    WEATHER("Weather", Icons.Default.Cloud),
+
+    /**
+     * Weapon Delivery Planner, Falcas's program ported into the app (docs/WDP-PORT.md): the same pages,
+     * read out of his own layout, running on the phone, the tablet, the browser and the PC alike. It works in **WDP
+     * mode** only: in EZBoards mode its tab is greyed out and shows [PlannerLockedPane] (MissionSource.kt).
+     */
+    PLANNER("Planner", Icons.Default.Calculate),
 }
+
+/**
+ * The Mission views that show the mission itself, and so show [NotPopulatedPane] instead in WDP mode before the first
+ * Populate from Planner: nothing of the printed briefing may stand in for the Planner's flight. Kneeboards keeps its
+ * page (it has the Populate button beside the greyed GENERATE NOW); Weather and the Planner are not views of it.
+ */
+val missionViewTabs = setOf(MissionTab.DASH, MissionTab.MAP, MissionTab.TAXI, MissionTab.AWACS, MissionTab.BRIEF, MissionTab.COMMS)
 
 /**
  * The VR board setup, set by the PC entry point. Null everywhere else. It is a section of the Kneeboards page rather
@@ -120,10 +156,13 @@ object MissionTabPrefs {
     var showConfig: Boolean
         get() = config == 1
         set(v) { config = if (v) 1 else 0; Repo.putInt(CONFIG_KEY, config) }
+
 }
 
 /** The tabs this build actually has. */
-val missionTabs: List<MissionTab> get() = MissionTab.entries.filter { it != MissionTab.AWACS || MissionTabPrefs.showAwacs }
+val missionTabs: List<MissionTab> get() = MissionTab.entries.filter {
+    (it != MissionTab.AWACS || MissionTabPrefs.showAwacs) && (it != MissionTab.RADIO || RadioTabPrefs.shown)
+}
 
 
 /**
@@ -137,9 +176,19 @@ data class MissionEnv(val nav: NavHostController, val theater: Theater?, val set
 
 @Composable
 fun rememberMissionEnv(nav: NavHostController): MissionEnv {
-    val info by MissionLink.info.collectAsState()
-    val live by MissionLink.live.collectAsState()
-    val theaterName = info?.bms?.theater ?: live?.theater
+    val infoState = MissionLink.info.collectAsState()
+    val liveState = MissionLink.live.collectAsState()
+    val missionState = MissionLink.mission.collectAsState()
+    // Only the theater's name is read here, through derivedStateOf: this runs in the Mission section's own scope, and a
+    // plain read of the live readings (four a second) recomposed the whole section, the Planner's page included.
+    val theaterName by androidx.compose.runtime.remember {
+        androidx.compose.runtime.derivedStateOf {
+            val info = infoState.value
+            // WDP mode's snapshot is of the save's own theater, which need not be the one Falcon BMS is set to
+            val populatedIn = missionState.value?.populated?.theater?.takeIf { info.wdpMode && it.isNotBlank() }
+            populatedIn ?: info?.bms?.theater ?: liveState.value?.theater
+        }
+    }
     val theater by produceState<Theater?>(null, theaterName) {
         val all = Repo.index().theaters
         value = resolveTheater(all, theaterName) ?: all.firstOrNull { it.id == Repo.selectedTheater.value }
@@ -171,9 +220,10 @@ private fun PublishMapMission(env: MissionEnv) {
             stpts.forEach { add(it.x!! to it.y!!) }
             mission?.dtc?.weaponTargets?.forEach { add(it.x to it.y) }
             preplannedThreats(mission, live).forEach { add(it.x to it.y) }
-            listOf(bases.departure, bases.arrival, bases.alternate).mapNotNull { matchAirport(env.set, it) }.forEach { add(it.x to it.y) }
+            // a ship has no fixed position (BMS keeps it at the theater corner), so it has no place in the frame
+            listOf(bases.departureIn(env.set), bases.arrivalIn(env.set), bases.alternateIn(env.set)).filterNotNull().filterNot(::afloat).forEach { add(it.x to it.y) }
         }
-        val ownFlight = b?.`package`?.firstOrNull { it.primary } ?: b?.`package`?.firstOrNull { f -> b.overview.flight?.let { f.callsign.equals(it, true) } == true }
+        val ownFlight = b?.ownFlight()
         val targetText = listOfNotNull(b?.overview?.targetArea, b?.overview?.mission, b?.overview?.packageMission, ownFlight?.target).joinToString("\n")
         val targets = (stpts.filter { it.isTarget }.map { it.x!! to it.y!! } + mission?.dtc?.weaponTargets.orEmpty().map { it.x to it.y }).distinct()
         MapMission(env.theater?.mapId ?: mapIdOf(env.theater?.map), text, points, stpts.filterNot { it.isAlternate }.map { it.x!! to it.y!! }, targetText, targets)
@@ -196,23 +246,36 @@ fun saveMissionTab(t: MissionTab) = Repo.putString("mission_tab", t.name)
 @Composable
 fun MissionTabStrip(tab: MissionTab, onTab: (MissionTab) -> Unit) {
     val medium = isMedium()
+    val info by MissionLink.info.collectAsState()
+    // the Planner is greyed out in EZBoards mode on every device; a press on it shows why, and the way to WDP mode
+    val plannerLocked = !info.wdpMode
     Row(
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         missionTabs.forEach { t ->
             val sel = t == tab
+            val locked = t == MissionTab.PLANNER && plannerLocked
+            val ink = when { locked -> Hud.TextFaint.copy(alpha = 0.7f); sel -> Hud.Amber; else -> Hud.TextDim }
             Row(
                 Modifier.clip(RoundedCornerShape(10.dp))
-                    .background(if (sel) Hud.Amber.copy(alpha = 0.16f) else Hud.Surface)
-                    .border(1.dp, if (sel) Hud.Amber.copy(alpha = 0.6f) else Hud.Outline.copy(alpha = 0.6f), RoundedCornerShape(10.dp))
+                    .background(if (sel && !locked) Hud.Amber.copy(alpha = 0.16f) else if (locked) Hud.Surface.copy(alpha = 0.5f) else Hud.Surface)
+                    .border(
+                        1.dp,
+                        if (sel && !locked) Hud.Amber.copy(alpha = 0.6f) else if (sel) Hud.TextFaint.copy(alpha = 0.6f) else Hud.Outline.copy(alpha = if (locked) 0.35f else 0.6f),
+                        RoundedCornerShape(10.dp),
+                    )
                     .clickable { onTab(t) }
                     .padding(horizontal = if (medium) 14.dp else 11.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(t.icon, null, tint = if (sel) Hud.Amber else Hud.TextDim, modifier = Modifier.size(17.dp))
+                Icon(t.icon, null, tint = ink, modifier = Modifier.size(17.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(t.label, color = if (sel) Hud.Amber else Hud.TextDim, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text(t.label, color = ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                if (locked) {
+                    Spacer(Modifier.width(5.dp))
+                    Icon(Icons.Default.Lock, "WDP mode only", tint = ink, modifier = Modifier.size(13.dp))
+                }
             }
         }
     }
@@ -225,15 +288,36 @@ fun MissionTabStrip(tab: MissionTab, onTab: (MissionTab) -> Unit) {
 @Composable
 fun MissionTabContent(tab: MissionTab, env: MissionEnv, onTab: (MissionTab) -> Unit) {
     val mapState = rememberMapState()
-    var mapSel by remember { mutableStateOf<MapSel?>(null) }
+    // a new mission or a switch of mode (MissionEpoch) clears the selection and the AWACS tools of the last one
+    var mapSel by remember(MissionEpoch.n) { mutableStateOf<MapSel?>(null) }
     var focusVersion by remember { mutableIntStateOf(0) }
-    val awacs = remember { AwacsState() }
+    val awacs = remember(MissionEpoch.n) { AwacsState() }
+    val info by MissionLink.info.collectAsState()
+    val mission by MissionLink.mission.collectAsState()
     val showOnMap: (MapSel, Double, Double) -> Unit = { sel, x, y ->
         mapSel = sel
         mapState.flyTo(x, y, maxOf(mapState.scale, 5f))
         focusVersion++
         onTab(MissionTab.MAP)
     }
+    // EZBoards mode: a switch into it lands on the Briefing (MissionTabRequest), and so does a section that opens on
+    // the greyed-out Planner; a press on the Planner afterwards still shows why it is greyed (PlannerLockedPane)
+    val pendingTab = MissionTabRequest.pending
+    val mode = info?.mission?.mode
+    // the Radio tab shows by itself while the PC has BMS's debug log (RadioTabPrefs)
+    LaunchedEffect(info?.radio?.state) { com.bmscompanion.app.data.mission.RadioFeed.noteInfo(info) }
+    var openChecked by remember { mutableStateOf(false) }
+    LaunchedEffect(pendingTab, mode) {
+        if (com.bmscompanion.app.ui.Kneeboard.on) return@LaunchedEffect
+        val want = MissionTabRequest.take()
+        if (want != null && want != tab) onTab(want)
+        else if (!openChecked && mode != null) {
+            openChecked = true
+            if (mode == MissionMode.EZBOARDS && tab == MissionTab.PLANNER) onTab(MissionTab.BRIEF)
+        }
+    }
+    // WDP mode before the first Populate: one empty state on every view of the mission, nothing else
+    if (tab in missionViewTabs && mission?.awaitingPopulate == true) { NotPopulatedPane(onTab); return }
     when (tab) {
         MissionTab.DASH -> MissionDashboardPane(env, mapState, mapSel, { mapSel = it }, onOpenTab = onTab)
         MissionTab.MAP -> MissionMapPane(env, mapState, mapSel, { mapSel = it }, onOpenTab = onTab)
@@ -241,7 +325,10 @@ fun MissionTabContent(tab: MissionTab, env: MissionEnv, onTab: (MissionTab) -> U
         MissionTab.AWACS -> MissionAwacsPane(env, awacs, onOpenTab = onTab)
         MissionTab.BRIEF -> MissionBriefingPane(env, showOnMap)
         MissionTab.COMMS -> MissionCommsPane(env)
-        MissionTab.BOARDS -> MissionBoardsPane(env, onSetup = { env.nav.go(Routes.SETUP) })
+        MissionTab.RADIO -> MissionRadioPane(env)
+        MissionTab.BOARDS -> MissionBoardsPane(env, onSetup = { env.nav.go(Routes.SETUP) }, onOpenTab = onTab)
+        MissionTab.WEATHER -> com.bmscompanion.app.ui.screens.editor.WeatherEditorPane(env)
+        MissionTab.PLANNER -> if (info.wdpMode) com.bmscompanion.app.ui.screens.wdp.WdpPane(env, onOpenTab = onTab) else PlannerLockedPane()
     }
 }
 

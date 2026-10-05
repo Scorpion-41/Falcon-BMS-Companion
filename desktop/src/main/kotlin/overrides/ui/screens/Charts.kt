@@ -71,8 +71,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.rotate
-import androidx.compose.ui.input.pointer.PointerEventType
-import androidx.compose.ui.input.pointer.onPointerEvent
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -89,11 +87,12 @@ import com.bmscompanion.app.ui.components.AssetImage
 import com.bmscompanion.app.ui.components.BmsTopBar
 import com.bmscompanion.app.ui.components.LoadingBox
 import com.bmscompanion.app.ui.components.SectionCard
+import com.bmscompanion.app.ui.components.ZoomMath
+import com.bmscompanion.app.ui.components.wheelZoom
 import com.bmscompanion.app.ui.go
 import com.bmscompanion.app.ui.theme.Hud
 import kotlin.math.abs
 import kotlin.math.min
-import kotlin.math.pow
 
 // PC version of app/.../ui/screens/Charts.kt: same screens, with mouse-wheel zoom and drag to pan.
 
@@ -269,10 +268,8 @@ private fun PageKey(icon: ImageVector, description: String, enabled: Boolean, on
     ) { Icon(icon, description, tint = if (enabled) Hud.Amber else Hud.TextFaint, modifier = Modifier.size(30.dp)) }
 }
 
-/** Zoom: how far the page is allowed in, how far one wheel notch and one button press take it, and how it gets there. */
+/** Zoom: how far the page is allowed in, and how it gets there (a wheel notch and a button press are ZoomMath's). */
 private const val MAX_ZOOM = 8f
-private const val WHEEL_STEP = 1.07f
-private const val BUTTON_STEP = 1.55f
 private val ZOOM_SPRING = spring<Float>(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow)
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -308,12 +305,17 @@ fun ZoomableBitmap(b: Bitmap, modifier: Modifier, background: Color = Color.Whit
         val ph = if (sideways) b.width else b.height
         val fit = min(w / pw, h / ph)
         // zooming about a point leaves whatever is under that point where it is; back at 1x the page sits centred again
+        // A smooth step is built on where the page is already going, not where the spring has got to, so wheel
+        // notches that come quicker than it settles add up instead of being lost; a finger works from where it is.
         fun zoomAbout(p: Offset, to: Float, smooth: Boolean, by: Offset = Offset.Zero) {
+            val z0 = if (smooth) zoom.targetValue else zoom.value
+            val x0 = if (smooth) panX.targetValue else panX.value
+            val y0 = if (smooth) panY.targetValue else panY.value
             val ns = to.coerceIn(1f, MAX_ZOOM)
             val c = Offset(p.x - w / 2, p.y - h / 2)
-            val f = ns / zoom.value
-            val nx = if (ns <= 1f) 0f else c.x - (c.x - (panX.value + by.x)) * f
-            val ny = if (ns <= 1f) 0f else c.y - (c.y - (panY.value + by.y)) * f
+            val f = ns / z0
+            val nx = if (ns <= 1f) 0f else c.x - (c.x - (x0 + by.x)) * f
+            val ny = if (ns <= 1f) 0f else c.y - (c.y - (y0 + by.y)) * f
             scope.launch {
                 if (!smooth) { zoom.snapTo(ns); panX.snapTo(nx); panY.snapTo(ny) }
                 else {
@@ -325,12 +327,8 @@ fun ZoomableBitmap(b: Bitmap, modifier: Modifier, background: Color = Color.Whit
         }
         Canvas(
             Modifier.fillMaxSize()
-                .onPointerEvent(PointerEventType.Scroll) { e ->
-                    val ch = e.changes.firstOrNull() ?: return@onPointerEvent
-                    // one notch is one small step, whichever size the mouse driver or the browser reports
-                    val notches = ch.scrollDelta.y.coerceIn(-3f, 3f)
-                    if (notches != 0f) { zoomAbout(ch.position, zoom.value * WHEEL_STEP.pow(-notches), smooth = true); ch.consume() }
-                }
+                // the wheel or a touchpad, measured (ZoomMath): a notch is a small step and the spring carries it
+                .wheelZoom(b, w, h) { f, at -> zoomAbout(at, zoom.targetValue * f, smooth = true) }
                 .pointerInput(b) {
                     // a fresh gesture starts from zero, watched on the way down so nothing here consumes the event
                     awaitEachGesture {
@@ -348,12 +346,12 @@ fun ZoomableBitmap(b: Bitmap, modifier: Modifier, background: Color = Color.Whit
                                 swiped.floatValue = 0f
                             }
                         } else {
-                            zoomAbout(centroid, zoom.value * gesture, smooth = false, by = pan)
+                            zoomAbout(centroid, zoom.value * ZoomMath.pinch(gesture), smooth = false, by = pan)
                         }
                     }
                 }
                 .pointerInput(b) {
-                    detectTapGestures(onDoubleTap = { p -> zoomAbout(p, if (zoom.value > 1.5f) 1f else 3f, smooth = true) })
+                    detectTapGestures(onDoubleTap = { p -> zoomAbout(p, if (zoom.targetValue > 1.5f) 1f else 3f, smooth = true) })
                 },
         ) {
             val dw = b.width * fit * zoom.value; val dh = b.height * fit * zoom.value
@@ -368,8 +366,8 @@ fun ZoomableBitmap(b: Bitmap, modifier: Modifier, background: Color = Color.Whit
             Modifier.align(Alignment.BottomEnd).padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            ZoomKey(Icons.Default.Add, "Zoom in") { zoomAbout(centre, zoom.value * BUTTON_STEP, smooth = true) }
-            ZoomKey(Icons.Default.Remove, "Zoom out", enabled = zoomedIn) { zoomAbout(centre, zoom.value / BUTTON_STEP, smooth = true) }
+            ZoomKey(Icons.Default.Add, "Zoom in") { zoomAbout(centre, zoom.targetValue * ZoomMath.BUTTON, smooth = true) }
+            ZoomKey(Icons.Default.Remove, "Zoom out", enabled = zoomedIn) { zoomAbout(centre, zoom.targetValue / ZoomMath.BUTTON, smooth = true) }
             ZoomKey(Icons.Default.FitScreen, "Fit the page", enabled = zoomedIn) { zoomAbout(centre, 1f, smooth = true) }
         }
         // a kneeboard says nothing it does not have to

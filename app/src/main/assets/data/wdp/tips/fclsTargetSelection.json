@@ -1,0 +1,17 @@
+{
+ "lblExplainTarget": "What to do in this window, and what the list holds while it is being read.",
+ "lblF": "The position selected or tapped, in the theater's feet (north and east).",
+ "lblCurCoordinates": "The position selected or tapped, in latitude and longitude.",
+ "btnCancel":"Closes the window and changes nothing.",
+ "btnApply": "Uses the selection. DataCard: the objective, the building (the DMPI, your aim point) and its position with the ground's height go into the TGT boxes. DTC page: the target or steerpoint is set.",
+ "dgvObjectives": "The places to pick from, with position, elevation in feet and who holds them. Tap one to select it: the map shows it, and on the DataCard its buildings are listed under the map.",
+ "cboObjectives": "Which places the list shows: one type, or All. On the DataCard you can also type part of a name to find every objective holding it.",
+ "chbFill": "Draws the marks on the map filled in rather than as outlines.",
+ "chbNr": "Writes each mark's name beside it on the map.",
+ "chbShowAll": "On the DataCard: lists and draws the buildings worth nothing too. On the DTC page: lists every place in view on the map.",
+ "dgvFed": "On the DataCard: the selected objective's buildings, where each is, the ground's height and its worth; tap one to aim at it, a double tap applies it. On the DTC page: the selection.",
+ "lblFeet": "The position selected or tapped, in the theater's feet (north and east).",
+ "lblCurCoord": "The position selected or tapped, in latitude and longitude.",
+ "cntImageControl": "The ground around the selection, from the app's theater map. A tap picks the nearest mark (the one picked is red) and reads out the position tapped.",
+ "chbTiles": "Draws the app's theater map under the marks. Needs the theater Falcon BMS is on."
+}

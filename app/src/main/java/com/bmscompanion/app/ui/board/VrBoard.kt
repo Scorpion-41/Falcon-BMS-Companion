@@ -69,10 +69,14 @@ import com.bmscompanion.app.data.airfield.AfSpot
 import com.bmscompanion.app.data.airfield.TaxiPath
 import com.bmscompanion.app.data.airfield.TaxiClearance
 import com.bmscompanion.app.data.airfield.clearanceFor
+import com.bmscompanion.app.data.airfield.landingRouteFor
 import com.bmscompanion.app.data.airfield.routeForPosition
+import com.bmscompanion.app.data.airfield.routeShown
 import com.bmscompanion.app.data.airfield.AfRoute
 import com.bmscompanion.app.data.airfield.Airfield
 import com.bmscompanion.app.data.airfield.TaxiNet
+import com.bmscompanion.app.data.airfield.ON_DECK_FT
+import com.bmscompanion.app.data.airfield.deckPosition
 import com.bmscompanion.app.data.airfield.fieldOffset
 import com.bmscompanion.app.ui.components.AirfieldChart
 import com.bmscompanion.app.ui.screens.fieldTraffic
@@ -83,7 +87,6 @@ import com.bmscompanion.app.ui.screens.mission.MapLayers
 import com.bmscompanion.app.ui.screens.mission.MapSel
 import com.bmscompanion.app.ui.screens.mission.MissionEnv
 import com.bmscompanion.app.ui.screens.mission.airbases
-import com.bmscompanion.app.ui.screens.mission.matchAirport
 import com.bmscompanion.app.ui.screens.mission.flightLevel
 import com.bmscompanion.app.ui.screens.mission.rangeNm
 import com.bmscompanion.app.ui.screens.mission.bra
@@ -135,6 +138,8 @@ enum class BoardKind(
         "Where you are on the field, with what is ahead of you up the page. Turning a page zooms in and out.",
         TAXI_SPANS.size, configurable = true,
     ),
+    // No MFD board: in VR the cockpit's own MFDs are in front of the pilot, and a board has no pointer to press them
+    // with. A board saved with the old "mfds" kind opens as the live map (BoardKind.of).
     PLATES("plates", "Instrument charts", "Approach, departure and arrival plates for that field.", 40),
     PICTURE("picture", "Hostile picture", "The AWACS picture: what is out there, nearest first.", 1),
 
@@ -142,7 +147,7 @@ enum class BoardKind(
      * The kneeboard html_brief exported on the BMS PC, page for page. Twelve pages: its own layout is six, and a
      * pilot who has put their own PDFs in its folder gets those too.
      */
-    EXPORTED("exported", "HTML Briefing kneeboards", "The pages BMS's HTML Briefing tool exported, as it made them.", 12),
+    EXPORTED("exported", "HTML Briefing kneeboards", "The pages UOAF's HTML Briefing tool exported, as it made them.", 12),
 
     ;
 
@@ -172,6 +177,10 @@ private const val ON_FIELD_FT = 2 * 6076.12
 
 val TAXI_SPANS = listOf(12000.0, 6000.0, 3000.0, 1500.0, 800.0)
 val TAXI_SPAN_LABELS = listOf("whole field", "wide", "close", "closer", "stand")
+
+/** The same five steps on a carrier: the whole deck down to the wire or the catapult the jet is on. */
+val DECK_SPANS = listOf(1400.0, 900.0, 550.0, 320.0, 180.0)
+val DECK_SPAN_LABELS = listOf("whole deck", "wide", "close", "closer", "spot")
 
 /**
  * The zoom steps a map board walks through, widest first.
@@ -243,7 +252,12 @@ fun VrBoardScreen(nav: NavHostController, slot: Int) {
     // previous page zooms out — the only two controls that matter on a map, and the pilot already has them bound.
     val shape = Kneeboard.shapes[Kneeboard.shape]
     val kind = board?.let { BoardKind.of(it.kind) }
-    val zoomSteps = when (kind) {
+    // WDP mode before the first Populate from Planner: a board of the mission says so, and shows nothing of the
+    // printed briefing in its place (the live boards — taxi, MFDs, the picture — have nothing of either to mix)
+    val mission by MissionLink.mission.collectAsState()
+    val waiting = mission?.awaitingPopulate == true && kind != null && kind in MISSION_KINDS
+
+    val zoomSteps = if (waiting) 0 else when (kind) {
         BoardKind.MAP -> MAP_ZOOMS.size
         BoardKind.LIVETAXI -> TAXI_SPANS.size
         else -> 0
@@ -262,6 +276,9 @@ fun VrBoardScreen(nav: NavHostController, slot: Int) {
       when {
         cfg == null -> listOf(BoardPage("") { BoardNotice("Looking for the PC…", "This board reads what to show from BMS Companion on the BMS PC.") })
         board == null -> listOf(BoardPage("") { BoardNotice("Board $slot is not set up", "Open Mission -> Kneeboards on the PC and give board $slot something to show.") })
+        waiting -> listOf(BoardPage(kind?.label.orEmpty()) {
+            BoardNotice("Not populated yet", "WDP mode: open your flight in the Planner and press Populate from Planner, and this board fills itself in.")
+        })
         else -> boardPages(BoardKind.of(board.kind), board, env, if (zoomSteps > 0) page.coerceIn(0, zoomSteps - 1) else -1)
       }
     }
@@ -352,6 +369,15 @@ fun VrBoardScreen(nav: NavHostController, slot: Int) {
     }
 }
 
+/**
+ * The kinds of board drawn from the mission (the briefing, the cartridge, the populated flight): in WDP mode they wait
+ * for Populate from Planner. The live ones (taxi, MFDs, the picture) and html_brief's pages do not.
+ */
+private val MISSION_KINDS = setOf(
+    BoardKind.MAP, BoardKind.BRIEFING, BoardKind.FLIGHT, BoardKind.COMMS, BoardKind.SUPPORT, BoardKind.THREATS,
+    BoardKind.RUNWAYS, BoardKind.PLATES,
+)
+
 /** What this kind of board shows, as pages. */
 @Composable
 private fun boardPages(kind: BoardKind, slot: BoardSlot, env: MissionEnv, step: Int = -1): List<BoardPage> = when (kind) {
@@ -367,6 +393,42 @@ private fun boardPages(kind: BoardKind, slot: BoardSlot, env: MissionEnv, step: 
     BoardKind.PLATES -> chartPages(env)
     BoardKind.PICTURE -> picturePages(env)
     BoardKind.EXPORTED -> exportedPages()
+}
+
+/**
+ * The merged mission (PlanMerge) for a board's sheets: the printed briefing, or the save's flight the Planner sent,
+ * with BMS's route and the plan merged in. Only the jet's own navigation points take part from the live data, and
+ * only a change to them redraws: a sheet of print is measured block by block, and doing that at the live data's four
+ * times a second would be work for nothing.
+ */
+@Composable
+private fun rememberBoardMerged(): com.bmscompanion.app.data.mission.MergedMission {
+    val mission by MissionLink.mission.collectAsState()
+    val liveState = MissionLink.live.collectAsState()
+    val nav by remember { androidx.compose.runtime.derivedStateOf { liveState.value?.navPoints } }
+    return remember(mission, nav) { com.bmscompanion.app.data.mission.PlanMerge.merge(mission, liveState.value) }
+}
+
+/**
+ * One sheet of a board of [kind], as the headset shows it, with no page publishing and no configuration fetched: for
+ * the developer checks' pictures (`--planviewsrender`). [page] is the sheet (or, on a map, the zoom step).
+ * The caller provides the board's skin and density, as the browser's board page does.
+ */
+@Composable
+fun BoardSheetPreview(kind: BoardKind, slot: BoardSlot, env: MissionEnv, page: Int = 0) {
+    val zoomed = kind == BoardKind.MAP || kind == BoardKind.LIVETAXI
+    val pages = boardPages(kind, slot, env, if (zoomed) page else -1)
+    // clamped as the board itself clamps it: the sheets are only counted once the first one has been measured
+    val index = if (zoomed) 0 else page.coerceIn(0, (pages.size - 1).coerceAtLeast(0))
+    Box(Modifier.fillMaxSize()) {
+        val sheet = pages.getOrNull(index)
+        if (sheet != null) sheet.content() else BoardNotice("Nothing on this page", "Turn back for what this board has.")
+        if (!zoomed && pages.size > 1) Text(
+            "${index + 1} / ${pages.size}",
+            Modifier.align(Alignment.BottomEnd).padding(end = 10.dp, bottom = 6.dp),
+            color = Hud.Text.copy(alpha = 0.45f), fontSize = 11.sp, fontWeight = FontWeight.Bold,
+        )
+    }
 }
 
 
@@ -389,9 +451,15 @@ private fun BoardMap(env: MissionEnv, slot: BoardSlot, step: Int = -1) {
         layer("traffic") { MapLayers.traffic = it }
         layer("hostiles") { MapLayers.hostiles = it }
         layer("labels") { MapLayers.labels = it }
-        layer("fields") { MapLayers.fields = it }
+        // every other airfield (the flight's own are always drawn); "fields", the old all-or-nothing switch, is not read
+        MapLayers.fields = slot.options["allfields"] == "1"
         layer("sams") { MapLayers.sams = it }
         layer("support") { MapLayers.support = it }
+        // the plan sent from the Planner: its lines, its attack, and everything of it at once (on unless a board says)
+        layer("lines") { MapLayers.lines = it }
+        layer("attack") { MapLayers.attack = it }
+        layer("plan") { MapLayers.plan = it }
+        // the mission's threats come under "sams" (MissionPicture): the briefed sites and the PPTs, nothing else
         MapLayers.follow = slot.options["follow"] != "0"
         MapLayers.save()
     }
@@ -399,12 +467,38 @@ private fun BoardMap(env: MissionEnv, slot: BoardSlot, step: Int = -1) {
     // nothing in a headset to pinch with, so the page binding is the zoom control.
     val chosen = slot.options["zoom"]?.toFloatOrNull()
     val zoom = if (step >= 0) MAP_ZOOMS.getOrNull(step) ?: chosen else chosen
-    LaunchedEffect(zoom, d.ownPos, d.route.size) {
+    // keyed on the map's first framing too: the map frames the route itself the first time it is laid out, which
+    // used to overwrite the step chosen here on a board opened before 3D (nothing moves then to set it again)
+    LaunchedEffect(zoom, d.ownPos, d.route.size, state.initialized) {
         val z = zoom ?: return@LaunchedEffect
         val t = d.ownPos ?: d.route.firstOrNull()?.let { it.x!! to it.y!! } ?: return@LaunchedEffect
         state.flyTo(t.first, t.second, z)
     }
+    // The plan sent from the Planner comes with the mission (/api/mission), like everything else on the board: its
+    // points, PPTs, lines and attack are in the map data (PlanMerge), drawn under the same Plan layer as the app's map.
+    // Nothing is asked of /api/attack any more: the attack reaches a board only when the pilot sends the plan.
     LiveMap(env, d, state, null as MapSel?, {}, Modifier.fillMaxSize(), flightStrip = false, bare = true)
+    // a board has no chips to say it: one line at the foot, only while the plan puts something on this map
+    if (MapLayers.plan && d.planAvailable && d.merged.anyFromPlan) PlanMapLegend(d.merged)
+}
+
+/** The foot of a map board while a plan is on it: what the plan's ink means, and how much of it the jet lacks. */
+@Composable
+private fun PlanMapLegend(merged: com.bmscompanion.app.data.mission.MergedMission) {
+    Box(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 8.dp, end = 70.dp)
+                .clip(RoundedCornerShape(4.dp)).background(Hud.Bg.copy(alpha = 0.78f)).padding(horizontal = 6.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.width(14.dp).height(3.dp).background(com.bmscompanion.app.ui.screens.mission.PlanInk))
+            Spacer(Modifier.width(5.dp))
+            Text(
+                "Planner's plan" + if (merged.notInJet.isEmpty()) "" else " · hollow/dashed: not in the jet (${merged.notInJet.size})",
+                color = Hud.Text, fontSize = 10.sp, maxLines = 1,
+            )
+        }
+    }
 }
 
 /** One thing that goes on a sheet: a section, a row of a table, a threat — named for the page it lands on. */
@@ -549,11 +643,24 @@ private fun PackedSheet(
  */
 @Composable
 private fun briefingPages(env: MissionEnv): List<BoardPage> {
-    val mission by MissionLink.mission.collectAsState()
-    val b = mission?.briefing ?: return listOf(BoardPage("Briefing") {
-        BoardNotice("No briefing yet", "Press PRINT on the BMS briefing screen and this board fills itself in.")
+    // the merged mission's briefing: the printed one, or — when the Planner sent a flight of a save and BMS printed
+    // none for it — the save's own (PlanMerge)
+    val merged = rememberBoardMerged()
+    val b = merged.briefing ?: return listOf(BoardPage("Briefing") {
+        BoardNotice("No briefing yet", com.bmscompanion.app.ui.screens.mission.fillHint("Press PRINT on the BMS briefing screen and this board fills itself in.", "The flight populated from the Planner carries no briefing."))
     })
     val blocks = mutableListOf<BoardBlock>()
+    val populated = MissionLink.mission.value?.populated
+    // WDP mode: one line saying where it all comes from, as the Mission section's source line does
+    if (populated != null) blocks += BoardBlock {
+        Note(listOfNotNull("From the Planner", populated.save.takeIf { it.isNotBlank() }, populated.callsign).joinToString(" · "))
+    } else if (merged.fromSave) blocks += BoardBlock {
+        Callout(
+            "From your save" + (merged.saveFile?.let { " $it" } ?: ""),
+            "Built from the flight the Planner sent. PRINT in BMS for the situation, weather, comm ladder and ROE.",
+            com.bmscompanion.app.ui.screens.mission.PlanInk,
+        )
+    }
     val o = b.overview
     val facts = listOfNotNull(
         o.flight?.let { "Flight" to it },
@@ -588,9 +695,9 @@ private fun briefingPages(env: MissionEnv): List<BoardPage> {
     // The fields this flight uses, so the pilot has the TACAN and the runway headings without leaving the board.
     run {
         val bases = airbases(null, b)
-        val dep = matchAirport(env.set, bases.departure)
-        val arr = matchAirport(env.set, bases.arrival)?.takeIf { it.id != dep?.id }
-        val alt = matchAirport(env.set, bases.alternate)?.takeIf { it.id != dep?.id && it.id != arr?.id }
+        val dep = bases.departureIn(env.set)
+        val arr = bases.arrivalIn(env.set)?.takeIf { it.id != dep?.id }
+        val alt = bases.alternateIn(env.set)?.takeIf { it.id != dep?.id && it.id != arr?.id }
         if (dep != null || arr != null || alt != null) blocks += BoardBlock("Airfields") {
             Head("Airfields")
             AirfieldFacts("Departure", dep)
@@ -611,7 +718,7 @@ private fun briefingPages(env: MissionEnv): List<BoardPage> {
         Head("Emergency")
         b.emergency.forEach { t -> t.title?.let { Head(it) }; t.lines.forEach { Para(it) } }
     }
-    b.weather?.let { w ->
+    b.weather?.takeIf { it.rows.isNotEmpty() }?.let { w ->
         blocks += BoardBlock("Weather") {
             Head("Weather")
             // BMS gives one figure per phase of the flight, and run together they read "Fair  Fair  Fair" with
@@ -626,7 +733,16 @@ private fun briefingPages(env: MissionEnv): List<BoardPage> {
                     row = i,
                 )
             }
+            // WDP mode: which save's weather file, as of when
+            w.source?.let { Note(it) }
             if (weights.isEmpty()) Unit
+        }
+    }
+    // WDP mode with no weather from Populate: the board says why, as the Dashboard and the Briefing page do
+    if (b.weather?.rows.isNullOrEmpty() && MissionLink.mission.value?.mode == com.bmscompanion.app.data.mission.MissionMode.WDP) {
+        blocks += BoardBlock("Weather") {
+            Head("Weather")
+            Note(com.bmscompanion.app.ui.screens.mission.wdpNoWeather())
         }
     }
     return packedPages("Briefing", blocks, maxSheets = 2)
@@ -671,57 +787,115 @@ private fun ColumnScopeLike.AirfieldFacts(role: String, a: Airport?) {
     }
 }
 
-/** The flight plan, a row at a time, filling each sheet. */
+/**
+ * The mark a board gives what the plan sent from the Planner changed or added: a small raised P in the plan's ink,
+ * P* when the jet does not have it yet. A board is print: a tag in a box is what a screen does, a superscript is what
+ * a page does — and the sheet's legend ([planLegend]) says what the two mean.
+ */
+@Composable
+private fun RowScope.PMark(notInJet: Boolean) {
+    Text(
+        if (notInJet) "P*" else "P",
+        Modifier.align(Alignment.Top).padding(start = 1.dp, end = 2.dp),
+        color = com.bmscompanion.app.ui.screens.mission.PlanInk, fontSize = 8.sp, fontWeight = FontWeight.Bold, maxLines = 1,
+    )
+}
+
+/** The one line at the foot of a sheet with P marks on it. */
+private fun planLegend(notInJet: Boolean): BoardBlock = BoardBlock {
+    Note(
+        "P  from the Planner's plan." +
+            if (notInJet) "   P*  not in the jet yet: Save to DTC in the Planner, then LOAD in BMS's DTC window." else "",
+    )
+}
+
+/**
+ * The flight plan, a row at a time, filling each sheet: the briefing's rows as printed, and the steerpoints the plan
+ * sent from the Planner added (P), each moved or new point marked — P* while the jet does not have it yet.
+ */
 @Composable
 private fun flightPages(): List<BoardPage> {
-    val mission by MissionLink.mission.collectAsState()
-    val steer = mission?.briefing?.steerpoints.orEmpty()
-    if (steer.isEmpty()) return listOf(BoardPage("Flight plan") {
-        BoardNotice("No flight plan yet", "Press PRINT on the BMS briefing, or save the DTC, and this board fills itself in.")
+    val merged = rememberBoardMerged()
+    val printed = merged.briefing?.steerpoints.orEmpty().associateBy { it.n }
+    // the briefing's rows and the plan's own; with no briefing at all, every flight-plan point there is
+    val pts = merged.allSteerpoints.filter { it.n in printed || it.planRow || (printed.isEmpty() && it.onRoute) }
+    if (pts.isEmpty()) return listOf(BoardPage("Flight plan") {
+        BoardNotice("No flight plan yet", com.bmscompanion.app.ui.screens.mission.fillHint("Press PRINT on the BMS briefing, or save the DTC, and this board fills itself in.", "The flight populated from the Planner has no steerpoints."))
     })
-    val blocks = steer.mapIndexed { r, s ->
+    val marked = pts.any { it.source == com.bmscompanion.app.data.mission.PlanItemSource.PLAN || it.notInJet || it.cleared }
+    val blocks = pts.mapIndexed { r, p ->
+        val s = printed[p.n]
+        // a row the briefing does not have is given what the briefing would: the leg to it from the point before
+        val prev = if (s == null && p.onRoute && p.hasPos) pts.take(r).lastOrNull { it.onRoute && it.hasPos } else null
+        val leg = prev?.let { bra(it.x, it.y, p.x, p.y).split('/') }
+        val fromPlan = p.source == com.bmscompanion.app.data.mission.PlanItemSource.PLAN
         BoardBlock {
-            Cols(
-                listOf(
-                    "${s.n}  ${s.desc.orEmpty()}" to 3f,
-                    s.time.orEmpty() to 2.5f,
-                    s.heading.orEmpty() to 1.2f,
-                    s.dist.orEmpty() to 1.4f,
-                    s.alt.orEmpty() to 1.7f,
-                    s.cas.orEmpty() to 1.4f,
+            RichCols(
+                listOf<Pair<Float, @Composable RowScope.() -> Unit>>(
+                    3f to {
+                        Text("${p.n}", color = Hud.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        if (fromPlan || p.notInJet) PMark(p.notInJet)
+                        Text(
+                            "  " + (if (s != null) s.desc.orEmpty() else p.title) + if (p.cleared) " (cleared in plan)" else "",
+                            color = if (p.cleared) Hud.TextDim else Hud.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 2,
+                        )
+                    },
+                    2.5f to { Text(s?.time.orEmpty(), color = Hud.Text, fontSize = 12.sp, maxLines = 1) },
+                    1.2f to { Text(s?.heading ?: leg?.getOrNull(0).orEmpty(), color = Hud.Text, fontSize = 12.sp, maxLines = 1) },
+                    1.4f to { Text(s?.dist ?: leg?.getOrNull(1).orEmpty(), color = Hud.Text, fontSize = 12.sp, maxLines = 1) },
+                    1.7f to { Text(s?.alt ?: if (p.altFt > 0) p.altFt.roundToInt().toString() else "", color = Hud.Text, fontSize = 12.sp, maxLines = 1) },
+                    1.4f to { Text(s?.cas.orEmpty(), color = Hud.Text, fontSize = 12.sp, maxLines = 1) },
                 ),
                 row = r,
             )
         }
-    }
+    } + if (marked) listOf(planLegend(pts.any { it.notInJet })) else emptyList()
     return packedPages("Flight plan", blocks) {
         Cols(listOf("STPT" to 3f, "TIME" to 2.5f, "HDG" to 1.2f, "DIST" to 1.4f, "ALT" to 1.7f, "CAS" to 1.4f), header = true)
     }
 }
 
-/** The comm ladder, the same way. */
+/**
+ * The comm ladder, the same way: the briefing's rows as printed, a row whose preset the plan moved marked P with
+ * where it went, and the presets the plan changed in a table of their own.
+ */
 @Composable
 private fun commsPages(): List<BoardPage> {
-    val mission by MissionLink.mission.collectAsState()
-    val comms = mission?.briefing?.comms.orEmpty()
-    if (comms.isEmpty()) return listOf(BoardPage("Comms") {
-        BoardNotice("No comm plan yet", "Press PRINT on the BMS briefing, or save the DTC, and this board fills itself in.")
+    val merged = rememberBoardMerged()
+    val comms = merged.briefing?.comms.orEmpty()
+    val changed = merged.presets.filter { it.changed }
+    if (comms.isEmpty() && changed.isEmpty()) return listOf(BoardPage("Comms") {
+        BoardNotice("No comm plan yet", com.bmscompanion.app.ui.screens.mission.fillHint("Press PRINT on the BMS briefing, or save the DTC, and this board fills itself in.", "The flight populated from the Planner carries no comm ladder."))
     })
+    fun moved(band: String, ch: Int?) = ch != null && changed.any { it.band == band && it.ch == ch }
+    fun star(band: String, ch: Int?) = changed.any { it.band == band && it.ch == ch && it.notInJet }
     val blocks = comms.mapIndexed { r, c ->
+        val note = com.bmscompanion.app.ui.screens.mission.presetNote(c, merged.presets)
         BoardBlock {
             RichCols(
                 listOf<Pair<Float, @Composable RowScope.() -> Unit>>(
                     2.5f to { Text(c.agency, color = Hud.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 2) },
                     2.4f to { Text(c.callsign.orEmpty(), color = Hud.Text, fontSize = 12.sp, maxLines = 1) },
-                    2.7f to { Channel(c.uhfCh, c.uhf) },
-                    2.6f to { Channel(c.vhfCh, c.vhf) },
+                    2.7f to { Channel(c.uhfCh, c.uhf); if (note != null && moved("UHF", c.uhfCh)) PMark(star("UHF", c.uhfCh)) },
+                    2.6f to { Channel(c.vhfCh, c.vhf); if (note != null && moved("VHF", c.vhfCh)) PMark(star("VHF", c.vhfCh)) },
                 ),
                 row = r,
             )
+            note?.let { Text(it, color = com.bmscompanion.app.ui.screens.mission.PlanInk, fontSize = 10.sp, maxLines = 1, modifier = Modifier.padding(start = 4.dp, bottom = 1.dp)) }
         }
+    }.toMutableList()
+    if (changed.isNotEmpty()) blocks += BoardBlock("Presets") {
+        Head("Presets the plan changed")
+        Table(
+            weights = listOf(1.2f, 1.4f, 2.2f, 1.4f),
+            header = listOf("Preset", "Now", "Comment", "Cartridge"),
+            rows = changed.map { p -> listOf("${p.band} ${p.ch}" + if (p.notInJet) " P*" else " P", p.freq, p.comment.orEmpty(), p.was ?: "—") },
+            labels = setOf(0),
+        )
     }
+    if (changed.isNotEmpty()) blocks += planLegend(changed.any { it.notInJet })
     return packedPages("Comms", blocks) {
-        Cols(listOf("AGENCY" to 2.5f, "CALLSIGN" to 2.4f, "UHF" to 2.7f, "VHF" to 2.6f), header = true)
+        if (comms.isNotEmpty()) Cols(listOf("AGENCY" to 2.5f, "CALLSIGN" to 2.4f, "UHF" to 2.7f, "VHF" to 2.6f), header = true)
     }
 }
 
@@ -746,8 +920,12 @@ private fun supportPages(env: MissionEnv): List<BoardPage> {
                     a.uhf?.let { "UHF" to (a.uhfCh?.let { c -> "$c · " }.orEmpty() + it) },
                     a.vhf?.let { "VHF" to it },
                     a.loc?.let { "Bullseye" to it },
+                    // before anybody is airborne: where the station is planned, from bullseye
+                    a.stationLoc?.takeIf { a.loc == null }?.let { "Station" to it },
                 ) + a.radios.map { r -> r.label to listOfNotNull(r.ch?.let { c -> "ch $c" }, r.uhf ?: r.vhf).joinToString(" · ") },
             )
+            a.station?.let { Note("Station: " + it.fromText) }
+            if (a.uhfChFromPlan) Note("The plan changed the briefed preset for ${a.uhf ?: "this frequency"}: " + (a.uhfCh?.let { "preset $it holds it now." } ?: "no preset holds it now."))
             a.notes?.takeIf { it.isNotBlank() }?.let { Para(it) }
         }
     } + if (assets.any { it.tacanDefault }) {
@@ -758,27 +936,62 @@ private fun supportPages(env: MissionEnv): List<BoardPage> {
     return packedPages("Tankers & AWACS", blocks)
 }
 
-/** Every threat the briefing names, matched against the threat reference and laid down the sheet. */
+/**
+ * Every threat the briefing names, matched against the threat reference and laid down the sheet — after the
+ * pre-planned threats of the cartridge (the PPT rings), where the plan sent from the Planner's are marked P.
+ */
 @Composable
 private fun threatPages(): List<BoardPage> {
-    val mission by MissionLink.mission.collectAsState()
+    val merged = rememberBoardMerged()
     val all by produceState<List<Threat>>(emptyList()) { value = Repo.threats() }
-    val text = mission?.briefing?.threats.orEmpty().flatMap { it.lines }.joinToString(" ").lowercase()
-    if (text.isBlank()) return listOf(BoardPage("Threats") {
-        BoardNotice("No threats listed yet", "The briefing's threat section fills this board in.")
-    })
+    val said = merged.briefing?.threats.orEmpty()
+    val text = said.flatMap { it.lines }.joinToString(" ").lowercase()
+    // the rings only: a marker (an AWACS, a tanker) is a pre-planned point, not a threat
+    val rings = remember(merged) { com.bmscompanion.app.ui.screens.mission.preplannedPoints(merged).filter { !it.marker && it.rangeNm > 0 } }
+    // the bullseye the calls are made from: the jet's in 3D, the save's before; read so that only a moved bullseye
+    // redraws the sheet, not every live reading
+    val liveState = MissionLink.live.collectAsState()
+    val bull by remember { androidx.compose.runtime.derivedStateOf { bullseye(liveState.value, null) } }
+    val from = bull ?: merged.saveBullseye
+    val ppts = if (rings.isEmpty()) emptyList() else {
+        val star = rings.any { it.notInJet }
+        // a ruled table like the others, a row a ring, the plan's marked with the same raised P as the flight plan
+        listOf(
+            BoardBlock("Pre-planned") {
+                Head("Pre-planned threats (DTC)")
+                Cols(listOf("PPT" to 0.9f, "SYSTEM" to 2.4f, "RING" to 1.3f, "BULLSEYE" to 1.8f), header = true)
+                rings.forEachIndexed { r, t ->
+                    RichCols(
+                        listOf<Pair<Float, @Composable RowScope.() -> Unit>>(
+                            0.9f to { Text("${t.n}", color = Hud.TextDim, fontSize = 11.sp, maxLines = 1) },
+                            2.4f to {
+                                Text(t.name, color = if (t.cleared) Hud.TextDim else Hud.Text, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                                if (t.fromPlan || t.notInJet) PMark(t.notInJet)
+                                if (t.cleared) Text(" cleared", color = Hud.TextDim, fontSize = 10.sp, maxLines = 1)
+                            },
+                            1.3f to { Text("${t.rangeNm.roundToInt()} nm", color = Hud.Text, fontSize = 12.sp, maxLines = 1) },
+                            1.8f to { Text(from?.let { b -> bra(b.first, b.second, t.x, t.y) } ?: "—", color = Hud.Text, fontSize = 12.sp, maxLines = 1) },
+                        ),
+                        row = r,
+                    )
+                }
+            },
+        ) + if (rings.any { it.fromPlan || it.notInJet }) listOf(planLegend(star)) else emptyList()
+    }
+    if (text.isBlank()) return packedPages("Threats", ppts).ifEmpty {
+        listOf(BoardPage("Threats") { BoardNotice("No threats listed yet", "The briefing's threat section fills this board in.") })
+    }
     val named = all.filter { t ->
         val keys = (listOf(t.name) + t.aliases).map { it.lowercase() }.filter { it.length >= 3 }
         keys.any { text.contains(it) }
     }.distinctBy { it.id }
     if (named.isEmpty()) {
-        val said = mission?.briefing?.threats.orEmpty()
-        return packedPages("Threats", said.map { t ->
+        return packedPages("Threats", ppts + said.map { t ->
             BoardBlock(t.title) { t.title?.let { Head(it) }; t.lines.forEach { Para(it) } }
         }).ifEmpty { listOf(BoardPage("Threats") { BoardNotice("No threats listed yet", "The briefing's threat section fills this board in.") }) }
     }
     // a system is a heading and a handful of figures, so a page each was a page each of empty board
-    val blocks = named.map { t ->
+    val blocks = ppts + named.map { t ->
         BoardBlock(t.name) {
             Head(t.name)
             Rows(
@@ -843,16 +1056,16 @@ private fun harmPages(): List<BoardPage> {
 @Composable
 private fun chartPages(env: MissionEnv): List<BoardPage> {
     val live by MissionLink.live.collectAsState()
-    val mission by MissionLink.mission.collectAsState()
-    val bases = airbases(live, mission?.briefing)
-    val field: Airport? = matchAirport(env.set, bases.departure) ?: matchAirport(env.set, bases.arrival)
+    val merged = rememberBoardMerged()
+    val bases = airbases(live, merged)
+    val field: Airport? = bases.departureIn(env.set) ?: bases.arrivalIn(env.set)
     val setId = env.theater?.airportSet
     val charts by produceState<List<ChartRef>?>(null, setId, field?.id) {
         value = if (setId == null || field == null) emptyList() else Repo.charts(setId)[field.id.toString()].orEmpty()
     }
     val what = "Instrument charts"
     if (field == null) return listOf(BoardPage(what) {
-        BoardNotice(what, "This board follows the field you take off from. Press PRINT on the BMS briefing and it fills itself in.")
+        BoardNotice(what, "This board follows the field you take off from. " + com.bmscompanion.app.ui.screens.mission.fillHint("Press PRINT on the BMS briefing and it fills itself in.", "The flight populated from the Planner names none."))
     })
     val list = charts ?: return listOf(BoardPage(what) { BoardNotice(what, "Loading ${field.name}…") })
     val wanted = list.filter { it.pages.isNotEmpty() }
@@ -883,7 +1096,8 @@ private fun chartPages(env: MissionEnv): List<BoardPage> {
 @Composable
 private fun groundChartPages(env: MissionEnv, slot: BoardSlot): List<BoardPage> {
     val live by MissionLink.live.collectAsState()
-    val mission by MissionLink.mission.collectAsState()
+    val merged = rememberBoardMerged()
+    val contacts by MissionLink.contacts.collectAsState()
     val setId = env.theater?.airfieldSet
 
     // Follow the pilot: the field they are standing on, then the one the briefing departs from.
@@ -896,15 +1110,16 @@ private fun groundChartPages(env: MissionEnv, slot: BoardSlot): List<BoardPage> 
             .minByOrNull { hypot(it.x - jet.x, it.y - jet.y) }
             ?.takeIf { hypot(it.x - jet.x, it.y - jet.y) < 4 * 6076 }
     }
-    val bases = airbases(live, mission?.briefing)
-    val airport = nearest ?: matchAirport(env.set, bases.departure) ?: matchAirport(env.set, bases.arrival)
+    // the ship the jet stands on names itself by its hull number in the Tacview picture
+    val bases = airbases(live, merged, contacts?.contacts)
+    val airport = nearest ?: bases.departureIn(env.set) ?: bases.arrivalIn(env.set)
     val field by produceState<Airfield?>(null, setId, airport?.id) {
         value = if (setId == null || airport == null) null else Repo.airfield(setId, airport.id)
     }
 
     val what = "Ground chart"
     if (airport == null) return listOf(BoardPage(what) {
-        BoardNotice(what, "This board draws the field you take off from, one page per runway. Press PRINT on the BMS briefing and it fills itself in. For where you are on the field while you taxi, put a Live taxi board on another kneeboard.")
+        BoardNotice(what, "This board draws the field you take off from, one page per runway. " + com.bmscompanion.app.ui.screens.mission.fillHint("Press PRINT on the BMS briefing and it fills itself in.", "The flight populated from the Planner names none.") + " For where you are on the field while you taxi, put a Live taxi board on another kneeboard.")
     })
     val f = field ?: return listOf(BoardPage(what) { BoardNotice(what, "Loading ${airport.name}…") })
     if (f.routes.isEmpty()) return listOf(BoardPage(what) {
@@ -947,12 +1162,24 @@ private fun liveTaxiPages(env: MissionEnv, slot: BoardSlot, step: Int): List<Boa
             .minByOrNull { hypot(it.x - jet.x, it.y - jet.y) }
             ?.takeIf { hypot(it.x - jet.x, it.y - jet.y) < ON_FIELD_FT }
     }
+    // A ship is never where the airport list puts it — it moves — so a jet standing on one is found through the
+    // Tacview feed instead: there is a ship under it, and the briefing's own carrier (which that ship's hull number
+    // picks out) is the chart to open.
+    val contacts by MissionLink.contacts.collectAsState()
+    val merged = rememberBoardMerged()
+    val afloat = nearest == null && onTheGround && live?.let { l ->
+        contacts?.contacts.orEmpty().any { it.kind == "ship" && hypot(it.x - l.x, it.y - l.y) < ON_DECK_FT }
+    } == true
+    val carrier = if (!afloat) null else airbases(live, merged, contacts?.contacts)
+        .let { b -> b.departureIn(env.set) ?: b.arrivalIn(env.set) }
+        ?.takeIf { index.containsKey(it.id.toString()) }
+    val here = nearest ?: carrier
 
     val what = "Live taxi"
     if (live == null) return listOf(BoardPage(what) {
         BoardNotice(what, "Waiting for BMS. This board draws the field you are on, as soon as there is a jet to put on it.")
     })
-    if (nearest == null) return listOf(BoardPage(what) {
+    if (here == null) return listOf(BoardPage(what) {
         BoardNotice(
             what,
             if (onTheGround) "No airfield within two miles. The chart appears as soon as you are on one."
@@ -960,38 +1187,45 @@ private fun liveTaxiPages(env: MissionEnv, slot: BoardSlot, step: Int): List<Boa
         )
     })
 
-    val field by produceState<Airfield?>(null, setId, nearest.id) {
-        value = if (setId == null) null else Repo.airfield(setId, nearest.id)
+    val field by produceState<Airfield?>(null, setId, here.id) {
+        value = if (setId == null) null else Repo.airfield(setId, here.id)
     }
 
     var chosen by remember { mutableStateOf<TaxiSelection?>(null) }
+    // the controller's last call to the flight, when the PC heard it after the Taxi page's last choice (BMS's debug log)
+    var radio by remember { mutableStateOf<com.bmscompanion.app.data.mission.RadioTaxi?>(null) }
     LaunchedEffect(Unit) {
         while (true) {
-            runCatching { MissionLink.taxiSelection() }.getOrNull()?.let { if (it.runway.isNotEmpty()) chosen = it }
+            // an empty answer is "no choice for this mission" (the PC forgets one made for another): follow the jet again
+            runCatching { MissionLink.taxiSelection() }.getOrNull()?.let { chosen = it.takeIf { s -> s.runway.isNotEmpty() }; radio = it.radio }
             delay(1500)
         }
     }
 
-    val f = field ?: return listOf(BoardPage(what) { BoardNotice(what, "Loading ${nearest.name}…") })
-    val pick = chosen?.takeIf { it.airportId == f.id }
-    val span = TAXI_SPANS.getOrNull(step) ?: 3000.0
-    val label = TAXI_SPAN_LABELS.getOrNull(step) ?: ""
+    val f = field ?: return listOf(BoardPage(what) { BoardNotice(what, "Loading ${here.name}…") })
+    val pick = radio?.let { r -> radioPick(f, r) } ?: chosen?.takeIf { it.airportId == f.id }
+    // a deck is a fifth of a mile long, so its zoom steps are a deck's, not an airfield's
+    val span = (if (f.ship != null) DECK_SPANS else TAXI_SPANS).getOrNull(step) ?: 3000.0
+    val label = (if (f.ship != null) DECK_SPAN_LABELS else TAXI_SPAN_LABELS).getOrNull(step) ?: ""
     return listOf(BoardPage("${f.icao ?: f.name} live") { BoardLiveTaxi(f, slot, live, pick, span, label) })
 }
 
 @Composable
 private fun BoardLiveTaxi(f: Airfield, slot: BoardSlot, live: Live?, pick: TaxiSelection?, span: Double, zoomLabel: String) {
     val contacts by MissionLink.contacts.collectAsState()
-    val here = live?.let { fieldOffset(f, it.x, it.y) }
+    // on a ship, through the ship's own position and heading from the feed: see deckPosition
+    val deck = if (f.ship != null) deckPosition(f, live, contacts?.contacts, contacts?.t ?: 0L) else null
+    val here = if (f.ship != null) deck?.let { it.e to it.n } else live?.let { fieldOffset(f, it.x, it.y) }
+    val heading = if (f.ship != null) deck?.heading else live?.hdgTrue
     val traffic = remember(f.id, contacts) { fieldTraffic(f, contacts?.contacts.orEmpty()) }
     val taxi = rememberBoardTaxi(f, here, pick)
     Column(Modifier.fillMaxSize().padding(PLATE_MARGIN)) {
-        SheetTitle("${f.name} — live" + (taxi.route?.takeIf { f.ship == null }?.let { " RWY ${it.designator}" } ?: ""))
+        SheetTitle("${f.name} — live" + (taxi.runway?.takeIf { f.ship == null && taxi.route != null }?.let { " RWY $it" } ?: ""))
         Text(
             listOfNotNull(
                 taxi.clearance?.line,
-                taxi.spot?.let { "spot ${it.n}" },
-                if (here == null) "no live position" else null,
+                taxi.spot?.takeIf { f.ship == null }?.let { "spot ${it.label}" },
+                if (here == null) (if (f.ship != null) "no place on the deck without ACMI recording (F)" else "no live position") else null,
                 zoomLabel.takeIf { it.isNotEmpty() },
             ).joinToString("  ·  "),
             color = Hud.TextDim, fontSize = 9.sp,
@@ -1005,7 +1239,7 @@ private fun BoardLiveTaxi(f: Airfield, slot: BoardSlot, live: Live?, pick: TaxiS
                 modifier = Modifier.fillMaxSize(),
                 path = taxi.path?.nodes,
                 you = here?.let { Offset(it.first.toFloat(), it.second.toFloat()) },
-                youHeading = live?.hdgTrue,
+                youHeading = heading,
                 traffic = traffic,
                 selectedSpot = if (taxi.outbound) taxi.spot?.n else null,
                 destinationSpot = if (taxi.outbound) null else taxi.spot?.n,
@@ -1014,7 +1248,8 @@ private fun BoardLiveTaxi(f: Airfield, slot: BoardSlot, live: Live?, pick: TaxiS
                 follow = here?.let { Offset(it.first.toFloat(), it.second.toFloat()) },
                 followSpanFt = span,
                 // Always heading up: this is the board for taxiing, and what is ahead of the jet belongs up the page.
-                upHeading = live?.hdgTrue,
+                // On a deck that is the jet's heading on the ship, since the ship's bow is the chart's north.
+                upHeading = heading,
             )
             // Nothing in a headset to dismiss a corner pill with, so the same middle-of-the-page notice the live
             // map uses, and it leaves of its own accord when the feed arrives.
@@ -1044,18 +1279,35 @@ private fun boardInks(slot: BoardSlot): ChartInks = when (slot.options["chart"])
     else -> ChartInks.night
 }
 
+/**
+ * A controller's call to the flight as the board's choice on [f]: the runway to taxi to, or the way in (the runway
+ * landed on when a landing clearance named it, else the network the jet stands in) with the spot Ground gave. Null when
+ * the call names a runway this field does not have.
+ */
+private fun radioPick(f: Airfield, r: com.bmscompanion.app.data.mission.RadioTaxi): TaxiSelection? {
+    if (f.ship != null) return null
+    val a = com.bmscompanion.app.data.mission.RadioCalls.applyTo(r, f.routes.map { it.designator }) ?: return null
+    return TaxiSelection(f.id, a.runway.orEmpty(), a.outbound, a.spot, r.at)
+}
+
 /** Everything the board knows about the taxi: the route, the spot and the way between them. */
-private class BoardTaxi(val route: AfRoute?, val spot: AfSpot?, val outbound: Boolean, val path: TaxiPath?, val clearance: TaxiClearance?)
+private class BoardTaxi(
+    val route: AfRoute?, val spot: AfSpot?, val outbound: Boolean, val path: TaxiPath?, val clearance: TaxiClearance?,
+    /** the runway taxied to, or landed on for the way in (whose taxi-in network [route] is) */
+    val runway: String?,
+)
 
 @Composable
 private fun rememberBoardTaxi(f: Airfield, here: Pair<Double, Double>?, pick: TaxiSelection?): BoardTaxi {
-    val route = f.routes.firstOrNull { it.designator == pick?.runway }
+    val outbound = pick?.outbound ?: true
+    // the page's runway (landed on, for the way in) and the network it shows, whose numbers the spot is in: see routeShown
+    val route = pick?.let { routeShown(f, it.runway, outbound) }
         ?: here?.let { routeForPosition(f, it.first, it.second) }
         ?: f.routes.firstOrNull()
     val net = remember(f.id, route?.designator) { route?.let { TaxiNet(f, it) } }
     val liveSpot = here?.let { net?.nearestSpot(it.first, it.second) }?.takeIf { it.second < 220 }?.first
     val spot = pick?.spot?.let { n -> route?.parking?.firstOrNull { it.n == n } } ?: liveSpot
-    val outbound = pick?.outbound ?: true
+    val runway = pick?.runway?.takeIf { p -> f.routes.any { it.designator == p } } ?: route?.designator
     val path = remember(net, spot?.n, outbound) {
         val n = net ?: return@remember null
         val start = route?.start ?: return@remember null
@@ -1064,24 +1316,30 @@ private fun rememberBoardTaxi(f: Airfield, here: Pair<Double, Double>?, pick: Ta
     }
     val clearance = remember(path, outbound, spot?.n) {
         val n = net ?: return@remember null
-        path?.let { clearanceFor(n, it, outbound, spot) }
+        path?.let { clearanceFor(n, it, outbound, spot, runway = runway ?: n.route.designator) }
     }
-    return BoardTaxi(route, spot, outbound, path, clearance)
+    return BoardTaxi(route, spot, outbound, path, clearance, runway)
 }
 
 /** The live page: the jet in the middle, the chart turned to its heading, and the next turns under it. */
 @Composable
 private fun BoardGroundChart(f: Airfield, route: AfRoute?, slot: BoardSlot, live: Live?) {
-    val here = live?.let { fieldOffset(f, it.x, it.y) }
+    val contacts by MissionLink.contacts.collectAsState()
+    val deck = if (f.ship != null) deckPosition(f, live, contacts?.contacts, contacts?.t ?: 0L) else null
+    val here = if (f.ship != null) deck?.let { it.e to it.n } else live?.let { fieldOffset(f, it.x, it.y) }
+    val heading = if (f.ship != null) deck?.heading else live?.hdgTrue
     val spot = route?.let { r -> here?.let { (e, n) -> TaxiNet(f, r).nearestSpot(e, n) } }?.takeIf { it.second < 220 }?.first
     Column(Modifier.fillMaxSize().padding(PLATE_MARGIN)) {
         SheetTitle(if (route == null) f.name else "${f.name} — runway ${route.designator}")
         Text(
             listOfNotNull(
                 f.ship?.cls ?: f.runways.joinToString("  ") { "${it.name} ${it.lengthFt}×${it.widthFt} ft" },
+                f.ship?.skiDeg?.let { "${it.toInt()}° ski jump" },
                 f.elevationFt?.takeIf { f.ship == null }?.let { "ELEV $it ft" },
                 route?.let { "${it.parking.size} spots" },
-                spot?.let { "you are on ${it.n}" },
+                // the numbers are BMS's for this network, which is also the one Ground counts in after landing the other way
+                route?.let { r -> landingRouteFor(f, r).takeIf { it !== r }?.let { "Ground's numbers after landing on ${it.designator}" } },
+                spot?.let { "you are on ${it.label}" },
             ).joinToString("  ·  "),
             color = Hud.TextDim, fontSize = 9.sp,
         )
@@ -1099,13 +1357,13 @@ private fun BoardGroundChart(f: Airfield, route: AfRoute?, slot: BoardSlot, live
                 // or on the way in; the way to taxi is the Live taxi board's job and drawing it on both only puts
                 // a line across a chart the pilot is using to find something else.
                 you = here?.let { Offset(it.first.toFloat(), it.second.toFloat()) },
-                youHeading = live?.hdgTrue,
+                youHeading = heading,
                 selectedSpot = spot?.n,
                 interactive = false,
                 labelScale = 0.8f,
                 // A kneeboard page is far taller than it is wide and most airfields are long and thin, so the field
                 // is turned to whatever angle fills the page unless the pilot has asked for north or heading up.
-                upHeading = if (slot.options["up"] == "heading") live?.hdgTrue else null,
+                upHeading = if (slot.options["up"] == "heading") heading else null,
                 fitRotation = (slot.options["up"] ?: "fit") == "fit",
             )
         }
@@ -1118,6 +1376,10 @@ private fun picturePages(env: MissionEnv): List<BoardPage> {
     val live by MissionLink.live.collectAsState()
     val all = contacts?.contacts.orEmpty()
     val hostiles = all.filter { it.hostile && it.kind == "air" }
+    // the PC sends no hostile contact unless the pilot turned them on (HostileContacts, off by default)
+    if (!com.bmscompanion.app.ui.screens.mission.rememberHostilesOn()) return listOf(BoardPage("Picture") {
+        BoardNotice("Hostile contacts are off", "The live feed's enemy is shown only when Show hostile contacts (live) is on in Setup.")
+    })
     if (hostiles.isEmpty()) return listOf(BoardPage("Picture") {
         BoardNotice("No hostile air", "The picture comes from BMS's Tacview feed — press F in the cockpit to start ACMI recording.")
     })
@@ -1533,7 +1795,7 @@ private fun exportedPages(): List<BoardPage> {
     if (kb == null || !kb.available) return listOf(BoardPage("HTML Briefing") {
         BoardNotice(
             "No HTML Briefing kneeboard",
-            kb?.message ?: "This board shows the pages BMS's HTML Briefing tool exports. Run it on the BMS PC and export, " +
+            kb?.message ?: "This board shows the pages UOAF's HTML Briefing tool exports. Run it on the BMS PC and export, " +
                 "or give this board something else to show — nothing else depends on that tool.",
         )
     })

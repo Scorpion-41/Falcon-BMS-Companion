@@ -133,6 +133,22 @@ object Repo {
 
     suspend fun geo(mapId: String): GeoLayers? = load<GeoLayers>("data/geo/$mapId.json").await()
 
+    /** One Weapon Delivery Planner page as Falcas laid it out (docs/WDP-PORT.md); the shared Repo has the same. */
+    suspend fun wdpForm(form: String): com.bmscompanion.app.data.wdp.WdpForm? =
+        load<com.bmscompanion.app.data.wdp.WdpForm>("data/wdp/$form.json").await()
+
+    /**
+     * An asset as plain text, cached like every other: the Weapon Delivery Planner engine tables and databases,
+     * which are Falcas’s own formats and parsed by the ported code rather than by the JSON serializer.
+     */
+    suspend fun text(path: String): String? {
+        @Suppress("UNCHECKED_CAST")
+        val d = cache.getOrPut("text:$path") {
+            scope.async { runCatching { open(path).use { it.readBytes().decodeToString() } }.getOrNull() }
+        } as Deferred<String?>
+        return d.await()
+    }
+
     // ---------- images ----------
     // charts and map tiles; the map keeps its own visible tiles, so this only has to cover what is reused
     /** The PC always has room for full-size map tiles (see the Android Repo). */
@@ -217,9 +233,11 @@ object Repo {
     }
 
     private fun savePrefs() {
-        val snapshot = synchronized(prefs) { Properties().also { it.putAll(prefs) } }
         scope.async {
             synchronized(prefsFile) {
+                // taken here, not at the call: two saves in flight may run in either order, and one holding an older
+                // copy that ran last put a setting back (a page that writes on every slider move does exactly this)
+                val snapshot = synchronized(prefs) { Properties().also { it.putAll(prefs) } }
                 runCatching {
                     settingsFolder.mkdirs()
                     val tmp = File(settingsFolder, "pc-app.properties.tmp")

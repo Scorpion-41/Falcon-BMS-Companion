@@ -27,6 +27,7 @@ private external fun jsFetch(url: String, method: String, body: String?, timeout
 
 /** GET or POST returning the body text; throws [HttpException] (status -1 = network error, -2 = timeout). */
 suspend fun httpText(url: String, method: String = "GET", body: String? = null, timeoutMs: Int = 15_000): String {
+    installProbeIfAsked()
     val r = jsFetch(url, method, body, timeoutMs).await<JsAny>()
     val status = jsStatus(r)
     val text = jsText(r)
@@ -273,3 +274,65 @@ external fun perfMillis(): Double
 @JsFun("(s) => { try { return decodeURIComponent(s); } catch (e) { return s; } }")
 external fun decodeUriComponent(s: String): String
 
+// ---------------------------------------------------------------- the audit's probe
+
+/** The page was opened with `?probe=1`. */
+@JsFun("() => { try { return /[?&]probe=1(&|$)/.test(window.location.search); } catch (e) { return false; } }")
+private external fun probeAsked(): Boolean
+
+@JsFun("(f) => { window.__bmscProbe = () => { try { return JSON.parse(f()); } catch (e) { return { error: String(e) }; } }; }")
+private external fun jsInstallProbe(f: () -> String)
+
+@JsFun("() => (window.devicePixelRatio || 1)")
+private external fun devicePixelRatio(): Double
+
+private var probeChecked = false
+
+/**
+ * With `?probe=1` in the address, puts `window.__bmscProbe()` on the page for the browser audit (driven over the Chrome
+ * DevTools Protocol, which has no other way to find a button on a canvas): it returns
+ * `{"dpr":…,"rects":{"<form>/<control>":[x,y,w,h],…},"focused":…,"scales":{…}}` — every control of WDP's forms and
+ * windows ([WdpProbe]) and every named button of the Planner's shell and windows (`"planner/…"`, see `plannerProbe`),
+ * in canvas pixels (divide by `dpr` for CSS pixels). Installed once, on the page's first request, so no entry point has
+ * to call it (calling it again does nothing). Without the parameter it does nothing and the probe stays off.
+ */
+fun installProbeIfAsked() {
+    if (probeChecked) return
+    probeChecked = true
+    if (!probeAsked()) return
+    com.bmscompanion.app.ui.screens.wdp.WdpProbe.on = true
+    jsInstallProbe { probeJson() }
+}
+
+private fun probeJson(): String {
+    val probe = com.bmscompanion.app.ui.screens.wdp.WdpProbe
+    fun q(t: String) = buildString {
+        append('"')
+        for (c in t) when {
+            c == '"' -> append("\\\"")
+            c == '\\' -> append("\\\\")
+            c < ' ' -> append(' ')
+            else -> append(c)
+        }
+        append('"')
+    }
+    // one decimal at most, and whole numbers without one ("12", "0.8")
+    fun n(v: Float): String {
+        if (!v.isFinite()) return "0"
+        val d = kotlin.math.round(v.toDouble() * 10.0) / 10.0
+        return if (d == kotlin.math.floor(d)) d.toLong().toString() else d.toString()
+    }
+    return buildString {
+        append("{\"dpr\":").append(devicePixelRatio())
+        append(",\"focused\":").append(probe.focused?.let(::q) ?: "null")
+        append(",\"scales\":{")
+        probe.scales.entries.sortedBy { it.key }.forEachIndexed { i, (k, v) -> if (i > 0) append(','); append(q(k)).append(':').append(n(v)) }
+        append("},\"rects\":{")
+        probe.rects.entries.sortedBy { it.key }.forEachIndexed { i, (k, r) ->
+            if (i > 0) append(',')
+            append(q(k)).append(":[").append(n(r.left)).append(',').append(n(r.top)).append(',')
+                .append(n(r.width)).append(',').append(n(r.height)).append(']')
+        }
+        append("}}")
+    }
+}

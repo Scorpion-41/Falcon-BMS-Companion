@@ -1,32 +1,37 @@
 package com.bmscompanion.app.ui.screens
 
-import androidx.compose.foundation.lazy.grid.items as gridItems
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
 import androidx.compose.material.icons.filled.RestartAlt
@@ -41,6 +46,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -51,13 +57,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.bmscompanion.app.data.Checklist
 import com.bmscompanion.app.data.ChecklistItem
+import com.bmscompanion.app.data.ChecklistSection
 import com.bmscompanion.app.data.CommsFile
 import com.bmscompanion.app.data.HarmFile
 import com.bmscompanion.app.data.LineBrief
@@ -78,6 +87,7 @@ import com.bmscompanion.app.ui.components.RwrBadge
 import com.bmscompanion.app.ui.components.SearchField
 import com.bmscompanion.app.ui.components.SectionCard
 import com.bmscompanion.app.ui.components.Tag
+import com.bmscompanion.app.ui.components.isMedium
 import com.bmscompanion.app.ui.components.isWide
 import com.bmscompanion.app.ui.go
 import com.bmscompanion.app.ui.theme.Hud
@@ -123,11 +133,29 @@ fun ChecklistScreen(nav: NavHostController, id: String) {
     LaunchedEffect(wide, c) { if (wide && selected == null) selected = c?.sections?.firstOrNull { group.isEmpty() || it.group == group }?.id }
     val sections = remember(c, group, q) {
         c?.sections.orEmpty().filter { group.isEmpty() || it.group == group }.filter { s ->
-            q.isBlank() || s.title.contains(q, true) || s.items.any { (it.text ?: "").contains(q, true) || (it.action ?: "").contains(q, true) }
+            q.isBlank() || s.title.contains(q, true) || s.items.any {
+                (it.text ?: "").contains(q, true) || (it.action ?: "").contains(q, true) || (it.title ?: "").contains(q, true)
+            }
         }
     }
+    // The checklists either side of the open one, in the order the list shows them: within its group, and within the
+    // search while one is typed. A procedure opened from a warning light may sit in another group; then it is that
+    // group's order. At either end of a group there is nothing to go to, and no button.
+    fun neighbour(id: String, step: Int): ChecklistSection? {
+        val own = c?.sections?.firstOrNull { it.id == id } ?: return null
+        val order = sections.takeIf { l -> l.any { it.id == id } } ?: c.sections.filter { it.group == own.group }
+        val i = order.indexOfFirst { it.id == id }
+        return if (i < 0) null else order.getOrNull(i + step)
+    }
+    // Where a warning light's "open procedure" came from, so Back returns to the light rather than to the list.
+    var trail by remember(id) { mutableStateOf(listOf<String>()) }
+    fun go(target: String) { trail = emptyList(); selected = target }
+    fun openRef(target: String) { selected?.let { trail = trail + it }; selected = target }
+    fun back() { if (trail.isNotEmpty()) { selected = trail.last(); trail = trail.dropLast(1) } else selected = null }
     if (!wide && selected != null) {
-        c?.sections?.firstOrNull { it.id == selected }?.let { s -> ChecklistSectionView(c, s.id, onBack = { selected = null }, highlight = q) }
+        c?.sections?.firstOrNull { it.id == selected }?.let { s ->
+            ChecklistSectionView(c, s.id, onBack = { back() }, highlight = q, prev = neighbour(s.id, -1), next = neighbour(s.id, 1), onGo = { go(it) }, onOpenRef = { openRef(it) })
+        }
         return
     }
     ListDetail(
@@ -145,29 +173,99 @@ fun ChecklistScreen(nav: NavHostController, id: String) {
                             s.title, "${s.items.size} items" + if (done > 0) " · $done/$steps checked" else "",
                             selected = selected == s.id,
                             leading = { Box(Modifier.size(8.dp).clip(RoundedCornerShape(4.dp)).background(if (s.group.contains("Emergenc", true) || s.group.contains("Warning", true)) Hud.Red else Hud.Green)) },
-                            onClick = { selected = s.id },
+                            onClick = { go(s.id) },
                         )
                     }
                 }
             }
         },
-        detail = { c?.let { cc -> selected?.let { ChecklistSectionView(cc, it, onBack = null, highlight = q) } } },
+        detail = {
+            c?.let { cc ->
+                selected?.let {
+                    ChecklistSectionView(
+                        cc, it, onBack = if (trail.isNotEmpty()) ({ back() }) else null, highlight = q,
+                        prev = neighbour(it, -1), next = neighbour(it, 1), onGo = { n -> go(n) }, onOpenRef = { n -> openRef(n) },
+                    )
+                }
+            }
+        },
     )
 }
 
 @Composable
-private fun ChecklistSectionView(c: Checklist, sectionId: String, onBack: (() -> Unit)?, highlight: String) {
+private fun ChecklistSectionView(
+    c: Checklist,
+    sectionId: String,
+    onBack: (() -> Unit)?,
+    highlight: String,
+    prev: ChecklistSection? = null,
+    next: ChecklistSection? = null,
+    onGo: (String) -> Unit = {},
+    onOpenRef: (String) -> Unit = {},
+) {
     val s = c.sections.firstOrNull { it.id == sectionId } ?: return
     val prefKey = "cl:${c.id}:${s.id}"
     var checked by remember(prefKey) { mutableStateOf(Repo.getStringSet(prefKey)) }
     fun toggle(k: String) { checked = if (k in checked) checked - k else checked + k; Repo.putStringSet(prefKey, checked) }
     val emergency = s.group.contains("Emergenc", true)
+    // a warning light's link names the procedure it opens: its title, and which engine's where the groups differ by it
+    val refLabel: (String) -> String? = { ref ->
+        c.sections.firstOrNull { it.id == ref }?.let { t ->
+            val engine = Regex("\\(([^)]*)\\)\\s*$").find(t.group)?.groupValues?.get(1)
+            if (engine != null && !t.title.contains(engine)) "${t.title} ($engine)" else t.title
+        }
+    }
     Column(Modifier.fillMaxSize()) {
         BmsTopBar(s.title, s.group, onBack = onBack, actions = {
             IconButton({ checked = emptySet(); Repo.putStringSet(prefKey, emptySet()) }) { Icon(Icons.Default.RestartAlt, "Reset", tint = Hud.TextDim) }
         })
-        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            itemsIndexedCompat(s.items) { i, item -> ChecklistItemView(item, "$i" in checked, emergency, highlight) { toggle("$i") } }
+        // keyed by the checklist, so the next one opens at its top rather than at the scroll the last one ended on
+        key(s.id) {
+            LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                itemsIndexedCompat(s.items) { i, item ->
+                    ChecklistItemView(item, "$i" in checked, emergency, highlight, refLabel, onOpenRef) { toggle("$i") }
+                }
+                if (prev != null || next != null) item { ChecklistFoot(prev, next, onGo) }
+            }
+        }
+    }
+}
+
+/**
+ * The foot of a checklist: the one before on the left and the one after on the right, each naming its checklist, each
+ * whole card a button. A lone one takes the full width.
+ */
+@Composable
+private fun ChecklistFoot(prev: ChecklistSection?, next: ChecklistSection?, onGo: (String) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        prev?.let { p -> StepCard(p, forward = false, Modifier.weight(1f)) { onGo(p.id) } }
+        next?.let { n -> StepCard(n, forward = true, Modifier.weight(1f)) { onGo(n.id) } }
+    }
+}
+
+@Composable
+private fun StepCard(to: ChecklistSection, forward: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val tint = if (to.group.contains("Emergenc", true) || to.group.contains("Warning", true)) Hud.Red else Hud.Green
+    Row(
+        modifier.clip(RoundedCornerShape(10.dp)).background(Hud.Surface)
+            .border(1.dp, tint.copy(alpha = 0.5f), RoundedCornerShape(10.dp)).clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (!forward) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Previous checklist", tint = tint)
+            Spacer(Modifier.width(10.dp))
+        }
+        Column(Modifier.weight(1f), horizontalAlignment = if (forward) Alignment.Start else Alignment.End) {
+            Text(if (forward) "NEXT" else "PREVIOUS", style = LocalExtra.current.overline, color = tint)
+            Text(
+                to.title, style = MaterialTheme.typography.titleSmall, color = Hud.Text, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                textAlign = if (forward) TextAlign.Start else TextAlign.End,
+            )
+        }
+        if (forward) {
+            Spacer(Modifier.width(10.dp))
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, "Next checklist", tint = tint)
         }
     }
 }
@@ -177,41 +275,157 @@ private fun <T> androidx.compose.foundation.lazy.LazyListScope.itemsIndexedCompa
 }
 
 @Composable
-private fun ChecklistItemView(it: ChecklistItem, checked: Boolean, emergency: Boolean, highlight: String, onToggle: () -> Unit) {
+private fun ChecklistItemView(
+    it: ChecklistItem,
+    checked: Boolean,
+    emergency: Boolean,
+    highlight: String,
+    refLabel: (String) -> String?,
+    onOpenRef: (String) -> Unit,
+    onToggle: () -> Unit,
+) {
     when (it.type) {
+        "light" -> LightView(it, highlight, refLabel, onOpenRef)
+        "table" -> ChecklistTable(it)
         "subhead" -> Text((it.text ?: it.title ?: "").uppercase(), style = LocalExtra.current.overline, color = Hud.Cyan, modifier = Modifier.padding(top = 14.dp, bottom = 4.dp))
         "note", "caution", "warning" -> {
             val color = when (it.type) { "warning" -> Hud.Red; "caution" -> Hud.Amber; else -> Hud.Cyan }
             Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(10.dp)).background(color.copy(alpha = 0.10f)).border(1.dp, color.copy(alpha = 0.5f), RoundedCornerShape(10.dp)).padding(10.dp)) {
                 Text(it.type.uppercase(), style = LocalExtra.current.overline, color = color)
-                Text(it.text ?: "", style = MaterialTheme.typography.bodyMedium)
+                Text(it.text ?: "", style = MaterialTheme.typography.bodyMedium, color = Hud.Text)
             }
-        }
-        "table" -> Column(Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(RoundedCornerShape(10.dp)).background(Hud.Surface).horizontalScroll(rememberScrollState()).padding(10.dp)) {
-            it.title?.let { t -> Text(t, style = MaterialTheme.typography.titleSmall, color = Hud.Amber) }
-            if (it.columns.isNotEmpty()) Row { it.columns.forEach { col -> Text(col, Modifier.width(130.dp).padding(4.dp), style = LocalExtra.current.overline, color = Hud.Green) } }
-            it.rows.forEach { r -> Row { r.forEach { cell -> Text(cell, Modifier.width(130.dp).padding(4.dp), fontSize = 12.sp) } } }
         }
         else -> {
             val hl = highlight.isNotBlank() && ((it.text ?: "").contains(highlight, true) || (it.action ?: "").contains(highlight, true))
+            val body = MaterialTheme.typography.bodyMedium
+            // The box, the number and the words sit on the step's first line: the number and the words share its
+            // baseline (they are set in different faces and sizes, so tops would not line up), and the box is centred
+            // in the height of that line.
+            val firstLine = with(LocalDensity.current) { (if (body.lineHeight.isSp) body.lineHeight else body.fontSize * 1.4f).toDp() }
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp))
                     .background(if (hl) Hud.Amber.copy(alpha = 0.12f) else if (checked) Hud.Green.copy(alpha = 0.06f) else Color.Transparent)
                     .clickable(onClick = onToggle).padding(horizontal = 6.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.Top,
             ) {
-                Icon(if (checked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank, null, tint = if (checked) Hud.Green else Hud.TextFaint, modifier = Modifier.size(20.dp))
+                Box(Modifier.height(firstLine), contentAlignment = Alignment.Center) {
+                    Icon(if (checked) Icons.Default.CheckBox else Icons.Default.CheckBoxOutlineBlank, null, tint = if (checked) Hud.Green else Hud.TextFaint, modifier = Modifier.size(20.dp))
+                }
                 Spacer(Modifier.width(8.dp))
-                Text(it.n ?: "", Modifier.width(28.dp), style = LocalExtra.current.monoSmall, color = if (emergency || it.critical) Hud.Red else Hud.TextDim)
-                Column(Modifier.weight(1f)) {
+                Text(it.n ?: "", Modifier.width(28.dp).alignByBaseline(), style = LocalExtra.current.monoSmall, color = if (emergency || it.critical) Hud.Red else Hud.TextDim)
+                Column(Modifier.weight(1f).alignByBaseline()) {
                     Row {
-                        Text(it.text ?: "", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = if (checked) Hud.TextDim else Hud.Text, fontWeight = if (it.critical) FontWeight.Bold else FontWeight.Normal)
-                        it.action?.let { a -> Text(a, Modifier.padding(start = 10.dp).widthIn(max = 180.dp), style = LocalExtra.current.monoSmall, color = if (checked) Hud.TextDim else Hud.Amber, fontWeight = FontWeight.Bold) }
+                        Text(it.text ?: "", Modifier.weight(1f).alignByBaseline(), style = body, color = if (checked) Hud.TextDim else Hud.Text, fontWeight = if (it.critical) FontWeight.Bold else FontWeight.Normal)
+                        it.action?.let { a -> Text(a, Modifier.padding(start = 10.dp).widthIn(max = 180.dp).alignByBaseline(), style = LocalExtra.current.monoSmall, color = if (checked) Hud.TextDim else Hud.Amber, fontWeight = FontWeight.Bold) }
                     }
                     it.note?.let { n -> Text(n, style = MaterialTheme.typography.bodySmall, color = Hud.TextFaint) }
                 }
             }
         }
+    }
+}
+
+/**
+ * A table from the checklist, its columns sized to what they hold: a short "Term" column beside a long "Definition"
+ * gets a narrow share and the definition the rest, instead of every column the same 130 dp (which set the definitions
+ * one word to a line with half the card empty). Only when the columns cannot all fit at a readable width does the
+ * table keep them at a fixed width and scroll sideways.
+ */
+@Composable
+private fun ChecklistTable(it: ChecklistItem) {
+    val cols = maxOf(it.columns.size, it.rows.maxOfOrNull { r -> r.size } ?: 0)
+    if (cols == 0) return
+    val weights = (0 until cols).map { i ->
+        (listOfNotNull(it.columns.getOrNull(i)) + it.rows.mapNotNull { r -> r.getOrNull(i) })
+            .maxOfOrNull { s -> s.length }.let { n -> (n ?: 6).coerceIn(6, 48).toFloat() }
+    }
+    val rule = Hud.TextFaint.copy(alpha = 0.18f)
+    BoxWithConstraints(Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(RoundedCornerShape(10.dp)).background(Hud.Surface).padding(10.dp)) {
+        val minCol = 72.dp
+        val fits = maxWidth >= minCol * cols
+        val avg = weights.sum() / cols
+        val fixed = weights.map { w -> (minCol * (w / avg) * 1.4f).coerceIn(minCol, 240.dp) }
+        val across = if (fits) Modifier.fillMaxWidth() else Modifier.width(fixed.fold(0.dp) { a, b -> a + b })
+        @Composable
+        fun RowScope.cell(i: Int, content: @Composable (Modifier) -> Unit) =
+            content(if (fits) Modifier.weight(weights[i]) else Modifier.width(fixed[i]))
+        Column(if (fits) Modifier.fillMaxWidth() else Modifier.horizontalScroll(rememberScrollState())) {
+            it.title?.let { t -> Text(t, Modifier.padding(start = 4.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall, color = Hud.Amber) }
+            if (it.columns.isNotEmpty()) Row {
+                it.columns.forEachIndexed { i, col -> cell(i) { m -> Text(col, m.padding(4.dp), style = LocalExtra.current.overline, color = Hud.Green) } }
+            }
+            it.rows.forEach { r ->
+                Box(across.height(1.dp).background(rule))
+                Row {
+                    r.forEachIndexed { i, text ->
+                        cell(i) { m ->
+                            Text(text, m.padding(horizontal = 4.dp, vertical = 5.dp), fontSize = 13.sp, color = if (i == 0 && cols > 1) Hud.TextDim else Hud.Text)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One cockpit light: its legend on a lamp in the panel's colour, what lights it, what to do, and a link to each full
+ * procedure in this checklist (one per engine where the procedure differs by engine).
+ */
+@Composable
+private fun LightView(it: ChecklistItem, highlight: String, refLabel: (String) -> String?, onOpenRef: (String) -> Unit) {
+    val lamp = when (it.panel) { "warning" -> Hud.Red; "caution" -> Hud.Amber; else -> Hud.Green }
+    val hl = highlight.isNotBlank() && listOf(it.title, it.text, it.action).any { s -> (s ?: "").contains(highlight, true) }
+    val card = Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(10.dp))
+        .background(if (hl) Hud.Amber.copy(alpha = 0.12f) else Hud.Surface).padding(10.dp)
+    // the lamp: dark glass with the legend lit in the light's own colour, as on the panel
+    val lampView: @Composable (Modifier) -> Unit = { m ->
+        Box(
+            m.heightIn(min = 40.dp).clip(RoundedCornerShape(4.dp))
+                .background(lamp.copy(alpha = 0.14f)).border(1.dp, lamp.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text((it.title ?: "").uppercase(), style = LocalExtra.current.monoSmall, color = lamp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        }
+    }
+    // beside the words where there is room; on a phone above them, so the words have the whole width
+    if (isMedium()) Row(card, verticalAlignment = Alignment.Top) {
+        lampView(Modifier.width(132.dp))
+        Spacer(Modifier.width(12.dp))
+        LightWords(it, lamp, refLabel, onOpenRef, Modifier.weight(1f))
+    } else Column(card) {
+        lampView(Modifier.widthIn(min = 120.dp))
+        Spacer(Modifier.height(8.dp))
+        LightWords(it, lamp, refLabel, onOpenRef, Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun LightWords(it: ChecklistItem, lamp: Color, refLabel: (String) -> String?, onOpenRef: (String) -> Unit, modifier: Modifier) {
+    Column(modifier) {
+        it.text?.let { t -> Text(t, style = MaterialTheme.typography.bodyMedium, color = Hud.Text) }
+        it.action?.let { a ->
+            Spacer(Modifier.height(6.dp))
+            Text("WHAT TO DO", style = LocalExtra.current.overline, color = lamp)
+            Text(a, style = MaterialTheme.typography.bodyMedium, color = Hud.Amber)
+        }
+        // a procedure the checklist splits across two sections gets two links with one title: number them
+        val links = it.refs.mapNotNull { ref -> refLabel(ref)?.let { ref to it } }
+        val times = links.groupingBy { l -> l.second }.eachCount()
+        val seen = HashMap<String, Int>()
+        links.forEach { (ref, title) ->
+            val label = if ((times[title] ?: 0) > 1) "$title (part ${(seen[title] ?: 0) + 1})".also { seen[title] = (seen[title] ?: 0) + 1 } else title
+            Row(
+                Modifier.padding(top = 6.dp).clip(RoundedCornerShape(6.dp)).clickable { onOpenRef(ref) }.padding(vertical = 4.dp, horizontal = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(label, style = MaterialTheme.typography.bodySmall, color = Hud.Cyan, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(4.dp))
+                Icon(Icons.AutoMirrored.Filled.ArrowForward, "Open the procedure", tint = Hud.Cyan, modifier = Modifier.size(14.dp))
+            }
+        }
+        it.note?.let { n -> Text(n, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall, color = Hud.TextFaint) }
     }
 }
 

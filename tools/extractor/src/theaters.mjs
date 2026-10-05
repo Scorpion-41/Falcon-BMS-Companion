@@ -1,7 +1,7 @@
 // Theater discovery: theater.lst + .tdf files → resolved data directories.
 import fs from 'node:fs';
 import path from 'node:path';
-import { DATA, readText, resolveCI, slug, exists } from './util.mjs';
+import { DATA, readText, resolveCI, slug, exists, findFileCI } from './util.mjs';
 
 function parseTdf(file) {
   const out = {};
@@ -34,6 +34,8 @@ export function loadTheaters() {
       addon: /^add-on/i.test(rel),
       campaignDir: dir('campaigndir', 'Campaign'),
       terrainDir,
+      // whether the definition names its terrain at all (Weapon Delivery Planner's default differs from BMS's)
+      tdfTerrainDir: !!t.terraindir,
       terrDataDir: path.dirname(terrainDir), // holds TacRefDB.xml and ATC/
       objectDir: dir('objectdir', 'Terrdata/objects'),
       data3dDir: dir('3ddatadir', 'Terrdata/objects'),
@@ -46,6 +48,26 @@ export function loadTheaters() {
     theaters.push(th);
   }
   return theaters;
+}
+
+/**
+ * The theater's PPT type table, `Campaign/Ppt.ini`: one line per type, `<code> <radius ft> <name>` (e.g.
+ * `SA2 164055.124511719 SA-2`, `AWC 0.1 AWACS`), which is the list BMS's DTC offers for a pre-planned threat and
+ * the radius it draws when the cartridge gives none. Every campaign folder has its own (the Korea 2012 pack has one
+ * per campaign), so it is read from the definition's `campaigndir`. Rows are kept in the file's order and as the
+ * file has them, repeats and "---" separator rows included (Hellas's list is sectioned with them), because that is
+ * the order the pilot sees in BMS. Null when the file is missing.
+ */
+export function readPptTable(th) {
+  const file = findFileCI(th.campaignDir, 'Ppt.ini');
+  if (!file) return null;
+  const rows = [];
+  for (const raw of (readText(file, 'latin1') || '').split(/\r?\n/)) {
+    const m = raw.trim().match(/^(\S+)\s+([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)(?:\s+(.*))?$/);
+    if (!m) { if (raw.trim()) console.warn(`ppt: ${file}: "${raw.trim()}" is not <code> <radius> <name>; left out`); continue; }
+    rows.push({ code: m[1], radiusFt: Number(m[2]), name: (m[3] || '').trim() });
+  }
+  return { file: path.relative(DATA, file).split(path.sep).join('/'), rows };
 }
 
 if (process.argv[1] && process.argv[1].endsWith('theaters.mjs')) {

@@ -55,8 +55,11 @@ fun MissionScreen(nav: NavHostController) {
         return
     }
 
+    // The Dashboard can take the whole pane (DashFocus); every other tab always keeps its chrome.
+    val focused = ((DashFocus.on || MfdFull.on) && tab == MissionTab.DASH) ||
+        (com.bmscompanion.app.ui.screens.wdp.WdpFocus.on && tab == MissionTab.PLANNER && info.wdpMode)
     Column(Modifier.fillMaxSize().background(Hud.Bg)) {
-        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (!focused) Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 6.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             MissionStatus(
                 state, info, live,
                 badge = null,
@@ -64,7 +67,9 @@ fun MissionScreen(nav: NavHostController) {
                 onSetup = { nav.go(com.bmscompanion.app.ui.Routes.SETUP) },
             )
         }
-        MissionTabStrip(tab, onTab)
+        // where everything below comes from, on every tab: the EZBoards | WDP switch and its line (MissionSource.kt)
+        if (!focused) MissionSourceBar(onTab)
+        if (!focused) MissionTabStrip(tab, onTab)
         Box(Modifier.weight(1f).fillMaxWidth()) { MissionTabContent(tab, env, onTab) }
     }
 }
