@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.3.9 (BMS 4.38) — unreleased
+## 1.3.9 (BMS 4.38) — October 2026
 
 **Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install**; existing settings are kept.
 
