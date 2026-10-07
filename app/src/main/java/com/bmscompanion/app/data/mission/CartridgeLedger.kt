@@ -13,8 +13,12 @@ import kotlinx.serialization.Serializable
 // the Planner wrote, with the value and the mission it was written for. A key is a **leftover** when the mission now is
 // another flight than the ledger's, and the cartridge still holds exactly the value the Planner wrote — BMS or the
 // pilot having changed it since makes it theirs, and it is never touched. Keys BMS wrote are not in the ledger and
-// cannot be dated; nothing is said about them. Since 1.3.8 a leftover is never shown or asked about: the PC clears it
-// by itself when a new mission begins or the mode is switched ([SwitchReset]), with a short note and an Undo.
+// cannot be dated; nothing is said about them — except a **copy** of one of the Planner's items: BMS's DTC memory keeps
+// what the pilot last LOADed and writes it into the cartridge and the next save's mission file, so a PPT, target or
+// weapon target the ledger still names (its live rows, or what the last few resets cleared) for another flight turning
+// up again is the Planner's, wherever it is (1.3.9, [Leftovers.sameItem]); the rest is "Start each opened mission with
+// clean lines, PPTs and Open 1/2 steerpoints" ([PlannerPcSettings]). No log of past values is kept. Since 1.3.8 a leftover is never shown or asked
+// about: the PC clears it by itself when a new mission begins or the mode is switched ([SwitchReset]).
 
 /**
  * Which mission something was written for, or which mission is being flown now. The flight's [callsign] ("Cyborg6"),
@@ -127,7 +131,9 @@ data class LedgerCleared(
 
 /**
  * The ledger of one pilot's cartridge: the last write the Planner made to each key, and what the last few switches of
- * mode cleared ([cleared], for their Undo).
+ * mode cleared ([cleared], for their Undo; the last five resets). Those two are also the only memory a **copy BMS made**
+ * of a PPT, target or weapon target is recognised by ([Leftovers.sameItem]): no log of past values is kept (a 1.3.9 test
+ * build's `history` field is passed over when an old file is read).
  */
 @Serializable
 data class CartridgeLedger(
@@ -225,6 +231,50 @@ object Leftovers {
             else if (!x[i].equals(y[i], ignoreCase = true)) return false
         }
         return true
+    }
+
+    /** How far a copy's point may sit from the Planner's: BMS keeps positions as floats (a quarter foot at 2,000,000 ft). */
+    const val COPY_FT = 1.0
+
+    private val SPACES = Regex("\\s+")
+    private fun norm(s: String) = s.trim().replace(SPACES, " ").lowercase()
+
+    /**
+     * The same mission item, as Falcon BMS copies it from its DTC memory into another file (1.3.9): [a] and [b] are two
+     * values of a `[STPT]` key of [kind], and both place something at the same point. BMS writes a line point back
+     * exactly as the Planner wrote it ("%f, %f, %f"), but a PPT in its own way (seen on a pilot's install: the height
+     * written as 0, the range as a float, 164055.1 → 164055.125000, a north of 927309.5625 → 927309.5), so the values are
+     * compared as numbers, never as text: north and east within [COPY_FT] (the height is never compared); a PPT's range
+     * within a foot and its code; a target's or weapon target's action −1 (a precision target: BMS's route, action 0 and
+     * up, never matches) and its name (spaces and case aside; one a prefix of the other from 15 characters, in case BMS
+     * shortens a long name). Nav offsets are never compared here.
+     */
+    fun sameItem(kind: String, a: String, b: String): Boolean {
+        val x = a.split(',')
+        val y = b.split(',')
+        fun num(f: List<String>, i: Int) = f.getOrNull(i)?.trim()?.toDoubleOrNull()
+        val ax = num(x, 0) ?: return false
+        val ay = num(x, 1) ?: return false
+        val bx = num(y, 0) ?: return false
+        val by = num(y, 1) ?: return false
+        if (ax == 0.0 && ay == 0.0) return false
+        if (kotlin.math.abs(ax - bx) > COPY_FT || kotlin.math.abs(ay - by) > COPY_FT) return false
+        fun rest(f: List<String>) = norm(f.drop(4).joinToString(","))
+        return when (kind) {
+            LINE -> true
+            PPT -> {
+                val ar = num(x, 3) ?: return false
+                val br = num(y, 3) ?: return false
+                kotlin.math.abs(ar - br) <= maxOf(1.0, kotlin.math.abs(ar) * 1e-6) && rest(x).trimEnd(',').trim() == rest(y).trimEnd(',').trim()
+            }
+            STEERPOINT, WEAPON -> {
+                if (num(x, 3) != -1.0 || num(y, 3) != -1.0) return false
+                val p = rest(x)
+                val q = rest(y)
+                p == q || (minOf(p.length, q.length) >= 15 && (p.startsWith(q) || q.startsWith(p)))
+            }
+            else -> false
+        }
     }
 
     /** What Clear writes over a leftover: BMS's own empty slot, the zero nav offset, or (an offset aim point) nothing. */
@@ -356,6 +406,20 @@ object Leftovers {
         "The cartridge still holds ${summary(items)} the Planner saved for ${from?.label ?: "an earlier mission"}" +
             date(at).let { if (it.isEmpty()) "" else " on $it" } + "."
 }
+
+/**
+ * The Planner's settings that the PC keeps, because the PC acts on them (`GET`/`POST /api/planner/settings`, 1.3.9;
+ * shown in the Planner's Settings window on every device). [cleanOpened]: **Start each opened mission with clean lines
+ * and PPTs** — when the Planner plans another flight (Open mission… or Pick a flight, `POST /api/mission/opened?clean=1`)
+ * the PC takes every HSD line (`lineSTPT_0…23`) and every PPT (`ppt_0…14`) out of the cartridge and out of the campaign
+ * mission file BMS's LOAD reads for that flight, whoever made them (never in a TE or a training, never what the
+ * Planner saved for that flight, never a target). Never at a PRINT or a switch of mode. On by default; off = nothing is
+ * cleaned then.
+ */
+@Serializable
+data class PlannerPcSettings(
+    val cleanOpened: Boolean = true,
+)
 
 /**
  * What a switch of the Mission section's mode reset by itself (`MissionSourceInfo.reset`; docs/DATA-STORES.md, "What a

@@ -58,8 +58,9 @@ import javax.imageio.ImageIO
  *    circle, and timed.
  * 2. **Not linked**: the window says the PC does it, draws no table, and its Print does nothing.
  * 3. **Linked** (This PC, the bridge running on the copy, EZBoards mode): sixteen pages with their owners, EZBoards' claims from the
- *    copy's `CONFIG_USER.BAT`, and the Mission set on the first two pages EZBoards leaves alone.
- * 4. **Print** through the window's own button: exactly those two files change (SHA of every file in the copy before
+ *    copy's `CONFIG_USER.BAT`, and the Mission set (1.3.9: Briefing + Weather, DataCard, Coordination Card) on the first
+ *    three pages EZBoards leaves alone.
+ * 4. **Print** through the window's own button: exactly those three files change (SHA of every file in the copy before
  *    and after), each half the window drew is in the file (decoded, compared with what was captured), the owners read
  *    back as BMS Companion with the kind printed, and printing again changes nothing.
  * 5. **A test page** on one more page, through the Test page button, decoded to a picture at the pad's shape.
@@ -71,7 +72,7 @@ import javax.imageio.ImageIO
  *    the pictures kept on the device between launches; the print holds each picture stretched over its half, drawn by
  *    the PC from the file (no capture on the device), a 1024 x 2048 picture of one-pixel rules pixel for pixel, the
  *    owner reads back as Picture, and a picture gone by print time leaves its half as it is with the reason.
- * 9. **WDP mode**: the Mission set on pages 1 and 2 whatever EZBoards claims (on pages 2 and 3 in EZBoards mode, page 1
+ * 9. **WDP mode**: the Mission set on pages 1, 2 and 3 whatever EZBoards claims (on pages 2, 3 and 4 in EZBoards mode, page 1
  *    claimed: two `SET KNEEBOARD` lines are added to the copy's EZBoards config for this part when it does not claim
  *    page 1, and taken out after), an untouched EZBoards-mode Mission set laid again when the PC switches, the first
  *    opening in WDP mode, Print writing page 1, and a plan changed by hand kept across a switch.
@@ -85,6 +86,10 @@ import javax.imageio.ImageIO
 object PrintOutcome {
     private const val SCENE_W = 1280
     private const val SCENE_H = 800
+
+    /** The Mission set's halves on [pages], pair by pair (Briefing + Weather, DataCard, Coordination Card). */
+    private fun missionPlan(pages: List<Int>): Map<String, String> =
+        pages.zip(KneeboardPrintSession.MISSION_SET).flatMap { (n, k) -> listOf("${n}L" to k.first, "${n}R" to k.second) }.toMap()
 
     fun run(outDir: File, more: List<String>): String {
         val out = StringBuilder()
@@ -211,16 +216,15 @@ object PrintOutcome {
                 val claims = st?.pages.orEmpty().flatMap { p -> listOfNotNull("${p.n}L".takeIf { p.ezLeft }, "${p.n}R".takeIf { p.ezRight }) }
                 line("  EZBoards claims: ${claims.ifEmpty { listOf("none") }.joinToString()}")
                 val set = KneeboardPrintSession.missionPages()
-                check(set.size == 2 && set.none { n -> claims.any { it.startsWith("$n") && it.length == "$n".length + 1 } },
-                    "the Mission set is on the first two pages EZBoards leaves alone: ${set.joinToString(" and ")}", "$set")
+                check(set.size == 3 && set.none { n -> claims.any { it.startsWith("$n") && it.length == "$n".length + 1 } },
+                    "the Mission set is on the first three pages EZBoards leaves alone: ${set.joinToString(", ")}", "$set")
                 // EZBoards not set up in BMS Companion: its claims are unknown, and the pages as it ships are page 1
                 val unknown = KneeboardPrintSession.state?.let { st -> st.copy(ezConfig = null, pages = st.pages.map { it.copy(ezLeft = false, ezRight = false) }) }
                 val setUnknown = KneeboardPrintSession.missionPages(unknown)
-                check(setUnknown == listOf(2, 3), "with EZBoards not set up, the Mission set still leaves page 1 to it: pages 2 and 3", "$setUnknown")
+                check(setUnknown == listOf(2, 3, 4), "with EZBoards not set up, the Mission set still leaves page 1 to it: pages 2, 3 and 4", "$setUnknown")
                 val plan = KneeboardPrintSession.plan.toMap()
-                check(set.size == 2 && plan == mapOf("${set[0]}L" to KbKind.DATACARD_LEFT, "${set[0]}R" to KbKind.DATACARD_RIGHT,
-                    "${set[1]}L" to KbKind.COORDINATION_LEFT, "${set[1]}R" to KbKind.COORDINATION_RIGHT),
-                    "the window opened on the Mission set: DataCard on page ${set.getOrNull(0)}, Coordination on page ${set.getOrNull(1)}", "$plan")
+                check(set.size == 3 && plan == missionPlan(set),
+                    "the window opened on the Mission set: Briefing + Weather on page ${set.getOrNull(0)}, DataCard on page ${set.getOrNull(1)}, Coordination on page ${set.getOrNull(2)}", "$plan")
                 stage.frames(20, 30)   // the thumbnails
                 stage.shot(File(pics, "window-linked.png"))
                 // the picker: a half set by its menu, then set back
@@ -256,8 +260,8 @@ object PrintOutcome {
                 line("  took $took ms for ${captures.size} halves (capture, encode, send, write)")
                 val files = set.map { KneeboardPrint.pageName(it) }
                 check(res.map { it.file }.sorted() == files.sorted() && res.all { it.status == KbFileResult.WRITTEN },
-                    "the Mission set writes 2 files: ${files.joinToString()}", res.joinToString { "${it.file} ${it.status}" })
-                check(captures.size == 4 && captures.all { it.first == 1024 && it.second == 1536 }, "four halves were drawn at 1024 x 1536", captures.joinToString { "${it.first}x${it.second}" })
+                    "the Mission set writes 3 files: ${files.joinToString()}", res.joinToString { "${it.file} ${it.status}" })
+                check(captures.size == 6 && captures.all { it.first == 1024 && it.second == 1536 }, "six halves were drawn at 1024 x 1536", captures.joinToString { "${it.first}x${it.second}" })
                 val shaAfter = shaTree(root)
                 val changed = (shaBefore.keys + shaAfter.keys).filter { shaBefore[it] != shaAfter[it] }.sorted()
                 check(changed.map { it.substringAfterLast('/') }.sorted() == files.sorted(), "only those files changed in the copy, and nothing new appeared", changed.joinToString())
@@ -282,9 +286,9 @@ object PrintOutcome {
                 }
                 val st2 = KneeboardPrintSession.state
                 val owners = set.map { n -> st2?.pages?.firstOrNull { it.n == n } }
-                check(owners.size == 2 && owners[0]?.left == KbOwner.COMPANION && owners[0]?.leftKind == KbKind.DATACARD_LEFT && owners[0]?.rightKind == KbKind.DATACARD_RIGHT &&
-                    owners[1]?.left == KbOwner.COMPANION && owners[1]?.leftKind == KbKind.COORDINATION_LEFT && owners[1]?.rightKind == KbKind.COORDINATION_RIGHT,
-                    "the owners read back: BMS Companion, DataCard L/R on page ${set.getOrNull(0)}, Coordination L/R on page ${set.getOrNull(1)}",
+                check(owners.size == 3 && owners.zip(KneeboardPrintSession.MISSION_SET).all { (o, k) ->
+                        o?.left == KbOwner.COMPANION && o.right == KbOwner.COMPANION && o.leftKind == k.first && o.rightKind == k.second },
+                    "the owners read back: BMS Companion, Briefing/Weather on page ${set.getOrNull(0)}, DataCard L/R on page ${set.getOrNull(1)}, Coordination L/R on page ${set.getOrNull(2)}",
                     owners.joinToString { "${it?.n}: ${it?.left}/${it?.leftKind} ${it?.right}/${it?.rightKind}" })
                 stage.frames(20, 30)
                 stage.shot(File(pics, "window-printed.png"))
@@ -295,7 +299,7 @@ object PrintOutcome {
                 stage.until(180_000) { !KneeboardPrintSession.busy && KneeboardPrintSession.results.isNotEmpty() && KneeboardPrintSession.progress == null }
                 val again = KneeboardPrintSession.results
                 val sameFiles = shaTree(root) == shaMid
-                check(again.size == 2 && again.all { it.status == KbFileResult.UNCHANGED } && sameFiles, "printing again changes nothing (the same page draws the same picture)",
+                check(again.size == 3 && again.all { it.status == KbFileResult.UNCHANGED } && sameFiles, "printing again changes nothing (the same page draws the same picture)",
                     again.joinToString { "${it.file} ${it.status}" } + if (sameFiles) "" else "; files changed")
                 line("")
 
@@ -543,11 +547,15 @@ object PrintOutcome {
                 line("  EZBoards claims in the copy: ${claimedNow.ifEmpty { listOf("none") }.joinToString()}")
                 // the rule on a stock EZBoards setup (page 1 claimed), whatever the copy's own config says
                 val stock = KneeboardPrintSession.state?.let { s0 -> s0.copy(pages = s0.pages.map { it.copy(ezLeft = it.n == 1, ezRight = it.n == 1) }) }
-                check(KneeboardPrintSession.missionPages(stock?.copy(mode = MissionMode.EZBOARDS)) == listOf(2, 3), "EZBoards mode, page 1 claimed: the Mission set is on pages 2 and 3 (as before)",
+                check(KneeboardPrintSession.missionPages(stock?.copy(mode = MissionMode.EZBOARDS)) == listOf(2, 3, 4), "EZBoards mode, page 1 claimed: the Mission set is on pages 2, 3 and 4",
                     "${KneeboardPrintSession.missionPages(stock?.copy(mode = MissionMode.EZBOARDS))}")
-                check(KneeboardPrintSession.missionPages(stock?.copy(mode = MissionMode.WDP)) == listOf(1, 2), "WDP mode, page 1 claimed: the Mission set is on pages 1 and 2",
+                check(KneeboardPrintSession.missionPages(stock?.copy(mode = MissionMode.WDP)) == listOf(1, 2, 3), "WDP mode, page 1 claimed: the Mission set is on pages 1, 2 and 3",
                     "${KneeboardPrintSession.missionPages(stock?.copy(mode = MissionMode.WDP))}")
-                check(KneeboardPrintSession.missionPages(stock?.copy(mode = MissionMode.WDP, ezConfig = null)) == listOf(1, 2), "WDP mode, EZBoards not set up: pages 1 and 2 too",
+                // a theater with fewer free pages: the pairs that fit, Briefing and Weather first
+                val two = stock?.let { s0 -> s0.copy(mode = MissionMode.EZBOARDS, pages = s0.pages.map { if (it.n > 3) it.copy(missing = true) else it }) }
+                check(KneeboardPrintSession.missionPages(two) == listOf(2, 3), "EZBoards mode with only pages 1-3 in the theater: the first two pairs that fit (2, 3)",
+                    "${KneeboardPrintSession.missionPages(two)}")
+                check(KneeboardPrintSession.missionPages(stock?.copy(mode = MissionMode.WDP, ezConfig = null)) == listOf(1, 2, 3), "WDP mode, EZBoards not set up: pages 1, 2 and 3 too",
                     "${KneeboardPrintSession.missionPages(stock?.copy(mode = MissionMode.WDP, ezConfig = null))}")
                 // EZBoards claims page 1 in the copy for this part, as it does on a stock setup, so that the switch below
                 // really moves the Mission set (a copy whose config claims nothing lays both modes on pages 1 and 2)
@@ -570,11 +578,10 @@ object PrintOutcome {
                 stage.frames(10)
                 val wdpSet = KneeboardPrintSession.missionPages()
                 check(KneeboardPrintSession.state?.mode == MissionMode.WDP, "the PC says it is in WDP mode with the pages", "${KneeboardPrintSession.state?.mode}")
-                check(wdpSet.firstOrNull() == 1 && KneeboardPrintSession.plan.toMap() == mapOf("1L" to KbKind.DATACARD_LEFT, "1R" to KbKind.DATACARD_RIGHT,
-                    "${wdpSet.getOrNull(1)}L" to KbKind.COORDINATION_LEFT, "${wdpSet.getOrNull(1)}R" to KbKind.COORDINATION_RIGHT) && KneeboardPrintSession.relaid != null,
-                    "the EZBoards-mode Mission set is laid again for WDP mode: DataCard on page 1, Coordination on page ${wdpSet.getOrNull(1)}, and the window says so",
+                check(wdpSet == listOf(1, 2, 3) && KneeboardPrintSession.plan.toMap() == missionPlan(wdpSet) && KneeboardPrintSession.relaid != null,
+                    "the EZBoards-mode Mission set is laid again for WDP mode: Briefing + Weather on page 1, DataCard on 2, Coordination on 3, and the window says so",
                     "before $ezSet, now ${KneeboardPrintSession.plan}; ${KneeboardPrintSession.relaid}")
-                if (claims1) check(ezSet != KneeboardPrintSession.plan.toMap(), "the switch moved the set: EZBoards mode had it on pages ${ezSet.keys.map { it.dropLast(1) }.distinct().joinToString(" and ")}, WDP mode on 1 and ${wdpSet.getOrNull(1)}",
+                if (claims1) check(ezSet != KneeboardPrintSession.plan.toMap(), "the switch moved the set: EZBoards mode had it on pages ${ezSet.keys.map { it.dropLast(1) }.distinct().sorted().joinToString(", ")}, WDP mode on ${wdpSet.joinToString(", ")}",
                     "before $ezSet, now ${KneeboardPrintSession.plan}")
                 // without a claim on page 1 both modes lay the set on pages 1 and 2, and the switch would pass untested
                 else check(false, "the switch was tested: page 1 claimed by EZBoards in the copy for this part",
@@ -583,8 +590,8 @@ object PrintOutcome {
                 stage.shot(File(pics, "window-wdp-mode.png"))
                 // the window's first opening in WDP mode: the Mission set on page 1
                 stage.onUi { KneeboardPrintSession.planned = false; KneeboardPrintSession.plan.clear(); kotlinx.coroutines.runBlocking { KneeboardPrintSession.load() } }
-                check(KneeboardPrintSession.plan["1L"] == KbKind.DATACARD_LEFT && KneeboardPrintSession.plan["1R"] == KbKind.DATACARD_RIGHT && KneeboardPrintSession.relaid == null,
-                    "opened first in WDP mode, the window is on the Mission set with the DataCard on page 1", "${KneeboardPrintSession.plan}")
+                check(KneeboardPrintSession.plan.toMap() == missionPlan(listOf(1, 2, 3)) && KneeboardPrintSession.relaid == null,
+                    "opened first in WDP mode, the window is on the Mission set: Briefing + Weather on page 1, DataCard on 2, Coordination on 3", "${KneeboardPrintSession.plan}")
                 // print in WDP mode: page 1 is written, EZBoards' claim notwithstanding
                 val shaW = shaTree(root)
                 stage.onUi { KneeboardPrintSession.results = emptyList() }
@@ -594,8 +601,8 @@ object PrintOutcome {
                 val chW = shaTree(root).let { a -> (a.keys + shaW.keys).filter { a[it] != shaW[it] } }.map { it.substringAfterLast('/') }.sorted()
                 val p1 = KneeboardPrintSession.state?.pages?.firstOrNull { it.n == 1 }
                 check(rw.any { it.file == KneeboardPrint.pageName(1) && it.status == KbFileResult.WRITTEN } && KneeboardPrint.pageName(1) in chW &&
-                    p1?.left == KbOwner.COMPANION && p1.leftKind == KbKind.DATACARD_LEFT,
-                    "Print writes the DataCard on page 1 (${KneeboardPrint.pageName(1)}) in WDP mode", rw.joinToString { "${it.file} ${it.status} ${it.reason ?: ""}" } + "; changed $chW")
+                    p1?.left == KbOwner.COMPANION && p1.leftKind == KbKind.BRIEFING && p1.rightKind == KbKind.WEATHER,
+                    "Print writes the Briefing and the Weather on page 1 (${KneeboardPrint.pageName(1)}) in WDP mode", rw.joinToString { "${it.file} ${it.status} ${it.reason ?: ""}" } + "; changed $chW")
                 // a plan changed by hand is kept across a switch back, with a quiet line
                 stage.onUi { KneeboardPrintSession.set(5, 'L', KbKind.BLANK) }
                 val handPlan = KneeboardPrintSession.plan.toMap()
@@ -603,6 +610,26 @@ object PrintOutcome {
                 stage.onUi { kotlinx.coroutines.runBlocking { KneeboardPrintSession.load() } }
                 check(KneeboardPrintSession.plan.toMap() == handPlan && KneeboardPrintSession.madeIn == MissionMode.WDP && KneeboardPrintSession.relaid == null,
                     "a plan changed by hand is kept when the mode changes (the window says which mode it was made in)", "${KneeboardPrintSession.plan}")
+                // a plan kept by a build before 1.3.9 (no layout): its untouched Mission set (the two cards on 2 and 3) is
+                // laid again in the three-pair layout; one the pilot changed by hand is kept as it is
+                val oldCards = """{"2L":"${KbKind.DATACARD_LEFT}","2R":"${KbKind.DATACARD_RIGHT}","3L":"${KbKind.COORDINATION_LEFT}","3R":"${KbKind.COORDINATION_RIGHT}"}"""
+                stage.onUi {
+                    com.bmscompanion.app.data.Repo.putString(KneeboardPrintSession.SAVED_KEY, """{"plan":$oldCards,"planned":true,"laidFor":"${MissionMode.EZBOARDS}","madeIn":"${MissionMode.EZBOARDS}"}""")
+                    KneeboardPrintSession.reloadSaved()
+                    kotlinx.coroutines.runBlocking { KneeboardPrintSession.load() }
+                }
+                val relaidOld = KneeboardPrintSession.plan.toMap()
+                check(relaidOld == missionPlan(KneeboardPrintSession.missionPages()) && KneeboardPrintSession.layout == KneeboardPrintSession.LAYOUT &&
+                    KneeboardPrintSession.relaid?.contains("Briefing") == true,
+                    "an untouched Mission set an earlier build kept (DataCard 2, Coordination 3) is laid again: Briefing + Weather first, and the window says so",
+                    "$relaidOld; ${KneeboardPrintSession.relaid}")
+                stage.onUi {
+                    com.bmscompanion.app.data.Repo.putString(KneeboardPrintSession.SAVED_KEY, """{"plan":$oldCards,"planned":true,"madeIn":"${MissionMode.EZBOARDS}"}""")
+                    KneeboardPrintSession.reloadSaved()
+                    kotlinx.coroutines.runBlocking { KneeboardPrintSession.load() }
+                }
+                check(KneeboardPrintSession.plan.toMap().size == 4 && KneeboardPrintSession.plan["2L"] == KbKind.DATACARD_LEFT && KneeboardPrintSession.plan["3R"] == KbKind.COORDINATION_RIGHT,
+                    "an earlier build's plan changed by hand is kept as it is", "${KneeboardPrintSession.plan}")
                 stage.onUi { KneeboardPrintSession.missionSet() }
                 } finally {
                     // the copy's EZBoards config as it was

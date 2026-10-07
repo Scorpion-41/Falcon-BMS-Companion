@@ -234,12 +234,19 @@ object MissionSource {
      * Pick a flight). In WDP mode another flight than the last one opened is a **new mission**: what the Planner saved
      * for any other flight is cleared from the cartridge and the TEs' files, and a snapshot of another flight discarded
      * ([ModeSwitchReset.opened]); the answer is the source with its summary (`reset`). In EZBoards mode nothing is done.
+     * `clean=1` (1.3.9, in either mode): the Planner planned another flight than it had, and with **Start each opened
+     * mission with clean lines, PPTs and Open 1/2 steerpoints** on, the cartridge and the campaign mission file LOAD reads for that flight are
+     * cleaned of lines and PPTs ([ModeSwitchReset.cleanOpened]); `reset` then says so (kind `mission`).
      */
     private fun opened(req: ApiRequest): ApiResponse {
         val planner = req.query["for"]?.takeIf { it.isNotBlank() }?.let { s ->
             safe(null) { lenient.decodeFromString(com.bmscompanion.app.data.mission.LedgerMission.serializer(), s) }
         } ?: return error(400, "Say which flight was opened: for=<the flight, as the Planner names it>.")
-        synchronized(changeLock) { ModeSwitchReset.opened(planner) }
+        val clean = req.query["clean"].let { it == "1" || it.equals("true", true) }
+        synchronized(changeLock) {
+            ModeSwitchReset.opened(planner)
+            if (clean) ModeSwitchReset.cleanOpened(planner)
+        }
         return answer(info(Bridge.printedAt()))
     }
 

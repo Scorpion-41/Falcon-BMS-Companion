@@ -4,6 +4,8 @@ A companion for **Falcon BMS 4.38** on **Windows PCs, Android phones and tablets
 
 Everything it shows about the game — airfields, charts, aircraft, weapons, threats — is **generated from the Falcon BMS install's own files**. The install is read only, except where a feature writes on request; see [What it writes to the BMS folder](#what-it-writes-to-the-bms-folder).
 
+**New in 1.3.9:** lines, PPTs and Open 1/2 steerpoints that survive BMS's DTC LOAD and SAVE, with a clean start for each opened mission; **Add to Open bank…** on the Planner's Map page; control towers, arresting cables and free rotation on the ground charts; checked photographs in the Reference section. Full list: [CHANGELOG.md](CHANGELOG.md).
+
 **New in 1.3.8:** **WDP for Falcon BMS 4.38.1**, a port of Falcas's Weapon Delivery Planner on every device, and a choice of source for the Mission section: BMS's printed briefing (**EZBoards mode**) or the planned flight (**WDP mode**). Also live **MFDs**, **Dashboard pages**, a **weather generator**, carrier decks drawn from BMS's models, a **Radio** page with automatic taxi, and a **Reference** section with coordinates and radios for every airfield. Full list: [CHANGELOG.md](CHANGELOG.md).
 
 > Unofficial fan project, not affiliated with Benchmark Sims. See [Credits & licences](#credits--licences).

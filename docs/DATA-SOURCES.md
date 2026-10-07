@@ -30,6 +30,8 @@ The richest and least documented of the lot, so it gets the most space.
 | ‣ taxi points | `PHD_nnnnn.XML` / `PDX_nnnnn.XML`. Point types: 1 runway end, 2 taxi start, 3 taxiway, 8 runway edge, 9 runway crossing, 11 parking for a small aircraft, 12 parking with no size limit, 15 runway entry/crossing lane, 21 a point on the runway centreline where an exit lane meets it (not a hold short, which no point marks; `docs/PARKING.md`) |
 | ‣ everything standing on the field | `FED_nnnnn.XML` — each record names a feature class (`FeatureCtIdx` → `ct` → `fcd`) and carries its offset and heading |
 | ‣ the asphalt | the 3D models the FED records point at (`GraphicsNormal`) — `pavement.mjs`, below |
+| ‣ control towers | FED records whose class BMS names a control tower (`CONTROL_TOWER` in `airfields.mjs`) — position and heading exact; the **shape** from the tower's own 3D model, else the box its `Parent.dat` states — `footprint.mjs`, below |
+| ‣ arresting cables | FED records of class "Arrestor System 1/2/4/5" — exact positions, given to the runway each lies across (`assignCables`); no source says which kind of gear |
 
 **Four things about that data decide the whole design.** Each was learned the hard way; do not re-derive them.
 
@@ -100,6 +102,28 @@ zoom. The taxiway centre line drawn over it is BMS's own ground network, which i
 has it on the PATH, so the reader looks there itself and **stops the run** if it cannot find it — an earlier
 version failed silently and shipped 1,720 charts with no asphalt on them.
 
+### Control towers and arresting cables (`footprint.mjs`, `airfields.mjs`)
+
+**Control towers** are drawn as the shape they have from above. The FED record gives the position and heading
+(exact); the outline comes from the tower's own model: `modelTriangles` in `bml.mjs` reads a building's model mesh
+by mesh (its meshes change record size — 36, 40, 32 bytes — and may start a few bytes apart, so each is found where
+its own record size lands on unit normals, all of the first 24, and the last must end where the file does), every
+triangle standing off the ground is projected straight down, and the union is rasterised at 1 ft and traced. The
+part reaching 60 % of the model's height (the shaft and the cab) is kept as well. A reading is believed only when its
+extent agrees with the model's `Parent.dat` ("Dimensions = radius xmin xmax ymin ymax zmin zmax", x forward, y right,
+z down); otherwise that box is drawn — the right size and heading, a rectangle. In the stock data 1,649 of the 2,171
+towers placed across the theaters come from their model and 522 from the box (`airfieldrun.mjs` prints the split).
+Watchtowers, water and radio towers and "RKSS Old ATC Part n" (pieces of a terminal) are not control towers.
+
+**Arresting cables** are BMS's "Arrestor System" objects (variants 1, 2, 4 and 5; "Arrestor Cable Sign" is the
+marker beside one). Each is laid across a runway, its heading across the strip, and goes to the runway it lies
+across — within the width plus 60 ft, from 1,500 ft short of one end to 1,500 ft past the other. The distance is
+measured along the centre line from each end of the runway rectangle. Coverage: 1,061 cables on 312 fields' runways;
+29 lie across no runway BMS models (a closed or unmodelled strip at Tel Nof, Hatzor, Ramat David, Larissa, Nea
+Anchialos, Balikesir, Bandirma) and are left off, named in `airfieldrun.mjs`'s report. The distances agree with the
+usual placement (most within 1,200-1,800 ft of each threshold). The theaters' AIPs (`Docs/03 KTO Charts/KTO_AIP.pdf`)
+carry no arresting gear, and no BMS file says which kind of gear an object is, so the app says "cable".
+
 ### Looking at a chart
 
 ```bash
@@ -117,6 +141,9 @@ chart after any change to `pavement.mjs`.** A number cannot tell you the field l
 - [ ] `node src/airfieldrun.mjs` — rebuilds only the ground charts. Read its two summary lines: the count of
       charts, and the pavement line (how many models were taken, and how many were unreadable or had no vertex
       block). A jump in "unreadable" means the BML header changed.
+- [ ] The towers and cables lines of `airfieldrun.mjs`'s summary: a fall in towers "drawn from their model" means
+      the building models moved (`modelTriangles`); a rise in cables "on no runway" means the arrestor objects or the
+      runway rectangles moved.
 - [ ] `node src/apcverify.mjs` — the parking charts, spot for spot.
 - [ ] `node render-debug.mjs` on Osan (dense mesh, marker-less model) and Mezze (sparse mesh, marked block).
       Those two between them exercise every path in the extractor.
@@ -132,10 +159,12 @@ chart after any change to `pavement.mjs`.** A number cannot tell you the field l
 |---|---|---|---|
 | Airfields, navaids, ILS, ATC, radio | `Data/Campaign/<th>/*.obd`, `Stations+Ils`, ATC tables, RadioMap | `airports.mjs`; one set per distinct content (`ap-*`, `rm-*`), **written for every theater**, add-ons included | `node src/geocheck.mjs` (median error under ~1 nm against OurAirports); `node src/plannercheck.mjs` (every set a theater names is shipped) |
 | Aircraft, weapons, loadouts | the objects DB, `catalog.mjs` inputs | `db.mjs`, `catalog.mjs` | counts in `index.json` |
+| Reference pictures (Encyclopedia, Arsenal, Threats) | the theater's TacRef (`TacRefDB.xml` beside its terrain, else `Data/TerrData`'s): each entry's `PicName`, the file `<artdir>\Art\TacRData\<PicName>.tga`, else `Data\Art\TacRData`'s. An aircraft or store has the picture of the entry whose `ClassTable` is its own class-table row, and nothing else (no family or sibling picture). A theater that borrows another's TacRef (Hellas, LHTO, Hellas WCP, EF2000 BTO, the Korea 2012 six, LKTO, OFMKTO, TvT, KTO 80s) keeps a link only when that row is the same object in the TacRef's own `Objects` (same name), or the object's name is the entry's word for word, or for a store the same designation. A theater's own art that differs from the base theater's under the same name ships as `<name>__<add-on folder>`; a flat-colour placeholder is no picture. BMS's own slips, reviewed by eye, are listed in `reference.mjs` (an entry's `PicName` of another type, a row linked to another type's entry, a type's photo showing another air arm), keyed by name and picture so each lapses when BMS changes it. An aircraft still without a picture may take one of the same type family whose markings were identified as its own nation's (`NATION_PICTURES`, matched on the air arm its name names, `NATION_WORDS`; never across nations); three borrowed store links that differ only in name are explicit (`SAME_STORE` in `catalog.mjs`). The threat guide names its entry in `tools/curated/threat_pictures.json` (reviewed: same type and variant, no other nation's markings), shipped as each threat's `tacref` | `reference.mjs`, `catalog.mjs` (`tacrefFor`), `images.mjs`; `node src/referencerun.mjs` rebuilds only these | the run's counts (aircraft, weapons and entries pictured); `img/tacref` names nothing stale; on a new BMS, look at every picture two aircraft share and at every name `withThreatPictures` warns about |
 | Theater maps, tiles | `NewTerrain/HeightMaps/HeightMap.raw` (int16 feet, row 0 = north), `NewTerrain/Photoreal/GlobalColorMap.dds` | `maps.mjs`, `heightmap.mjs` | `--maprender <theater> <folder>`; `MAX_Z` must match `MapBase.kt`. Water is **flat areas**, not "height ≤ 0" — land lies below sea level in several theaters |
 | Borders, provinces, towns | Natural Earth 10m GeoJSON in `cache/ne`, projected with `NewTerrain/Theater.txt` | `geo.mjs`, `projection.mjs` | coordinates must be **integers**; one float fails the whole file |
 | Instrument charts, plates | `Docs/` PDFs and the theaters' own plates | `charts.mjs` (needs `cache/pdfbox-app.jar`) | page count and orientation, `PageDirs.java` |
-| Threats, HOTAS, checklists | the PDF manuals, by hand | `tools/curated/*.json` | diff the `pdftotext` dump between versions |
+| Reference photographs (in place of or beside BMS's pictures) | **not BMS** — Wikimedia Commons files, each chosen by hand in `tools/curated/photos.json` (`pic:<BMS picture>` stands in for that picture everywhere; `aircraft:`/`weapon:`/`enc:<key>` and `threat:<id>` give one entry its own). Rule: the exact type and variant the entry names, and for an air arm's aircraft that air arm's markings (the nation of the BMS picture it replaces); checked by the file's title, description and categories and by eye; no look-alike, no watermark, no collage; replaced only where clearly better. Licences: public domain (U.S. government works included), CC0, CC BY, CC BY-SA, read from the file's `extmetadata` at every fetch; anything else is refused | `photos.mjs` (fetch, licence check, 320:151 crop, ≤ 800 px WebP q80 → `img/tacref/ph-*.webp`; credits → `tools/curated/photo_credits.json` and `data/credits/photos.json`), `applyPhotos` in `referencerun.mjs`/`main.mjs` | `node src/photos.mjs` prints each file's licence, author and size and refuses any other licence; on a new BMS, a `pic:` whose BMS picture changed (another subject or nation) must be looked at again; `applyPhotos` warns about a target no entry has |
+| Threats, HOTAS, checklists | the PDF manuals, by hand (a threat's picture: `threat_pictures.json`, above) | `tools/curated/*.json` | diff the `pdftotext` dump between versions |
 | Live flight data | `Tools/SharedMem/FlightData.h` | `SharedMemory.kt` | `--selftest`; BMS appends fields at the **end** of each struct |
 | Briefing, DTC | `briefing.txt` (CRLF), the DTC files. BMS writes `[STPT]`, `[Radio]`, `[COMMS]` Comm1/2, `[EWS]`, `[MFD]`, `[IFF]`, `[HARM]`, `[LINK16]`; WDP and the Planner add `[NAV OFFSETS]`, `[COMMS]` TACAN/ILS, `[Laser]`, `[ICP]` and the EWS program comments. A PPT is `x, y, z, range in feet, code`, the code being the key of the theater's `Ppt.ini`; a range under 100 ft is a marker (AWACS and tanker are 0.1 ft) | `BmsFiles.kt` (`BriefingParser`, `DtcParser`, `PptTable`) | `--selftest`; `--plantest parse <a copy of a BMS folder> [api] out.txt` |
 | Text strings | StringData, with a running BMS | `SharedMemory.kt` | `--dumpstrings out.txt` |

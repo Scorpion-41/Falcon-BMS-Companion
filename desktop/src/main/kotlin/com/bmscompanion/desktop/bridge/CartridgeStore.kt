@@ -36,9 +36,10 @@ import java.io.File
  * A folder `User/Config/BMS Companion Backup/` that an earlier test build left on the pilot's disk is left exactly as
  * it is, and nothing reads it any more.
  *
- * One other file is written, and only with a save: the steerpoints of a Tactical Engagement the Planner has open go
- * into that TE's own mission file too, the same way ([saveTe]). A campaign start is never written ([CampaignStarts]);
- * the Planner cannot open one in the first place.
+ * One other file is written, and only with a save: the targets, lines and PPTs of the save the Planner has open (a
+ * Tactical Engagement, a training or a campaign) go into that save's own mission file too, the same way ([saveTe]),
+ * because BMS's DTC window loads them from there. A campaign start is never written ([CampaignStarts]); the Planner
+ * cannot open one in the first place.
  */
 class CartridgeStore(
     private val install: BmsInstall,
@@ -221,7 +222,10 @@ class CartridgeStore(
     }
 
     /** Every key of the first `[NAV OFFSETS]` section of [text], as the file spells it, with its value. */
-    private fun navKeys(text: String): List<Pair<String, String>> {
+    private fun navKeys(text: String): List<Pair<String, String>> = sectionKeys(text, "NAV OFFSETS")
+
+    /** Every key of the first [section] of [text], as the file spells it, with its value (the first of a name). */
+    private fun sectionKeys(text: String, section: String): List<Pair<String, String>> {
         val out = ArrayList<Pair<String, String>>()
         var inNav = false
         var seen = false
@@ -230,7 +234,7 @@ class CartridgeStore(
             val s = line.trim(' ', '\t')
             if (s.startsWith("[")) {
                 val nm = s.substring(1).substringBefore(']').trim(' ', '\t')
-                if (nm.equals("NAV OFFSETS", ignoreCase = true)) { inNav = !seen; seen = true } else inNav = false
+                if (nm.equals(section, ignoreCase = true)) { inNav = !seen; seen = true } else inNav = false
                 continue
             }
             if (!inNav || s.startsWith(";")) continue
@@ -286,8 +290,21 @@ class CartridgeStore(
      * ([teSave], a `.tac`/`.trn`, of [teTheater]), ledger or not — an earlier build, or WDP itself, wrote them before the
      * ledger existed, and BMS's own DTC window never edits them, so they only ever come from a planner. At a new mission
      * the one exception is what the ledger says the Planner saved for [keep] itself and the file still holds.
+     *
+     * **BMS's copies go too** (1.3.9, [copies]): BMS's DTC memory keeps what the pilot last LOADed, and its SAVE, FLY and
+     * campaign save write it into the cartridge and the next save's mission file — a line the Planner drew for one flight
+     * and a reset cleared came back in every later mission from there. So a `[STPT]` item (a PPT, a target or weapon
+     * target of action −1, never BMS's route; a line point) is also cleared, in the cartridge, in every mission file the
+     * ledger names, in the one BMS's LOAD reads for the flight now ([loadIni], the save [teSave]'s own) and in
+     * `Auto Save.ini`, when it holds a value the ledger names for another flight and none for [keep] — a PPT or target
+     * as BMS rewrites it ([Leftovers.sameItem]) against the live rows and what the last few resets cleared, a line point
+     * exactly against the live rows only, and a line only whole (its six points), when every point it places is such a
+     * value. No log of past values is kept (the rest is "Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints",
+     * [cleanForOpen]). A value the Planner never wrote — the pilot's own work in BMS — is never one of them.
      */
-    fun resetForSwitch(callsign: String?, keep: LedgerMission?, switchAt: Long, teSave: String? = null, teTheater: String? = null): SwitchCleared =
+    fun resetForSwitch(
+        callsign: String?, keep: LedgerMission?, switchAt: Long, teSave: String? = null, teTheater: String? = null, loadIni: File? = null,
+    ): SwitchCleared =
         attempt({ SwitchCleared(null, emptyList(), listOf("The cartridge could not be looked at: $it")) }) {
             val f = fileFor(callsign)?.takeIf { it.isFile } ?: return@attempt SwitchCleared(null, emptyList(), emptyList())
             val name = f.nameWithoutExtension
@@ -299,7 +316,8 @@ class CartridgeStore(
                 val m = w.mission ?: return false
                 return !m.sameFlight(keep)
             }
-            val older = ledger.writes.filter(::leftover)
+            // the ledger's own rows; a line point is left to the copies' rule below, which takes a line only whole
+            val older = ledger.writes.filter(::leftover).filterNot { Leftovers.kindOf(it.section, it.key)?.first == Leftovers.LINE }
             val text = String(f.readBytes(), Charsets.ISO_8859_1)
             val disk = Leftovers.keys(text)
             // the cartridge: the keys still holding the Planner's value
@@ -309,7 +327,8 @@ class CartridgeStore(
             val teNav = teNavFile(teSave, teTheater)?.let { te ->
                 runCatching { te to navToClear(String(te.readBytes(), Charsets.ISO_8859_1), te.name, ledger, keep, emptySet(), switchAt) }.getOrNull()
             }?.takeIf { it.second.isNotEmpty() }
-            if (older.isEmpty() && navMore.isEmpty() && teNav == null) return@attempt SwitchCleared(f.name, emptyList(), emptyList())
+            val anyCopy = (ledger.writes + ledger.cleared.map { it.write }).any { Leftovers.kindOf(it.section, it.key)?.first.let { k -> k != null && k != Leftovers.NAV } }
+            if (older.isEmpty() && navMore.isEmpty() && teNav == null && !anyCopy) return@attempt SwitchCleared(f.name, emptyList(), emptyList())
             val left = ArrayList<String>()
             DevGuard.refusal(f.path)?.let { return@attempt SwitchCleared(f.name, emptyList(), listOf("${f.name} was not cleared: $it")) }
             val cleared = ArrayList<LedgerCleared>()
@@ -357,16 +376,240 @@ class CartridgeStore(
                 }
             }
 
+            // BMS's copies of the Planner's items (1.3.9): in the files as they are after the clearing above
+            if (anyCopy) copies(callsign, f, ledger, keep, switchAt, teSave, teTheater, loadIni, cleared, left)
+
             if (cleared.isNotEmpty()) {
-                val gone = cleared.map { rowId(it.write.file, it.write.section, it.write.key) }.toSet()
-                note(name) { l ->
-                    val kept = (l.cleared + cleared).let { all -> val last = all.map { it.at }.distinct().sortedDescending().take(5).toSet(); all.filter { it.at in last } }
-                    l.copy(writes = l.writes.filterNot { rowId(it.file, it.section, it.key) in gone }, cleared = kept)
-                }
+                noteCleared(name, cleared)
                 BridgeLog.info("Mode switch / new mission: cleared ${Leftovers.summary(cleared.mapNotNull { itemOf(it.write) })} the Planner had saved (${f.name})")
             }
             SwitchCleared(f.name, cleared.mapNotNull { itemOf(it.write) }, left)
         }
+
+    /** What a reset cleared into the ledger: the rows out of `writes`, into `cleared` (the last five resets kept). */
+    private fun noteCleared(name: String, cleared: List<LedgerCleared>) {
+        val gone = cleared.map { rowId(it.write.file, it.write.section, it.write.key) }.toSet()
+        note(name) { l ->
+            val kept = (l.cleared + cleared).let { all -> val last = all.map { it.at }.distinct().sortedDescending().take(5).toSet(); all.filter { it.at in last } }
+            l.copy(writes = l.writes.filterNot { rowId(it.file, it.section, it.key) in gone }, cleared = kept)
+        }
+    }
+
+    /**
+     * **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (1.3.9, the Planner's Settings; [ModeSwitchReset.cleanOpened]):
+     * when the Planner plans another flight (Open mission… or Pick a flight), every line (`lineSTPT_0…23`, each line
+     * whole), every PPT (`ppt_0…14`) and every Open 1/Open 2 steerpoint (`target_80…98`) that places something is
+     * cleared, whoever wrote it, in [callsign]'s cartridge
+     * and in [files] (the campaign mission file BMS's LOAD reads for that flight) — except a line or PPT holding a value
+     * the Planner saved for [keep] itself (its live ledger rows), so planning the same flight again loses nothing saved
+     * for it. Never STPT 1-24 (BMS's route, a precision or Recon target: `target_0…23`) or a weapon target. Written as Save to DTC
+     * writes (temp file, then a move); the cleared points go into the ledger's `cleared` under [at] (under no flight when
+     * the Planner did not write them) for the Undo route. Never throws.
+     */
+    fun cleanForOpen(callsign: String?, keep: LedgerMission?, at: Long, files: List<File>): SwitchCleared =
+        attempt({ SwitchCleared(null, emptyList(), listOf("The cartridge could not be looked at: $it")) }) {
+            val f = fileFor(callsign)?.takeIf { it.isFile } ?: return@attempt SwitchCleared(null, emptyList(), emptyList())
+            DevGuard.refusal(f.path)?.let { return@attempt SwitchCleared(f.name, emptyList(), listOf("${f.name} was not cleaned: $it")) }
+            val name = f.nameWithoutExtension
+            val cleared = ArrayList<LedgerCleared>()
+            val left = ArrayList<String>()
+            cleanAll(callsign, f, ledger(name), keep, at, files, cleared, left)
+            if (cleared.isNotEmpty()) {
+                noteCleared(name, cleared)
+                BridgeLog.info("Opened mission (${keep?.label ?: "a flight"}): ${Leftovers.summary(cleared.mapNotNull { itemOf(it.write) })} cleaned from " +
+                    cleared.map { it.write.file.ifEmpty { f.name } }.distinct().joinToString(" and "))
+            }
+            SwitchCleared(f.name, cleared.mapNotNull { itemOf(it.write) }, left)
+        }
+
+    /**
+     * The copies' part of [resetForSwitch] (1.3.9): clears, in the cartridge [cart] and the mission files below, every
+     * `[STPT]` item holding a value the ledger names for another flight than [keep] (any flight at a switch, [keep]
+     * null) and none for [keep], whichever file the Planner wrote it to — BMS's DTC memory wrote it there
+     * (docs/DATA-STORES.md, "Starting the next mission"). The ledger's memory is all there is: a PPT, target or weapon
+     * target is matched as BMS rewrites it against the live rows and the rows the last few resets cleared; a line point
+     * exactly, against the live rows only (no log of past values is kept). The files: the cartridge,
+     * every mission file the ledger names, [loadIni] (the one BMS's LOAD reads for the flight now), the save [teSave]'s
+     * own `<name>.ini` and `Auto Save.ini` of [teTheater]'s campaign folder — never a campaign start's, never one
+     * without `[STPT]`. A line (`lineSTPT_` 6n to 6n+5) goes only whole: every point it places is such a value, or none
+     * of it is touched (the pilot added to it in BMS). A target or weapon target only of action −1, so BMS's route never
+     * is. Adds what it cleared to [cleared] (the value the file held, under the flight the Planner wrote it for) and why
+     * a file was left to [left]. Never throws.
+     */
+    private fun copies(
+        callsign: String?, cart: File, ledger: CartridgeLedger, keep: LedgerMission?, switchAt: Long,
+        teSave: String?, teTheater: String?, loadIni: File?, cleared: MutableList<LedgerCleared>, left: MutableList<String>,
+    ) {
+        try {
+            fun placed(w: LedgerWrite) = Leftovers.kindOf(w.section, w.key)?.first.let { k -> k != null && k != Leftovers.NAV && !Leftovers.isEmpty(k, w.value) }
+            // every value the ledger names that places something, by key: the live rows and (not for lines) what the last
+            // few resets cleared — a cleared row under no flight is a line the pilot or BMS drew, never the Planner's
+            val values = (ledger.writes + ledger.cleared.map { it.write }.filter { it.mission != null && Leftovers.kindOf(it.section, it.key)?.first != Leftovers.LINE })
+                .filter(::placed).groupBy { diskId(it.section, it.key) }
+            if (values.isEmpty()) return
+            fun own(w: LedgerWrite) = keep != null && w.mission?.sameFlight(keep) == true
+            fun other(w: LedgerWrite) = if (keep == null) true else w.mission?.let { !it.sameFlight(keep) } == true
+            /** The Planner's write [cur] is a copy of, for another flight; null when it is none, or one for [keep]. */
+            fun copyOf(key: String, kind: String, cur: String): LedgerWrite? {
+                // a line point exactly as the Planner wrote it (BMS writes it back so), anything else as BMS rewrites it
+                val c = values[diskId("STPT", key)]?.filter { if (kind == Leftovers.LINE) Leftovers.same(cur, it.value) else Leftovers.sameItem(kind, cur, it.value) }.orEmpty()
+                if (c.isEmpty() || c.any(::own)) return null
+                return c.filter(::other).maxByOrNull { it.at }
+            }
+
+            // the files: the cartridge, then the mission files (each once)
+            val files = LinkedHashMap<String, Pair<String, File>>()
+            fun add(label: String, file: File?) {
+                if (file == null || !file.isFile) return
+                if (label.isNotEmpty() && CampaignStarts.byName(file.name) != null) return
+                val k = runCatching { file.canonicalPath }.getOrDefault(file.absolutePath).uppercase()
+                if (k !in files) files[k] = label to file
+            }
+            add("", cart)
+            (ledger.writes + ledger.cleared.map { it.write }).filter { it.file.isNotBlank() }
+                .groupBy { it.file.trim().uppercase() }.values
+                .forEach { ws -> val w = ws.maxBy { it.at }; teFile(w.mission?.theater, w.file.trim())?.let { add(it.name, it) } }
+            loadIni?.let { add(it.name, it) }
+            teSave?.trim()?.takeIf { it.isNotEmpty() }?.let { s -> teFile(teTheater, teIniName(s))?.let { add(it.name, it) } }
+            teFile(teTheater, "Auto Save.ini")?.let { add(it.name, it) }
+
+            for ((label, file) in files.values) {
+                try {
+                    val text = String(file.readBytes(), Charsets.ISO_8859_1)
+                    val keys = sectionKeys(text, "STPT")
+                    if (keys.isEmpty()) continue
+                    val found = ArrayList<Pair<Pair<String, String>, LedgerWrite>>()
+                    // targets, weapon targets and PPTs: key by key
+                    for ((k, v) in keys) {
+                        val kind = Leftovers.kindOf("STPT", k)?.first ?: continue
+                        if (kind == Leftovers.LINE || kind == Leftovers.NAV || Leftovers.isEmpty(kind, v)) continue
+                        copyOf(k, kind, v)?.let { found += (k to v) to it }
+                    }
+                    // lines: a line of six points whole, or not at all
+                    val lines = keys.mapNotNull { (k, v) ->
+                        val (kind, slot) = Leftovers.kindOf("STPT", k) ?: return@mapNotNull null
+                        if (kind != Leftovers.LINE || slot !in 0..23 || Leftovers.isEmpty(kind, v)) null else Triple(slot / 6, k, v)
+                    }.groupBy { it.first }
+                    for ((_, pts) in lines) {
+                        val of = pts.map { (_, k, v) -> (k to v) to copyOf(k, Leftovers.LINE, v) }
+                        if (of.all { it.second != null }) of.forEach { (kv, w) -> found += kv to w!! }
+                    }
+                    if (found.isEmpty()) continue
+                    val rows = found.map { (kv, w) -> LedgerCleared(LedgerWrite(label, "STPT", kv.first, kv.second, w.at, w.mission), Leftovers.clearValue("STPT", kv.first), switchAt) }
+                    val edits = rows.map { CartridgeEdit("STPT", it.write.key, it.wrote) }
+                    if (label.isEmpty()) {
+                        val saved = save(callsign, edits, ledgered = false)
+                        if (saved.error != null) left += "${cart.name} was not cleared: ${saved.error}" else cleared += rows
+                    } else {
+                        val guard = DevGuard.refusal(file.path)
+                        if (guard != null) { left += "${file.name} was not cleared: $guard"; continue }
+                        val after = DtcEdits.apply(text, edits)
+                        if (after != text) { writeSafely(file, after.toByteArray(Charsets.ISO_8859_1)); cleared += rows }
+                    }
+                    BridgeLog.info("New mission / mode switch: ${file.name} held ${Leftovers.summary(rows.mapNotNull { itemOf(it.write) })} " +
+                        "BMS had copied from what the Planner saved for another flight: cleared")
+                } catch (e: Throwable) {
+                    left += "${file.name} was not cleared: ${reason(e)}"
+                }
+            }
+        } catch (e: Throwable) {
+            left += "The copies of the Planner's lines and PPTs could not be looked for: ${reason(e)}"
+        }
+    }
+
+    /**
+     * [cleanForOpen]'s work: every line (`lineSTPT_` 6n to 6n+5, the points that place something; a line whole or not at
+     * all), every PPT (`ppt_n` that places something) and every Open 1/Open 2 steerpoint (`target_80…98`, STPT 81-99)
+     * cleared, whoever wrote it, in the cartridge [cart] and in
+     * [files] (never a campaign start's, never one without `[STPT]`); a line or PPT holding a value the Planner saved for
+     * [keep] itself (a live ledger row) stays. Each point cleared is recorded in [cleared] (under the flight the Planner
+     * wrote it for when it did, else none: the pilot's or BMS's), so the Undo route can put it back. STPT 1-24 and weapon
+     * targets are never touched. Never throws.
+     */
+    private fun cleanAll(
+        callsign: String?, cart: File, ledger: CartridgeLedger, keep: LedgerMission?, switchAt: Long,
+        files: List<File>, cleared: MutableList<LedgerCleared>, left: MutableList<String>,
+    ) {
+        try {
+            val all = ledger.writes + ledger.cleared.map { it.write }.filter { it.mission != null }
+            fun planner(key: String) = all.filter { w -> diskId(w.section, w.key) == diskId("STPT", key) }
+            /** An Open bank steerpoint (STPT 81-99) is the same point at the same place (to [Leftovers.COPY_FT]) with the same action, whatever its type. */
+            fun sameOpen(a: String, b: String): Boolean {
+                val x = a.split(',').map { it.trim().toDoubleOrNull() }
+                val y = b.split(',').map { it.trim().toDoubleOrNull() }
+                val ax = x.getOrNull(0) ?: return false; val ay = x.getOrNull(1) ?: return false
+                val bx = y.getOrNull(0) ?: return false; val by = y.getOrNull(1) ?: return false
+                return !(ax == 0.0 && ay == 0.0) && kotlin.math.abs(ax - bx) <= Leftovers.COPY_FT && kotlin.math.abs(ay - by) <= Leftovers.COPY_FT &&
+                    x.getOrNull(3) == y.getOrNull(3)
+            }
+            fun same(kind: String, a: String, b: String) = if (kind == Leftovers.STEERPOINT) sameOpen(a, b) else Leftovers.sameItem(kind, a, b)
+            /** the flight's own: a value the Planner saved for [keep] (its live rows) */
+            fun own(kind: String, k: String, v: String) = keep != null &&
+                ledger.writes.any { w -> diskId(w.section, w.key) == diskId("STPT", k) && w.mission?.sameFlight(keep) == true && same(kind, v, w.value) }
+            fun row(label: String, kind: String, k: String, v: String): LedgerCleared {
+                // whose it was: the Planner's latest write of that value, else nobody's known
+                val w = planner(k).filter { it.mission != null && same(kind, v, it.value) }.maxByOrNull { it.at }
+                return LedgerCleared(LedgerWrite(label, "STPT", k, v, w?.at ?: switchAt, w?.mission), Leftovers.clearValue("STPT", k), switchAt)
+            }
+            val targets = LinkedHashMap<String, Pair<String, File>>()
+            fun add(label: String, file: File) {
+                if (!file.isFile) return
+                if (label.isNotEmpty() && CampaignStarts.byName(file.name) != null) return
+                val k = runCatching { file.canonicalPath }.getOrDefault(file.absolutePath).uppercase()
+                if (k !in targets) targets[k] = label to file
+            }
+            add("", cart)
+            files.forEach { add(it.name, it) }
+            for ((label, file) in targets.values) {
+                try {
+                    val text = String(file.readBytes(), Charsets.ISO_8859_1)
+                    val keys = sectionKeys(text, "STPT")
+                    if (keys.isEmpty()) continue
+                    val lines = keys.mapNotNull { (k, v) ->
+                        val (kind, slot) = Leftovers.kindOf("STPT", k) ?: return@mapNotNull null
+                        if (kind != Leftovers.LINE || slot !in 0..23 || Leftovers.isEmpty(kind, v)) null else Triple(slot / 6, k, v)
+                    }.groupBy { it.first }
+                    val rows = ArrayList<LedgerCleared>()
+                    for ((_, pts) in lines) {
+                        // the flight's own line (the Planner saved it for that flight): kept whole
+                        if (pts.any { (_, k, v) -> own(Leftovers.LINE, k, v) }) continue
+                        for ((_, k, v) in pts) rows += row(label, Leftovers.LINE, k, v)
+                    }
+                    // every PPT that places something, but the flight's own
+                    for ((k, v) in keys) {
+                        val kind = Leftovers.kindOf("STPT", k)?.first ?: continue
+                        if (kind != Leftovers.PPT || Leftovers.isEmpty(kind, v) || own(kind, k, v)) continue
+                        rows += row(label, kind, k, v)
+                    }
+                    // every Open 1/Open 2 steerpoint (STPT 81-99, `target_80…98`) that places something, but the flight's
+                    // own; never STPT 1-24 (BMS's route, the Recon bank 15-22) or a weapon target
+                    for ((k, v) in keys) {
+                        val (kind, n) = Leftovers.kindOf("STPT", k) ?: continue
+                        if (kind != Leftovers.STEERPOINT || n !in 81..99 || Leftovers.isEmpty(kind, v) || own(kind, k, v)) continue
+                        rows += row(label, kind, k, v)
+                    }
+                    if (rows.isEmpty()) continue
+                    val edits = rows.map { CartridgeEdit("STPT", it.write.key, it.wrote) }
+                    if (label.isEmpty()) {
+                        val saved = save(callsign, edits, ledgered = false)
+                        if (saved.error != null) { left += "${cart.name} was not cleaned: ${saved.error}"; continue }
+                        cleared += rows
+                    } else {
+                        val guard = DevGuard.refusal(file.path)
+                        if (guard != null) { left += "${file.name} was not cleaned: $guard"; continue }
+                        val after = DtcEdits.apply(text, edits)
+                        if (after == text) continue
+                        writeSafely(file, after.toByteArray(Charsets.ISO_8859_1))
+                        cleared += rows
+                    }
+                } catch (e: Throwable) {
+                    left += "${file.name} was not cleaned: ${reason(e)}"
+                }
+            }
+        } catch (e: Throwable) {
+            left += "The lines and PPTs could not be cleaned: ${reason(e)}"
+        }
+    }
 
     /**
      * Undo of a switch's reset ([switchAt]): each key it cleared written back to the Planner's value — only where the
@@ -416,7 +659,11 @@ class CartridgeStore(
             val stamp = System.currentTimeMillis()
             note(name) { l ->
                 val have = l.writes.associateBy { rowId(it.file, it.section, it.key) }
-                val restored = back.map { it.write }.filter { w -> (have[rowId(w.file, w.section, w.key)]?.at ?: Long.MIN_VALUE) < w.at }
+                // a line point or PPT cleared under no flight was the pilot's or BMS's (cleaned at Open mission…): put
+                // back into the file, never into the Planner's own rows
+                val restored = back.map { it.write }
+                    .filterNot { w -> w.mission == null && Leftovers.kindOf(w.section, w.key)?.first.let { it == Leftovers.LINE || it == Leftovers.PPT } }
+                    .filter { w -> (have[rowId(w.file, w.section, w.key)]?.at ?: Long.MIN_VALUE) < w.at }
                 val ids = restored.map { rowId(it.file, it.section, it.key) }.toSet()
                 l.copy(
                     writes = l.writes.filterNot { rowId(it.file, it.section, it.key) in ids } + restored,
@@ -462,32 +709,40 @@ class CartridgeStore(
      * - A TE that has **no mission file** of its own is flown on the cartridge alone, so none is created.
      * - A temporary file beside it, then one atomic move; nothing throws.
      *
-     * A campaign gets nothing but the cartridge. WDP also copied the cartridge's steerpoints into a campaign save's
-     * mission file, which in 4.38 zeroes BMS's own route there (R3-PLAN D46).
+     * **A campaign save's mission file is written the same way** (since 1.3.8), with one difference. In a campaign, BMS's DTC
+     * window takes targets, lines and PPTs from `<campaigndir>\<SaveFile>.ini` whenever that file exists — LOAD
+     * (`DataCartridgeClass::Load`) reads them from there, not from the cartridge, and the 2D map rebuilds its lines
+     * from there (`C_Map::AddListsToWindow`) — and SAVE and FLY write what it holds back over the cartridge
+     * (Falcon BMS.pdb + exe, docs/WDP-PORT.md D46). A save that reached only the cartridge was undone by the LOAD and
+     * SAVE the Steps ask for: the line or PPT vanished. That file also holds BMS's own route in 4.38.1, which WDP's
+     * copy of the cartridge's empty steerpoints zeroed (D46), so a `target_n` edit that would take away a point the
+     * file places is left out of it (only the cartridge gets it), and its `target_n` keys stay out of the ledger, so
+     * a mode switch or a new mission never clears a route point there either.
      */
     fun saveTe(callsign: String?, edits: List<CartridgeEdit>, te: CampRef, for_: LedgerMission? = null): CartridgeState {
         val saved = save(callsign, edits, for_)
         val ini = teIniName(te.file)
+        var stpt: List<CartridgeEdit> = emptyList()
         val mission =
             if (saved.error != null) MissionIniResult(ini, false, "Not written, because your cartridge was not saved either.")
-            else attempt({ MissionIniResult(ini, false, "$ini was not written: $it Only your cartridge was saved.") }) { writeTe(edits, te) }
-        if (mission.written) BridgeLog.info("Save to DTC: ${mission.file} written too (TE ${te.file.trim()}, ${te.theater.trim()})")
+            else attempt({ MissionIniResult(ini, false, "$ini was not written: $it Only your cartridge was saved.") }) { writeTe(edits, te) { stpt = it } }
+        if (mission.written) BridgeLog.info("Save to DTC: ${mission.file} written too (${te.file.trim()}, ${te.theater.trim()})")
         else BridgeLog.info("Save to DTC: ${mission.file} not written: ${mission.reason}")
-        // the TE's own file in the ledger too (never a leftover: it is that TE's mission file), for the record
-        if (mission.written) saved.callsign?.let { cs ->
-            val stpt = edits.filter { e -> e.section.trim().equals("STPT", ignoreCase = true) && TE_KEY.matches(e.key.trim()) }
+        // the mission file in the ledger too (a campaign's without its route keys: see above), for the record
+        if (mission.written && stpt.isNotEmpty()) saved.callsign?.let { cs ->
             note(cs) { Leftovers.record(it, cs, stpt, for_, System.currentTimeMillis(), file = mission.file) }
         }
         return saved.copy(mission = mission, ledger = ledger(saved.callsign).takeIf { it.writes.isNotEmpty() })
     }
 
-    private fun writeTe(edits: List<CartridgeEdit>, te: CampRef): MissionIniResult {
+    /** [ledgered] hears the edits written into the file that belong in the ledger (a campaign's without `target_n`). */
+    private fun writeTe(edits: List<CartridgeEdit>, te: CampRef, ledgered: (List<CartridgeEdit>) -> Unit = {}): MissionIniResult {
         val name = te.file.trim()
         var ini = teIniName(name)
         fun no(why: String) = MissionIniResult(ini, false, "$why Only your cartridge was saved.")
 
         // which file: one the theater's own campaign folder holds, by its exact name
-        if (name.isEmpty()) return no("No Tactical Engagement was named.")
+        if (name.isEmpty()) return no("No save was named.")
         if (name.any { it == '/' || it == '\\' || it == ':' } || name.contains("..")) {
             return no("\"$name\" is not the name of a file in a campaign folder.")
         }
@@ -498,16 +753,14 @@ class CartridgeStore(
             ?: return no("There is no $name in the campaign folder of ${t.name}.")
         val base = file.nameWithoutExtension
         ini = "$base.ini"
-        if (CampaignArchive.kindOfName(file.name) == CampKind.CAMPAIGN) {
-            return no("${file.name} is a campaign save, and a campaign keeps steerpoints, lines and PPTs in your cartridge only.")
-        }
+        val campaign = CampaignArchive.kindOfName(file.name) == CampKind.CAMPAIGN
 
-        // whose file: a TE saved by BMS under this very name, never a campaign start (the Planner does not open one)
+        // whose file: a save BMS made under this very name, never a campaign start (the Planner does not open one)
         val names = CampaignArchive.names(set, t)
         val save = CampaignArchive.read(file, names.takeIf { it.error == null })
         CampaignStarts.why(save)?.let { return no("$it, so it is never written.") }
         val header = save.header
-            ?: return no("${file.name} could not be read (${save.error ?: "it has no campaign header"}), so it is not certain which TE $ini belongs to.")
+            ?: return no("${file.name} could not be read (${save.error ?: "it has no campaign header"}), so it is not certain which save $ini belongs to.")
         val savedAs = header.saveFile.trim()
         if (!savedAs.equals(base.trim(), ignoreCase = true)) {
             return no(
@@ -520,7 +773,7 @@ class CartridgeStore(
         if (twin != null) {
             return no(
                 "$ini is also the mission file of ${twin.name}, saved later under the same name, so it holds that save's " +
-                    "flight now: SAVE the TE under a name of its own in BMS and open that.",
+                    "flight now: SAVE it under a name of its own in BMS and open that.",
             )
         }
 
@@ -541,16 +794,24 @@ class CartridgeStore(
             val s = l.trim(' ', '\t', '\r')
             s.startsWith("[") && s.substring(1).substringBefore(']').trim().equals("STPT", ignoreCase = true)
         }
-        if (!hasStpt) return no("$ini has no [STPT] section, so it does not look like a TE's mission file.")
+        if (!hasStpt) return no("$ini has no [STPT] section, so it does not look like a mission file.")
 
-        // the steerpoint keys only, each an absolute value, onto the file as it is now
-        val stpt = edits.filter { e -> e.value != null && e.section.trim().equals("STPT", ignoreCase = true) && TE_KEY.matches(e.key.trim()) }
+        // the steerpoint keys only, each an absolute value, onto the file as it is now; in a campaign's file never one
+        // that takes away a point it places (BMS's route, D46)
+        val held = if (campaign) Leftovers.keys(before) else emptyMap()
+        fun routeKept(e: CartridgeEdit): Boolean {
+            if (!campaign || !e.key.trim().startsWith("target_", ignoreCase = true)) return false
+            val now = held[diskId(e.section, e.key)] ?: return false
+            return Leftovers.isEmpty(Leftovers.STEERPOINT, e.value.orEmpty()) && !Leftovers.isEmpty(Leftovers.STEERPOINT, now)
+        }
+        val stpt = edits.filter { e -> e.value != null && e.section.trim().equals("STPT", ignoreCase = true) && TE_KEY.matches(e.key.trim()) && !routeKept(e) }
         if (stpt.isEmpty()) {
             return MissionIniResult(ini, false, "None of the changes were steerpoints, lines, PPTs or weapon targets, so $ini was left as it is.")
         }
         val after = DtcEdits.apply(before, stpt)
         if (after == before) return MissionIniResult(ini, false, "$ini already held these steerpoints: nothing had changed.")
         writeSafely(iniFile, after.toByteArray(Charsets.ISO_8859_1))
+        ledgered(if (campaign) stpt.filterNot { it.key.trim().startsWith("target_", ignoreCase = true) } else stpt)
         return MissionIniResult(ini, true, null)
     }
 

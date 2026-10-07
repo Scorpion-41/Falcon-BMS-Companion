@@ -261,11 +261,12 @@ private fun InfoRow(c: InfoCell, copied: Boolean, onCopy: (String) -> Unit) {
             maxLines = 1, softWrap = false, modifier = Modifier.width(64.dp),
         )
         Text(
-            value ?: "—", style = LocalExtra.current.mono.copy(fontSize = 14.5.sp, lineHeight = 18.sp), fontWeight = FontWeight.Bold,
+            value ?: "none", style = LocalExtra.current.mono.copy(fontSize = 14.5.sp, lineHeight = 18.sp), fontWeight = FontWeight.Bold,
             color = if (value != null) Hud.Text else Hud.TextFaint, maxLines = 1, softWrap = false,
         )
         Spacer(Modifier.width(6.dp))
-        val sub = if (copied) "copied" else c.sub
+        // a figure the field does not have says "none", without its band
+        val sub = if (copied) "copied" else c.sub.takeIf { value != null }
         Text(
             sub.orEmpty(), fontSize = 10.sp, lineHeight = 12.sp, color = if (copied) Hud.Green else Hud.TextDim,
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),

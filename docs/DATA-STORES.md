@@ -34,7 +34,7 @@ over every file for steerpoints, PPTs and lines (shared memory).
 | Precision targets (STPT 15-22 after a Recon) and STPT 81-99 | `User\Config\<callsign>.ini` `[STPT] target_14…21` (action −1), `target_80…98` | BMS (Recon, DTC SAVE); the Planner | Map, Briefing, targets | DTC SAVE, Save to DTC |
 | Weapon targets | cartridge `[STPT] wpntarget_0…99` | BMS; the Planner | Map | as above |
 | PPTs 56-70 (threat rings and markers) | cartridge `[STPT] ppt_0…14` (`x, y, z, range in feet, code`), named from the theater's `<campaign>\Ppt.ini`; **in a TE** the TE's own `<TE>.ini` `[STPT] ppt_…` (BMS loads it over the cartridge), once it is believed as above | BMS; the Planner | Map (rings), Dashboard threats | as above |
-| Lines L1-L4 (STPT 31-54) | cartridge `[STPT] lineSTPT_0…23`; in a TE the TE's `.ini` | BMS; the Planner | Map | as above |
+| Lines L1-L4 (STPT 31-54) | cartridge `[STPT] lineSTPT_0…23`; in a TE the TE's `.ini`. **BMS's DTC LOAD in a campaign reads lines, PPTs and targets from `<campaign>\<SaveFile>.ini`, not the cartridge** (WDP-PORT D46), so Save to DTC writes the open save's `.ini` too | BMS; the Planner | Map | as above |
 | VIP/VRP and OA1/OA2 (nav offsets) | cartridge `[NAV OFFSETS]` (`Modesel`, `VIP`, `VIPPUP`, `VRP`, `VRPPUP`, `OA1-…`, `OA2-…`) | BMS; the Planner's attack pages (Save to DTC) | the jet; **not drawn** in EZBoards mode (no attack overlay) | Save to DTC, DTC SAVE |
 | Pop-up / HADB / TOSS attack | — (worked out in the Planner, WDP mode only) | — | nothing in EZBoards mode | — |
 | Radios, TACAN, ILS | cartridge `[Radio]` (UHF/VHF 1-20 and comments, ILS presets), `[COMMS]` (Comm1/2, TACAN channel/band, ILS frequency and course); comm ladder in `briefing.txt` | BMS; the Planner | Comms, Dashboard, Briefing | DTC SAVE, PRINT |
@@ -157,7 +157,7 @@ memory and Tacview. The Planner, in WDP mode, reads BMS's files directly.
 | the cartridge | the Planner's saves showing in EZBoards mode | **shared by design** (above) |
 | the cartridge, next mission | lines, PPTs, steerpoints, weapon targets and the VIP/VRP/OA the Planner saved for an earlier flight, drawn on the next flight's map as if they were its own, in either mode | **fixed**: the ledger tells them apart, and the PC **clears them by itself when a new mission begins** (a PRINT of another flight, another flight opened or populated in WDP mode), with every nav offset but the new flight's own; nothing is drawn as a leftover, nothing is asked, nothing is shown |
 | the cartridge, a switch of mode | the other mode's mission reaching this one through the cartridge | **fixed**: a switch clears everything the Planner saved that is still unchanged, and every nav offset ([What a switch resets](#what-a-switch-resets)) |
-| a TE's own mission file | the Planner's PPTs and lines for another flight of the same TE | **fixed**: cleared with the cartridge at a new mission and a switch (the TE files the ledger names; the nav offsets in the current flight's TE file); otherwise BMS does not load the file |
+| a save's own mission file (a TE's; a campaign's since the line fix after 1.3.8's release) | the Planner's PPTs and lines for another flight of the same save | **fixed**: cleared with the cartridge at a new mission and a switch (the mission files the ledger names; never a campaign file's `target_n`, which are not in the ledger; the nav offsets in the current flight's TE file); otherwise BMS does not load the file |
 | the kneeboard DDS pages | one tool's pages staying after a switch | **fixed** for an earlier flight's: the switch puts BMS's own page back over the other mode's halves (where the theater ships BMS's originals; listed as left where it does not); the current flight's pages stay |
 | the snapshot after a switch to WDP mode | another flight's Populate shown as the mission | **fixed**: discarded at the switch when it is not the current flight's, "not populated yet" |
 | html_brief | an export of the last mission | flagged when BMS printed a newer briefing than the export |
@@ -204,7 +204,8 @@ WDP mode's snapshot is **kept** (it is not shown in EZBoards mode).
 
 **What a switch never touches:** keys BMS or the pilot changed since the Planner wrote them (only a key still holding
 exactly the Planner's value goes; numbers to half a foot, so BMS's own six-decimal rewrite at DTC SAVE or FLY changes
-nothing); keys BMS wrote (not in the ledger), the nav offsets excepted; the radios, IFF, EWS, MFD, HARM, laser and other
+nothing); keys BMS wrote (not in the ledger), the nav offsets and BMS's copies of the Planner's own values excepted
+([Starting the next mission](#starting-the-next-mission)); the radios, IFF, EWS, MFD, HARM, laser and other
 settings (not mission items); the current flight's pages and snapshot; a page whose owner is BMS, Falcas's WDP or
 unknown; a page in a theater whose BMS ships no originals (Korea KTO, the Balkans and Hellas ship them; elsewhere the
 page is left and the PC's log names it); a page file that does not exist (never created); the `KoreaObj_HiRes` twins.
@@ -246,6 +247,38 @@ and the new flight's TE file. In WDP mode another flight's snapshot is discarded
 cockpit kneeboard pages: the mode's own tool (EZBoards at PRINT, Upd Kneeboard) writes them for the new mission; only a
 switch of mode puts BMS's pages back. **Nothing is shown and nothing is asked**; the server page's recent activity names
 what was cleared. Then **LOAD** the DTC in BMS.
+
+**BMS's copies of them go too** (1.3.9). BMS's DTC memory keeps what the pilot last LOADed, and its SAVE, FLY and
+campaign save write that memory into the cartridge and into the next save's mission file (`<SaveFile>.ini`,
+`Auto Save.ini`). So a line the Planner drew for one flight, LOADed, then cleared by a new mission, came back in BMS's
+own writes, where no ledger row named it — and every later LOAD brought it back ("Line 1 loads in every mission"). A
+new mission and a switch therefore also clear, in the cartridge, every mission file the ledger names, the mission file
+BMS's LOAD reads now (the newest save's) and `Auto Save.ini`, each `[STPT]` item that holds **a value the ledger names
+for another flight** and none for the new flight. The ledger is the only memory — its live rows and what the last five
+resets cleared (`cleared`); no log of past values is kept. A PPT, a target or weapon target of action −1 (a precision
+target; BMS's route, action 0 and up, never) is compared as numbers, not text, against both: BMS writes a PPT back with
+its height as 0 and its range as a float (north and east to a foot, a PPT's range to a foot and its code, a target's
+name). A line point only exactly, against the live rows, and **a line goes only whole**: when every point it places is
+such a value; a line the pilot added a point to in BMS is kept. A value the Planner never wrote — a line or PPT the
+pilot drew in BMS — is never one of them. BMS's memory itself still holds the old items until the next LOAD, which is
+why the Steps say LOAD (then SAVE) after opening the new mission.
+
+**Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (1.3.9; the Planner's Settings, on by default; the PC's
+setting `CleanOpenedMission` in `bridge-settings.json`, `GET`/`POST /api/planner/settings`). A line or PPT comes back
+from BMS's memory long after the ledger forgets it. So when the Planner plans **another flight** than it had — Open
+mission… or Pick a flight (`POST /api/mission/opened?clean=1`; the same flight planned again, Reload from BMS or a seat
+changed, is not one) — the PC cleans **every** line (`lineSTPT_0…23`, each line whole), **every** PPT (`ppt_0…14`)
+and **every** Open 1/Open 2 steerpoint (STPT 81-99, `target_80…98`), whoever made them, from the cartridge and from the campaign mission file BMS's LOAD reads for that flight —
+`<SaveFile>.ini` of the save opened (`Auto Save.ini` when that is it; not when an `Auto Save.tac` was saved after it).
+Kept: a line, PPT or STPT 81-99 the Planner saved for that flight (its live ledger rows); BMS's route (STPT 1-24),
+precision and Recon targets (STPT 15-22) and weapon targets; everything of a **TE or a training**, the cartridge too (the save a `.tac`/`.trn`: BMS's
+2D map empties the four lines, loads them from the TE's own `<TE>.ini` and saves the cartridge, and a TE's LOAD reads
+lines and PPTs from that cartridge — cleaning it after the map was built would take the TE's authored items from the
+jet). Nothing else cleans them: not a PRINT, not a switch of mode; until the next Open mission… the pilot's own lines and
+PPTs stay. The Planner then reads its cartridge again (empty of lines and PPTs), and the maps suggest the mission's
+threats and its tanker and AWACS tracks — the Mission map draws them, the Planner's Map page lists them, one tap from a
+PPT or a line; nothing reaches BMS until the pilot adds them and saves. The cleaned points are in the ledger's `cleared`
+(under no flight when the Planner did not write them) for the Undo route. Off: nothing is cleaned at Open mission….
 
 **What does not, and why.**
 - **The cartridge** keeps whatever BMS saved into it. Falcon BMS's own manual says so: in a campaign, PPTs and lines
@@ -341,14 +374,16 @@ picture, so marking or asking about the last one's helps nobody. When a new miss
 that still holds its value (`0.000000, 0.000000, 0.000000, -1, Not set` for a steerpoint, the empty PPT and line
 slots, `0,0,0,0` and `none` for the nav offsets, an offset aim point removed), the same safe write as Save to DTC,
 after checking each still holds the Planner's value; the nav offsets go whoever wrote them (rule 1 does not apply to
-them, [What a switch resets](#what-a-switch-resets)). The ledger keeps what was cleared (`cleared`, the last five
-resets) for the Undo route, which no screen offers.
+them, [What a switch resets](#what-a-switch-resets)), and so do BMS's copies of the Planner's values ([Starting the next
+mission](#starting-the-next-mission)). The ledger keeps what was cleared (`cleared`, the last five resets) for the Undo
+route, which no screen offers, and to know BMS's copies of a PPT or target by; no log of past values is kept.
 Then **LOAD** the DTC in BMS (the jet loads the cartridge at LOAD, not when the file changes); the Planner's DTC page
 reads the file again (asking first over changes not saved). `MissionData.leftovers` and `POST /api/cartridge/
 leftovers` stay in the API for older devices; `leftovers` is always null now and no device calls the route.
 
 **What it cannot tell.** Keys BMS wrote (a Recon's targets, PPTs or lines placed in BMS's own 2D DTC window, anything
-saved before 1.3.8) are not in the ledger and cannot be dated, so nothing new is shown for them. BMS's own **CLEAR** in
+saved before 1.3.8) are not in the ledger and cannot be dated, so nothing new is shown for them — unless one holds a
+value the Planner wrote for another flight, which makes it BMS's copy of the Planner's (above). BMS's own **CLEAR** in
 the 2D DTC window wipes the whole cartridge (UM §5.1.11) — the blunt way to start from nothing — and the ledger then
 finds nothing left of the Planner's.
 
@@ -356,7 +391,7 @@ finds nothing left of the Planner's.
 
 | Item | Where it lives | Who wrote it | How the app tells it belongs to an earlier mission | What happens |
 |---|---|---|---|---|
-| Lines L1-L4 | cartridge `lineSTPT_0…23` (a TE: its `.ini` too) | BMS (2D DTC) or the Planner | the ledger (Planner's only) | the Planner's: cleared by itself at a new mission (another flight's) or a switch (all of them), silently |
+| Lines L1-L4 | cartridge `lineSTPT_0…23` (a TE: its `.ini` too) | BMS (2D DTC) or the Planner | the ledger (Planner's only) | the Planner's (a line only whole): cleared by itself at a new mission (another flight's) or a switch (all of them), silently; and with Start each opened mission with clean lines and PPTs (on by default) every line in the cartridge and the campaign mission file LOAD reads, whoever drew it, when the Planner plans another flight (never a TE's) |
 | PPTs 56-70 | cartridge `ppt_0…14` | BMS or the Planner | the ledger | as above |
 | Steerpoints, precision targets (STPT 15-22, 81-99) | cartridge `target_n` | BMS (Recon, DTC SAVE) or the Planner (From mission…, the Map page) | the ledger; BMS's Recon bank is BMS's and stays unmarked | as above. In 4.38.1 a cartridge steerpoint wins over the mission file's route, so a leftover route point is the most misleading of all |
 | Weapon targets | cartridge `wpntarget_0…99` | BMS or the Planner | the ledger | as above |

@@ -84,16 +84,19 @@ import kotlinx.serialization.Serializable
  * settings, [SAVED_KEY]), as WDP keeps its kneeboard choices and picture files in its Setup.ini: a picture page set
  * once — a checklist, say — is still planned the next evening.
  *
- * The first time the PC's pages are known the plan is the **Mission set**, laid for the Mission section's mode on the
- * PC ([KbPrintState.mode]):
- * - **WDP mode** (where the Planner is used): the DataCard on page 1 and the Coordination Card on page 2 — the first two
- *   pages that can be printed. EZBoards does not run at PRINT in WDP mode, so its pages are the Planner's.
- * - **EZBoards mode**: the DataCard on the first page pair EZBoards does not claim and the Coordination Card on the next
- *   (pages 2 and 3 on a stock install, beside EZBoards' page 1).
+ * The first time the PC's pages are known the plan is the **Mission set** ([MISSION_SET], 1.3.9: three page pairs —
+ * Briefing on the left and Weather on the right, then the DataCard's two halves, then the Coordination Card's), laid
+ * for the Mission section's mode on the PC ([KbPrintState.mode]):
+ * - **WDP mode** (where the Planner is used): pages 1, 2 and 3 — the first three that can be printed. EZBoards does not
+ *   run at PRINT in WDP mode, so its pages are the Planner's.
+ * - **EZBoards mode**: the first three pages EZBoards does not claim (2, 3 and 4 on a stock install, beside EZBoards'
+ *   page 1).
+ * A theater with fewer such pages gets the first pairs that fit.
  *
  * Every other half is left as it is. A Mission set the pilot has not touched since is laid again when the mode it was
- * laid for is no longer the PC's ([laidFor]), and the window says so ([relaid]); a plan changed by hand is kept, with
- * a quiet line saying which mode it was made in.
+ * laid for is no longer the PC's ([laidFor]), or when an earlier build laid it in an older layout ([layout] below
+ * [LAYOUT]), and the window says so ([relaid]); a plan changed by hand is kept, with a quiet line saying which mode it
+ * was made in.
  *
  * **Pictures** (Browse picture…, WDP's Browse Picture): a half of kind [KbKind.PICTURE] shows the file [pictures] names
  * for it, a path on the BMS PC ([KneeboardPictures]); [browse] is the chooser while it is open. A half keeps its
@@ -103,6 +106,19 @@ import kotlinx.serialization.Serializable
 object KneeboardPrintSession {
     /** Where the plan is kept between launches, in the device's own settings: one JSON object ([Saved]). */
     const val SAVED_KEY = "kb_print_plan"
+
+    /**
+     * The Mission set, page pair by page pair (left kind, right kind): Briefing + Weather, the DataCard, the
+     * Coordination Card (1.3.9; 1.3.8 laid the DataCard and the Coordination Card alone, [LAYOUT] 1).
+     */
+    val MISSION_SET: List<Pair<String, String>> = listOf(
+        KbKind.BRIEFING to KbKind.WEATHER,
+        KbKind.DATACARD_LEFT to KbKind.DATACARD_RIGHT,
+        KbKind.COORDINATION_LEFT to KbKind.COORDINATION_RIGHT,
+    )
+
+    /** The Mission set's layout this build lays; an untouched set kept with an older one is laid again. */
+    const val LAYOUT = 2
 
     /** `"<n><L|R>"` → a [KbKind]; a half not in the map is left as it is */
     val plan = mutableStateMapOf<String, String>()
@@ -118,6 +134,8 @@ object KneeboardPrintSession {
         val planned: Boolean = false,
         val laidFor: String? = null,
         val madeIn: String? = null,
+        /** the Mission set's layout ([LAYOUT]) an untouched set was laid in; absent (0) from a build before 1.3.9 */
+        val layout: Int = 0,
     )
 
     /** The plan as the device kept it; nothing (a fresh start) when there is none or it cannot be read. */
@@ -129,6 +147,7 @@ object KneeboardPrintSession {
         planned = s.planned
         laidFor = s.laidFor
         madeIn = s.madeIn
+        layout = s.layout
     }
 
     private fun halfKey(k: String) = k.length in 2..3 && k.last() in "LR" && k.dropLast(1).toIntOrNull() in 1..16
@@ -136,20 +155,20 @@ object KneeboardPrintSession {
     /** Keeps the plan on the device, for the next launch. Never throws. */
     private fun save() {
         runCatching {
-            Repo.putString(SAVED_KEY, Repo.json.encodeToString(Saved.serializer(), Saved(plan.toMap(), pictures.toMap(), planned, laidFor, madeIn)))
+            Repo.putString(SAVED_KEY, Repo.json.encodeToString(Saved.serializer(), Saved(plan.toMap(), pictures.toMap(), planned, laidFor, madeIn, layout)))
         }
     }
 
     /** Forgets the plan here and on the device: the next time the pages are read, the window opens on the Mission set. */
     fun forget() {
         plan.clear(); pictures.clear()
-        planned = false; laidFor = null; madeIn = null; relaid = null; browse = null
+        planned = false; laidFor = null; madeIn = null; relaid = null; browse = null; layout = 0
         runCatching { Repo.putString(SAVED_KEY, null) }
     }
 
     /** The plan as the device kept it, read again (what a launch finds): for the checks. */
     fun reloadSaved() {
-        plan.clear(); pictures.clear(); planned = false; laidFor = null; madeIn = null; relaid = null
+        plan.clear(); pictures.clear(); planned = false; laidFor = null; madeIn = null; relaid = null; layout = 0
         restore()
     }
 
@@ -166,6 +185,9 @@ object KneeboardPrintSession {
 
     /** the sentence saying the Mission set was laid again for a new mode, until the plan is next changed */
     var relaid by mutableStateOf<String?>(null)
+
+    /** the layout ([LAYOUT]) the untouched Mission set was laid in; 0 = before 1.3.9 (or none) */
+    var layout by mutableStateOf(0)
 
     /** Browse picture…'s chooser while it is open: the file picked, and the page it would go on. */
     var browse by mutableStateOf<PictureBrowse?>(null)
@@ -230,30 +252,35 @@ object KneeboardPrintSession {
     fun wdpMode(st: KbPrintState? = state): Boolean = mode(st) == MissionMode.WDP
 
     /**
-     * The pages the Mission set uses.
-     * - **WDP mode**: the first two pages that exist and can be written (1 and 2 on a stock install): EZBoards is paused
-     *   in WDP mode (`EzStatus.suspended`), so the halves it claims are not kept from the Planner.
-     * - **EZBoards mode**: the first two page pairs EZBoards does not claim, that exist and can be written. When BMS
+     * The pages the Mission set uses ([MISSION_SET]: three).
+     * - **WDP mode**: the first three pages that exist and can be written (1, 2 and 3 on a stock install): EZBoards is
+     *   paused in WDP mode (`EzStatus.suspended`), so the halves it claims are not kept from the Planner.
+     * - **EZBoards mode**: the first three page pairs EZBoards does not claim, that exist and can be written. When BMS
      *   Companion does not know EZBoards' configuration (its folder is not set), page 1 is left out all the same:
-     *   EZBoards as it ships writes page 1 at every PRINT, so the Planner's pages are 2 and 3 there.
+     *   EZBoards as it ships writes page 1 at every PRINT, so the Planner's pages are 2, 3 and 4 there.
      */
     fun missionPages(st: KbPrintState? = state): List<Int> {
         val usable = st?.pages.orEmpty().filter { printable(it) }
         val free = if (wdpMode(st)) usable else usable.filter { !it.ezLeft && !it.ezRight && !(st?.ezConfig == null && it.n == 1) }
-        return free.map { it.n }.sorted().take(2)
+        return free.map { it.n }.sorted().take(MISSION_SET.size)
+    }
+
+    /** The Mission set's halves on [pages], pair by pair ([MISSION_SET]). */
+    private fun missionPlan(pages: List<Int>): Map<String, String> = buildMap {
+        pages.zip(MISSION_SET).forEach { (n, kinds) -> put("${n}L", kinds.first); put("${n}R", kinds.second) }
     }
 
     /** The Mission set, in place of whatever was planned, laid for the mode in force. Answers the pages it used. */
     fun missionSet(): List<Int> {
         val pages = missionPages()
         plan.clear()
-        pages.getOrNull(0)?.let { plan["${it}L"] = KbKind.DATACARD_LEFT; plan["${it}R"] = KbKind.DATACARD_RIGHT }
-        pages.getOrNull(1)?.let { plan["${it}L"] = KbKind.COORDINATION_LEFT; plan["${it}R"] = KbKind.COORDINATION_RIGHT }
+        plan.putAll(missionPlan(pages))
         pages.firstOrNull()?.let { selN = it; selSide = 'L' }
         planned = true
         laidFor = mode()
         madeIn = laidFor
         relaid = null
+        layout = LAYOUT
         save()
         return pages
     }
@@ -320,10 +347,7 @@ object KneeboardPrintSession {
         if (laidFor == null) return false
         val pages = missionPages()
         if (pages.isEmpty()) return false
-        val want = HashMap<String, String>()
-        pages.getOrNull(0)?.let { want["${it}L"] = KbKind.DATACARD_LEFT; want["${it}R"] = KbKind.DATACARD_RIGHT }
-        pages.getOrNull(1)?.let { want["${it}L"] = KbKind.COORDINATION_LEFT; want["${it}R"] = KbKind.COORDINATION_RIGHT }
-        return want != plan.toMap()
+        return missionPlan(pages) != plan.toMap()
     }
 
     /** The files a print would write: page n with its left and right kinds, for every page with anything on it. */
@@ -349,6 +373,11 @@ object KneeboardPrintSession {
                     missionSet()
                     relaid = if (now == MissionMode.WDP) "Mission set laid again for WDP mode: EZBoards is paused, so the Planner's pages start at page 1."
                     else "Mission set laid again for EZBoards mode: it leaves EZBoards the pages it writes at PRINT."
+                }
+                // an untouched Mission set an earlier build laid in its older layout (1.3.8: the two cards alone)
+                laidFor != null && layout < LAYOUT -> {
+                    missionSet()
+                    relaid = "Mission set laid again: Briefing and Weather first, then the DataCard and the Coordination Card."
                 }
                 // an untouched Mission set whose pages moved (another theater, EZBoards' claims): laid on the pages now
                 missionSetMoved() -> missionSet()
@@ -816,10 +845,10 @@ private fun Warnings(st: KbPrintState?) {
     if (onEz.isNotEmpty()) {
         OneLine("EZBoards writes page ${onEz.joinToString(", ")} at every PRINT: PRINT in BMS after this and it replaces what you print there.", Hud.Amber, "Print/OnEz")
     }
-    if (st != null && st.error == null && st.pages.isNotEmpty() && s.missionPages(st).size < 2 && s.jobs().isEmpty()) {
+    if (st != null && st.error == null && st.pages.isNotEmpty() && s.missionPages(st).size < KneeboardPrintSession.MISSION_SET.size && s.jobs().isEmpty()) {
         OneLine(
-            if (wdp) "Fewer than two pages here can be printed: choose the pages yourself."
-            else "Fewer than two pages here are free of EZBoards: choose the pages yourself.",
+            if (wdp) "Fewer than three pages here can be printed: choose the pages yourself."
+            else "Fewer than three pages here are free of EZBoards: choose the pages yourself.",
             Hud.TextDim, "Print/Few",
         )
     }

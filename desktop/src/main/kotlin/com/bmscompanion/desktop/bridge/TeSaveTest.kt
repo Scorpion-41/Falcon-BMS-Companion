@@ -2,6 +2,7 @@ package com.bmscompanion.desktop.bridge
 
 import com.bmscompanion.app.data.mission.CartridgeEdit
 import com.bmscompanion.app.data.mission.CartridgeState
+import com.bmscompanion.app.data.mission.Leftovers
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -30,8 +31,9 @@ import java.security.MessageDigest
  * Then: the user TE gets **exactly** the edited `[STPT]` keys and every other byte is identical (the diff is in the
  * report); non-steerpoint edits and removals stay out of it; saving again changes nothing; nothing is added to
  * `User/Config` (no backup folder, README or record); the TE and the training that ship with BMS are written like the
- * pilot's own, as in WDP (their `.ini` files are put back afterwards, so the copy can be used again); a TE template (a
- * campaign start), a campaign save, the renamed copy, the read-only file, the twin, a file that is not there, a path,
+ * pilot's own, as in WDP (their `.ini` files are put back afterwards, so the copy can be used again); a campaign save's
+ * mission file gets the same keys, except a `target_n` that would zero a point of BMS's route there, and no route key
+ * enters the ledger (D46; the file is put back); a TE template (a campaign start), the renamed copy, the read-only file, the twin, a file that is not there, a path,
  * an unknown theater and a pilot with no cartridge are refused with their sentences and their files are untouched; a
  * TE with no `.ini` gets none;
  * a real user TE of another theater (Hellas WCP's `SAT 001.tac`) and the real `Auto Save.tac`/`harrier.tac` cases
@@ -256,7 +258,41 @@ object TeSaveTest {
             }
             val cam = dir.listFiles()?.firstOrNull { it.name.startsWith("Save-Day", true) && it.name.endsWith(".cam", true) }
                 ?: file(dir, "Auto Save.cam")
-            cam?.let { refused("a campaign save", "$tName|${it.name}", "a campaign keeps steerpoints, lines and PPTs in your cartridge only", File(dir, it.nameWithoutExtension + ".ini")) }
+            // a campaign save (D46): BMS's DTC LOAD takes targets, lines and PPTs from its mission file, so the edited
+            // keys go there too — but never one that would take away a point of BMS's route; the file is put back after
+            val camIni = cam?.let { file(dir, it.nameWithoutExtension + ".ini") }
+            if (cam == null || camIni == null) appendLine("     (no campaign save with a mission file in the copy: the campaign case is not shown)")
+            else {
+                val b0 = camIni.readBytes()
+                val camTime = camIni.lastModified()
+                val held0 = Leftovers.keys(String(b0, Charsets.ISO_8859_1))
+                val placed = (0..23).map { "target_$it" }.firstOrNull { k ->
+                    k !in TE_EDITED && held0["STPT\u0000${k.uppercase()}"]?.let { !Leftovers.isEmpty(Leftovers.STEERPOINT, it) } == true
+                }
+                val zero = placed?.let { CartridgeEdit("STPT", it, "0.000000, 0.000000, 0.000000, -1, Not set") }
+                try {
+                    val (r, s) = save("$tName|${cam.name}", EDITS + listOfNotNull(zero))
+                    val m = s?.mission
+                    val b1 = camIni.readBytes()
+                    val d = lineDiff(b0, b1)
+                    val keys = d.mapNotNull { (o, n) -> (n ?: o)?.substringBefore('=')?.trim() }.toSet()
+                    check("a campaign save (${cam.name}): ${camIni.name} written with exactly the planned keys, every other byte identical",
+                        r?.status == 200 && s?.error == null && m?.written == true && keys == TE_EDITED && String(b1, Charsets.ISO_8859_1) == swapLines(b0, d),
+                        m?.let { "${it.file} written=${it.written} ${it.reason ?: ""}; changed: ${keys.sorted().joinToString()}" } ?: (s?.error ?: error(r)))
+                    if (zero != null) {
+                        check("  … BMS's route point ${zero.key} it places is not zeroed there (the cartridge still gets the edit)",
+                            zero.key !in keys && File(config, "$PILOT.ini").readText(Charsets.ISO_8859_1).contains("\r\n${zero.key}=0.000000, 0.000000, 0.000000, -1, Not set"))
+                    } else appendLine("     (the mission file places none of target_0-23 outside the edits: the route guard is not shown)")
+                    val led = CartridgeStore(Bridge.install).ledger(PILOT).writes.filter { it.file.equals(camIni.name, true) }.map { it.key }.toSet()
+                    check("  … its ledger rows are the lines, PPTs and weapon targets, never a route key",
+                        led.isNotEmpty() && led.none { it.startsWith("target_", true) } && led == TE_EDITED.filterNot { it.startsWith("target_", true) }.toSet(),
+                        led.sorted().joinToString())
+                } finally {
+                    val t0 = camTime
+                    camIni.writeBytes(b0)
+                    camIni.setLastModified(t0)
+                }
+            }
             refused("a copy renamed in Explorer", "$tName|Renamed DEAD.tac", "renamed since", File(dir, "Renamed DEAD.ini"))
             refused("a read-only mission file", "$tName|ReadOnly DEAD.tac", "is read-only", File(dir, "ReadOnly DEAD.ini"))
             refused("a later save of the same name owns the .ini", "$tName|Twin DEAD.tac", "also the mission file of Twin DEAD.cam", File(dir, "Twin DEAD.ini"))

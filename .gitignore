@@ -39,3 +39,6 @@ tools/wdpref/out/
 
 # Claude Code local permissions (this machine only)
 .claude/settings.local.json
+
+# images for the owner to look at, never committed
+review/

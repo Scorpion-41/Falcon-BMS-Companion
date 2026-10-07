@@ -78,6 +78,12 @@ object PlannerMissionState {
      * it changes at once, so the pages see one new mission.
      */
     fun plan(theater: String, ref: CampRef, flight: CampFlight, seat: Int, file: CampFile? = null, precision: Boolean? = null) {
+        // another flight than the one planned (Open mission… or Pick a flight): the opened mission starts with clean
+        // lines and PPTs when the PC's setting says so (PlannerLeftovers.planned); the same flight again (Reload from
+        // BMS, a seat changed) keeps them
+        val another = this.source != SAVE || this.flight == null ||
+            !(this.theater.equals(theater.trim(), true) && this.ref?.file.equals(ref.file, true) &&
+                this.flight?.row?.callsign.equals(flight.row.callsign, true) && this.flight?.row?.number == flight.row.number)
         Snapshot.withMutableSnapshot {
             this.theater = theater.trim()
             this.ref = ref
@@ -93,7 +99,7 @@ object PlannerMissionState {
         // what Settings → Auto load last mission on startup opens again
         PlannerSettings.rememberLast(ref, this.seat)
         // what the Planner saved into the cartridge for another flight and is still there: asked about once
-        PlannerLeftovers.planned()
+        PlannerLeftovers.planned(clean = another)
     }
 
     /** **Back to BMS briefing**: the Planner plans the printed briefing and the cartridge again. */

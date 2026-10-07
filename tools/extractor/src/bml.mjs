@@ -250,6 +250,56 @@ export function readModel(file) {
   return { tris: tris.subarray(0, n), meshes: table.length, total: hdr.total, perMesh: best.perMesh, share: best.share };
 }
 
+/**
+ * Every triangle of a building's model, read mesh by mesh.
+ *
+ * [readModel] reads a model as one vertex array, which is how the large pavement models are laid out. A building's
+ * model is usually not: its meshes change record size from one to the next (36, 40, 32 bytes — a control tower's
+ * glass is a 40-byte mesh between two 36-byte ones) and a mesh may begin a few bytes past where the one before it
+ * ended. So each mesh is **found** where it starts, the same way the array is: from where the previous mesh ended,
+ * the first offset at which its own record size lands on unit normals. Only the positions are kept.
+ *
+ * Returns `{ tris, meshes }` (nine numbers per triangle, model feet: x right, y up, z forward) or null when the
+ * table does not read or a mesh cannot be found.
+ */
+export function modelTriangles(file) {
+  const b = inflate(file);
+  if (!b) return null;
+  const hdr = header(b);
+  if (!hdr) return null;
+  const table = meshTable(b, hdr);
+  if (!table) return null;
+  const unit = (i) => {
+    if (i + 24 > b.length) return false;
+    const len = Math.hypot(b.readFloatLE(i + 12), b.readFloatLE(i + 16), b.readFloatLE(i + 20));
+    return len > 0.97 && len < 1.03;
+  };
+  const startsAt = (at, m) => {
+    const n = Math.min(m.count, 24);
+    let good = 0;
+    for (let k = 0; k < n; k++) if (unit(at + k * m.stride)) good++;
+    // every one of them: a start one record early still passes four in five, and reads the mesh shifted
+    return good === n;
+  };
+  const out = [];
+  let at = table[table.length - 1].at + 8;
+  for (const m of table) {
+    let found = -1;
+    for (let s = at; s < at + 4096 && s + m.count * m.stride <= b.length; s++) if (startsAt(s, m)) { found = s; break; }
+    if (found < 0) return null;
+    for (let t = 0; t + 2 < m.count; t += 3) {
+      for (let j = 0; j < 3; j++) {
+        const i = found + (t + j) * m.stride;
+        out.push(b.readFloatLE(i), b.readFloatLE(i + 4), b.readFloatLE(i + 8));
+      }
+    }
+    at = found + m.count * m.stride;
+  }
+  // read right, the last mesh ends where the file does (within a record)
+  if (b.length - at > 64) return null;
+  return { tris: Float32Array.from(out), meshes: table.length };
+}
+
 /** Just the triangles lying flat on the ground: the painted surface. Nine numbers each, y dropped. */
 export function groundTriangles(file) {
   const model = readModel(file);

@@ -345,6 +345,9 @@ internal object WdpMapTest {
             WdpDialogs.stack.clear()
         }
 
+        // ---------------------------------------------------------------- Add to Open bank… (STPT 81-99), on a page of its own
+        openBank(this, ::check, page(DtcWiring(WdpDtcFixture.source())), mission, x, airports, reference, out, ui)
+
         // ---------------------------------------------------------------- the pictures
         d = build(w)
         val next = d.known.sites.withIndex().firstOrNull { it.value.inPpt == null && it.value.option != null }?.index
@@ -510,6 +513,242 @@ internal object WdpMapTest {
     }
 
     private class Shot(val name: String, val w: Int, val h: Int, val density: Float, val hsd: Boolean, val sel: MapPick?)
+
+    /**
+     * **Add to Open bank…** (1.3.9): a right-click on Incheon (else a field off the flight's) → the chooser on the field,
+     * Land, the first free slot from 81 → the DTC page's Open 1 tab shows it, it counts in Save to DTC and is written as
+     * `target_<n-1>` with Land's code 7 and the field's name; a second point into the same slot asks first (Cancel
+     * keeps it, Replace takes it); Move keeps its type; Take out empties it. The chooser drawn at a PC's and a phone's
+     * size into `<out>/openbank-*.png`.
+     */
+    private fun openBank(
+        sb: StringBuilder, check: (String, Boolean, String) -> Unit, w: DtcWiring, mission: com.bmscompanion.app.ui.screens.wdp.WdpMission,
+        x: com.bmscompanion.app.ui.screens.wdp.MapExtras, airports: com.bmscompanion.app.data.AirportSet?, reference: List<com.bmscompanion.app.data.Threat>,
+        out: File, ui: MapUi,
+    ) {
+        val coords = DtcCoords(mission.coords)
+        fun data() = mapData(w, WdpMapView.facts(w), mission, airports, reference, mapBullseye(mission), x)
+        var d = data()
+        val ours = d.fields.map { it.airport.id }.toSet()
+        val field = x.airports.firstOrNull { it.name.contains("Incheon", true) } ?: x.airports.firstOrNull { it.id !in ours && (it.elevationFt ?: 0) > 0 }
+        if (field == null || w.model == null) { check("Open bank: an airfield and a cartridge", false, "${x.airports.size} airfields"); return }
+        val m = w.model!!
+        val free = (81..99).firstOrNull { DtcFromMission.stptEmpty(if (it <= 89) m.open[it - 81] else m.hpn[it - 90]) }
+        sb.appendLine("Open bank: ${field.name} (${field.icao}), first free slot STPT $free")
+        // the phone's list first (its long press), while no window is open
+        listLongPress(sb, check, mission, out)
+        // the right-click: the point card a little off the field's middle
+        val near = Pt(field.x + 900.0, field.y - 600.0)
+        val card = MapActions(w, d, coords, ui, mission).card(MapPick.Point(near))
+        val act = card?.actions?.firstOrNull { it.label == com.bmscompanion.app.ui.screens.wdp.OpenBankChooser.LABEL }
+        check("a right-click near ${field.name} offers Add to Open bank…", act != null, card?.actions?.joinToString(" | ") { it.label }.orEmpty())
+        if (act == null || free == null) return
+        WdpDialogs.stack.clear()
+        act.run()
+        val c = com.bmscompanion.app.ui.screens.wdp.OpenBankChooser.current
+        check("…which opens the chooser on ${field.name} first, as Land, on STPT $free", c != null && c.isOpen && c.choices.first().field && c.action == 7 && c.slot == free &&
+            c.choices.size == 2, c?.let { "${it.choices.map { ch -> ch.label }} action ${it.action} slot ${it.slot}" }.orEmpty())
+        if (c == null) return
+        check("…listing STPT 81-99 with what each holds", c.slots().map { it.n } == (81..99).toList(), c.slots().filter { it.holds != null }.joinToString { "${it.n} ${it.holds}" })
+        check("…and every type the Open tabs' Change window offers", com.bmscompanion.app.ui.screens.wdp.OpenBankChooser.TYPES.size == 28 &&
+            com.bmscompanion.app.ui.screens.wdp.OpenBankChooser.TYPES.containsAll(listOf(-1, 0, 7, 8)), com.bmscompanion.app.ui.screens.wdp.OpenBankChooser.TYPES.joinToString())
+        // the pictures of the chooser over the Map page, PC and phone, before it is applied
+        shots(sb, check, c, mission, out)
+        c.pick(0); c.slot = free; c.more = false
+        val unsaved = w.unsaved
+        val r = c.apply()
+        val s = if (free <= 89) m.open[free - 81] else m.hpn[free - 90]
+        check("Add as STPT $free puts ${field.name} there as Land, at its elevation", r != null && Pt(s.falconY.toDouble(), s.falconX.toDouble()).dist(Pt(field.x, field.y)) < 2.0 &&
+            s.action == 7 && s.target.orEmpty().startsWith(field.name) && kotlin.math.abs(kotlin.math.abs(s.falconZ) - (field.elevationFt ?: 0)) < 1.0 && !c.isOpen,
+            "$r — ${s.falconY},${s.falconX} z ${s.falconZ} action ${s.action} '${s.target}'")
+        check("…counts as an unsaved edit", w.unsaved > unsaved, "$unsaved → ${w.unsaved}")
+        val v = w.values(emptyList()).values
+        val i = if (free <= 89) free - 80 else free - 89
+        val tab = if (free <= 89) "Open" else "Hpn"
+        check("…and the DTC page's ${if (free <= 89) "Open 1" else "Open 2"} tab shows it (Land, the name)", v["lbl${tab}Action$i.text"] == "Land" && (free > 89 || i > 6 || v["lbl${tab}Target_$i.text"].orEmpty().startsWith(field.name)),
+            "action '${v["lbl${tab}Action$i.text"]}', name '${v["lbl${tab}Target_$i.text"]}'")
+        d = data()
+        val shown = d.shown.stpt(free)
+        check("…and the map draws STPT $free (open, Land, not a target)", shown != null && shown.open && shown.inDtc && shown.action == 7 && !shown.target, "$shown")
+        val text = w.cartridgeText().orEmpty()
+        val line = text.lineSequence().firstOrNull { it.trim().startsWith("target_${free - 1}=") || it.trim().startsWith("target_${free - 1} ") }?.trim()
+        check("Save to DTC would write target_${free - 1} with Land's code 7 and the name", line != null && Regex("^target_${free - 1}\\s*=\\s*[^,]+,[^,]+,[^,]+,\\s*7,\\s*${Regex.escape(field.name)}").containsMatchIn(line), line.orEmpty())
+        // the same slot again from another point: WDP's question first
+        val other = Pt(field.x + 5 * DtcFromMission.NM, field.y)
+        fun answer(button: String): String? {
+            val q = WdpDialogs.stack.lastOrNull() as? WdpMessage ?: return null
+            WdpDialogs.stack.remove(q); q.onAnswer?.invoke(button)
+            return q.text.replace('\n', ' ')
+        }
+        fun again(): com.bmscompanion.app.ui.screens.wdp.OpenBankChooser? {
+            WdpDialogs.stack.clear()
+            MapActions(w, data(), coords, ui, mission).card(MapPick.Point(other))?.actions?.firstOrNull { it.label == com.bmscompanion.app.ui.screens.wdp.OpenBankChooser.LABEL }?.run?.invoke()
+            return com.bmscompanion.app.ui.screens.wdp.OpenBankChooser.current?.also { it.slot = free }
+        }
+        val c2 = again()
+        check("a point near nothing opens the chooser on the point alone, as Nav", c2 != null && c2.choices.size == 1 && c2.action == 0 && c2.buttonText() == "Replace STPT $free…",
+            c2?.let { "${it.choices.map { ch -> ch.label }} ${it.action} '${it.buttonText()}'" }.orEmpty())
+        val r2 = c2?.apply()
+        val q = answer("Cancel")
+        check("…and replacing STPT $free asks first; Cancel keeps ${field.name}", r2 == null && q != null && q.contains(field.name) && s.action == 7 && s.target.orEmpty().startsWith(field.name), q.orEmpty())
+        val c3 = again()
+        c3?.apply()
+        val q2 = answer("Replace")
+        check("…Replace puts the point there, as Nav", q2 != null && Pt(s.falconY.toDouble(), s.falconX.toDouble()).dist(other) < 2.0 && s.action == 0, "${s.falconY},${s.falconX} ${s.action}")
+        WdpDialogs.stack.clear()
+        // back to the field, then Move and Change type… and Take out, as on any placed steerpoint
+        w.placeSteerpoint(free, DtcFromMission.Place(field.name, Pt(field.x, field.y), (field.elevationFt ?: 0).toDouble(), "Airbases"), ask = false, action = 7)
+        val a = MapActions(w, data(), coords, ui, mission)
+        a.card(MapPick.Stpt(free))?.actions?.firstOrNull { it.label == "Move" }?.run?.invoke()
+        val to = Pt(field.x + 2000.0, field.y + 2000.0)
+        a.moveTo(MapPick.Stpt(free), to)
+        check("Move puts STPT $free where the tap was, keeping Land", Pt(s.falconY.toDouble(), s.falconX.toDouble()).dist(to) < 2.0 && s.action == 7, "${s.action}")
+        val stCard = MapActions(w, data(), coords, ui, mission).card(MapPick.Stpt(free))
+        val change = stCard?.actions?.firstOrNull { it.label == "Change type…" }
+        change?.run?.invoke()
+        val c4 = com.bmscompanion.app.ui.screens.wdp.OpenBankChooser.current
+        c4?.action = 8
+        val r4 = c4?.apply()
+        check("Change type… sets it to Holding without a question, in place", change != null && r4 != null && s.action == 8 && Pt(s.falconY.toDouble(), s.falconX.toDouble()).dist(to) < 2.0 && WdpDialogs.stack.isEmpty(), r4.orEmpty())
+        MapActions(w, data(), coords, ui, mission).card(MapPick.Stpt(free))?.actions?.firstOrNull { it.label.startsWith("Take out") }?.run?.invoke()
+        check("Take out of the DTC empties STPT $free", DtcFromMission.stptEmpty(s) && data().shown.stpt(free) == null, "")
+        WdpDialogs.stack.clear()
+        WdpMapView.sel = null
+    }
+
+    /** The chooser [c] over the Map page with the point card under it: a PC's window and a phone (by finger). */
+    private fun shots(sb: StringBuilder, check: (String, Boolean, String) -> Unit, c: com.bmscompanion.app.ui.screens.wdp.OpenBankChooser, mission: com.bmscompanion.app.ui.screens.wdp.WdpMission, out: File) {
+        val sel = WdpMapView.sel
+        for ((name, size) in listOf("pc" to Triple(1600, 1000, 1f), "phone" to Triple(412, 892, 2f))) {
+            com.bmscompanion.app.ui.screens.wdp.WdpTouch.seen = name == "phone"
+            WdpMapView.hsd = false; WdpMapView.listOpen = false; WdpMapView.status = null; WdpMapView.framed = null; WdpMapView.optionsOpen = false
+            WdpMapView.sel = MapPick.Point(c.choices.last().at)
+            val (wd, ht, den) = size
+            val scene = ImageComposeScene((wd * den).toInt(), (ht * den).toInt(), Density(den)) {
+                BmsTheme {
+                    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                        WdpMapPage(mission, Modifier.fillMaxSize())
+                        com.bmscompanion.app.ui.screens.wdp.WdpDialogHost()
+                    }
+                }
+            }
+            try {
+                com.bmscompanion.app.ui.screens.wdp.WdpProbe.on = true
+                // each size starts from the chooser as it opened
+                c.pick(0); c.more = false
+                var t = 0L
+                repeat(70) { scene.render(t); t += 50_000_000; Thread.sleep(40) }
+                File(out, "openbank-$name.png").writeBytes(scene.render(t).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+                sb.appendLine("ok    drawn: openbank-$name.png ($wd x $ht dp at $den)")
+                // every kind of control of the chooser pressed with the pointer (a mouse on the PC, a finger on the phone)
+                var ms = 50_000L
+                fun press(probe: String): Boolean {
+                    val r = com.bmscompanion.app.ui.screens.wdp.WdpProbe.rects["planner/Map/$probe"] ?: return false
+                    val p = r.center
+                    // a mouse's press on both (the phone laid out for fingers): this headless scene, driven off the Swing
+                    // thread, takes only every other finger tap of a row of them; the long press above is a real finger
+                    val touch = false
+                    val type = if (touch) androidx.compose.ui.input.pointer.PointerType.Touch else androidx.compose.ui.input.pointer.PointerType.Mouse
+                    if (!touch) scene.sendPointerEvent(PointerEventType.Move, p, timeMillis = ms, type = type)
+                    scene.sendPointerEvent(PointerEventType.Press, p, timeMillis = ms, type = type, buttons = PointerButtons(isPrimaryPressed = true), button = PointerButton.Primary)
+                    repeat(2) { scene.render(t); t += 16_000_000; Thread.sleep(16) }
+                    ms += 80
+                    scene.sendPointerEvent(PointerEventType.Release, p, timeMillis = ms, type = type, buttons = PointerButtons(), button = PointerButton.Primary)
+                    // a finger's tap settles (the tap's own timeout, the scroll's) before the next one
+                    repeat(if (touch) 20 else 6) { scene.render(t); t += 50_000_000; Thread.sleep(if (touch) 40 else 20) }
+                    ms += if (touch) 1500 else 400
+                    return true
+                }
+                val slot0 = c.slot
+                // (the slots first: with every type listed they move down the scrolling window)
+                val steps = listOf(
+                    Triple("OpenBankSlot/83", "a slot picked: STPT 83") { c.slot == 83 },
+                    Triple("OpenBankSlot/$slot0", "back on STPT $slot0") { c.slot == slot0 },
+                    Triple("OpenBankWhat/1", "the point itself picked: Nav") { c.choice == 1 && c.action == 0 },
+                    Triple("OpenBankWhat/0", "the field again: Land") { c.choice == 0 && c.action == 7 },
+                    Triple("OpenBankMore", "More types… lists every type") { c.more },
+                    Triple("OpenBankType/Holding", "a type picked: Holding") { c.action == 8 },
+                    Triple("OpenBankType/Land", "Land again") { c.action == 7 },
+                )
+                val fails = ArrayList<String>()
+                for ((probe, what, ok) in steps) {
+                    val pressed = try { press(probe) } catch (e: Throwable) { fails += "$probe threw ${e::class.simpleName}: ${e.message}"; continue }
+                    if (!pressed) fails += "$probe not on screen" else if (!ok()) fails += "$probe: not $what"
+                    if (System.getenv("BMSC_OPENBANK_STEPS") != null) {
+                        File(out, "openbank-$name-step-${probe.replace('/', '-')}.png").writeBytes(scene.render(t).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+                        sb.appendLine("      step $probe at ${com.bmscompanion.app.ui.screens.wdp.WdpProbe.rects["planner/Map/$probe"]}: choice ${c.choice} action ${c.action} slot ${c.slot} more ${c.more}")
+                    }
+                    if (probe == "OpenBankType/Holding" && name == "pc") {
+                        File(out, "openbank-pc-types.png").writeBytes(scene.render(t).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+                        sb.appendLine("ok    drawn: openbank-pc-types.png (every type listed)")
+                    }
+                }
+                check("the chooser's controls pressed ($name${if (name == "phone") ", laid out for fingers" else ""}): a slot and back, the point, the field, More types…, two types", fails.isEmpty() && c.isOpen,
+                    fails.joinToString("; "))
+            } catch (e: Throwable) {
+                check("drawing the chooser ($name)", false, "${e::class.simpleName}: ${e.message}")
+            } finally { scene.close() }
+        }
+        com.bmscompanion.app.ui.screens.wdp.WdpTouch.seen = false
+        com.bmscompanion.app.ui.screens.wdp.WdpProbe.on = false
+        WdpMapView.sel = sel
+    }
+
+    /**
+     * The phone's list (a sheet over the map, by finger): a long press on one of the flight's fields opens the Open bank
+     * chooser on it straight away, as Land. Drawn into `<out>/openbank-phone-list.png` (the list) and
+     * `openbank-phone-longpress.png` (the chooser it opened). Leaves no window open.
+     */
+    private fun listLongPress(sb: StringBuilder, check: (String, Boolean, String) -> Unit, mission: com.bmscompanion.app.ui.screens.wdp.WdpMission, out: File) {
+        val probe = com.bmscompanion.app.ui.screens.wdp.WdpProbe
+        com.bmscompanion.app.ui.screens.wdp.WdpTouch.seen = true
+        probe.on = true
+        WdpDialogs.stack.clear()
+        com.bmscompanion.app.ui.screens.wdp.OpenBankChooser.current = null
+        WdpMapView.hsd = false; WdpMapView.sel = null; WdpMapView.status = null; WdpMapView.framed = null; WdpMapView.optionsOpen = false
+        WdpMapView.listOpen = true
+        val (wd, ht, den) = Triple(412, 892, 2f)
+        val scene = ImageComposeScene((wd * den).toInt(), (ht * den).toInt(), Density(den)) {
+            BmsTheme {
+                androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+                    WdpMapPage(mission, Modifier.fillMaxSize())
+                    com.bmscompanion.app.ui.screens.wdp.WdpDialogHost()
+                }
+            }
+        }
+        try {
+            var t = 0L
+            repeat(70) { scene.render(t); t += 50_000_000; Thread.sleep(40) }
+            File(out, "openbank-phone-list.png").writeBytes(scene.render(t).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+            sb.appendLine("ok    drawn: openbank-phone-list.png")
+            // a row on screen, a field's first (the list scrolls; a row below the sheet is laid out but not under the finger)
+            val shown = probe.rects.filter { (k, r) -> k.startsWith("planner/Map/ListBank/") && r.top > 0f && r.bottom < ht * den }
+            val key = shown.keys.firstOrNull { it.contains("(departure") || it.contains("(alternate") || it.contains("(arrival") } ?: shown.keys.firstOrNull()
+            check("the phone's list offers a long press on a field or threat", key != null, probe.rects.keys.filter { it.startsWith("planner/Map/List") }.joinToString())
+            if (key == null) return
+            val p = probe.rects[key]!!.center
+            val type = androidx.compose.ui.input.pointer.PointerType.Touch
+            scene.sendPointerEvent(PointerEventType.Press, p, timeMillis = 90_000L, type = type, buttons = PointerButtons(isPrimaryPressed = true), button = PointerButton.Primary)
+            repeat(20) { scene.render(t); t += 50_000_000; Thread.sleep(50) }
+            scene.sendPointerEvent(PointerEventType.Release, p, timeMillis = 91_200L, type = type, buttons = PointerButtons(), button = PointerButton.Primary)
+            repeat(20) { scene.render(t); t += 50_000_000; Thread.sleep(30) }
+            val c = com.bmscompanion.app.ui.screens.wdp.OpenBankChooser.current
+            File(out, "openbank-phone-longpress.png").writeBytes(scene.render(t).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+            sb.appendLine("ok    drawn: openbank-phone-longpress.png")
+            check("…a long press on \"${key.substringAfterLast('/')}\" opens the chooser on it (the list closed)", c != null && c.isOpen && !WdpMapView.listOpen &&
+                c.choices.isNotEmpty() && (c.choices.first().action == 7 || !c.choices.first().field),
+                c?.let { "${it.choices.map { ch -> ch.label }} action ${it.action} slot ${it.slot}" } ?: "no chooser")
+        } catch (e: Throwable) {
+            check("the phone's list long press", false, "${e::class.simpleName}: ${e.message}")
+        } finally {
+            scene.close()
+            WdpDialogs.stack.clear()
+            com.bmscompanion.app.ui.screens.wdp.OpenBankChooser.current = null
+            WdpMapView.listOpen = false
+            com.bmscompanion.app.ui.screens.wdp.WdpTouch.seen = false
+            probe.on = false
+        }
+    }
 
     /**
      * The save's known enemy air-defence sites for [flightId], spotted by the side controlling the flight's team: what

@@ -28,6 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.text.font.FontFamily
@@ -60,6 +61,8 @@ import kotlinx.coroutines.launch
  * - **Auto load last mission on startup** — [autoLoad]: the first time the Planner opens after the app starts, the
  *   flight picker opens on the save planned last with that flight and seat picked ([startup]), as WDP opened its last
  *   file and its flight selection. Off by default, as in WDP.
+ * - Not WDP's: **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** ([cleanOpened], 1.3.9) — the PC's own setting, read and set over
+ *   `/api/planner/settings`, because the PC does the cleaning when the Planner plans another flight; on by default.
  * - **Reload WDP database** — **Reload from BMS** ([reload]): WDP read its own database folder again; here the data
  *   is the app's and BMS's, so it reads the open save's flight and the cartridge from BMS again.
  * - Left out, each for a reason the window gives at its foot: Screen size (the Planner fits any window), Use large
@@ -90,6 +93,36 @@ object PlannerSettings {
     fun chooseAutoLoad(on: Boolean) {
         autoLoad = on
         runCatching { Repo.putInt(AUTOLOAD_KEY, if (on) 1 else 0) }
+    }
+
+    /**
+     * **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (1.3.9): the PC's setting, not this device's — the PC
+     * cleans the cartridge and the campaign's mission file of lines and PPTs when the Planner plans another flight
+     * ([PlannerLeftovers.planned], `BridgeSettings.CleanOpenedMission`, `GET`/`POST /api/planner/settings`).
+     * Null until the PC has said ([readCleanOpened]); an older PC never does.
+     */
+    var cleanOpened: Boolean? by mutableStateOf(null)
+        private set
+
+    /** Why the PC's setting could not be read or changed, in a sentence; null when it was. */
+    var cleanOpenedNote: String? by mutableStateOf(null)
+        private set
+
+    /** Asks the PC for [cleanOpened]. */
+    suspend fun readCleanOpened() {
+        val a = runCatching { MissionLink.plannerSettings() }.getOrNull()
+        a?.value?.let { cleanOpened = it.cleanOpened; cleanOpenedNote = null; return }
+        cleanOpenedNote = a?.error ?: "The PC could not be reached."
+    }
+
+    /** Turns it on or off on the PC; the switch moves at once and goes back when the PC refuses. */
+    suspend fun chooseCleanOpened(on: Boolean) {
+        val was = cleanOpened
+        cleanOpened = on
+        val a = runCatching { MissionLink.setCleanOpened(on) }.getOrNull()
+        val v = a?.value
+        if (v != null) { cleanOpened = v.cleanOpened; cleanOpenedNote = null }
+        else { cleanOpened = was; cleanOpenedNote = "Not changed: ${a?.error ?: "the PC could not be reached."}" }
     }
 
     /** Opens the window (the toolbar's Options menu, the ⋮ menu's Options; anything else may call it). */
@@ -204,6 +237,7 @@ internal fun ColumnScope.PlannerSettingsWindow(onClose: () -> Unit) {
         dataCards = PlannerSettings.dataCardsFolder()
         planner = runCatching { MissionLink.filesStat("@planner").value?.path }.getOrNull()
         dataCardsChosen = runCatching { MissionLink.filesPlanner().value?.dataCardsSet == true }.getOrDefault(false)
+        PlannerSettings.readCleanOpened()
     }
     // the PC window in This PC mode: the BMS folder is its own Setup's to change
     val local = plannerIsLocal(MissionLink.host) && Platform.installer != null
@@ -267,6 +301,16 @@ internal fun ColumnScope.PlannerSettingsWindow(onClose: () -> Unit) {
                 (last?.let { " (now: ${it.file}, ${it.theater})" } ?: " (none planned yet)") + ".",
             PlannerSettings.autoLoad, "Settings/AutoLoad",
         ) { PlannerSettings.chooseAutoLoad(it) }
+        // the PC's setting (it clears the lines): on every device, read from and written to the PC
+        val clear = PlannerSettings.cleanOpened
+        Toggle(
+            "Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints",
+            "When Open mission… or Pick a flight plans another flight, every HSD line, PPT and Open 1/Open 2 steerpoint " +
+                "(STPT 81-99) leaves your cartridge and the campaign's mission file, whoever made it; the route and the targets stay. " +
+                "The maps then suggest the mission's threats and tanker and AWACS tracks. A TE keeps its own.",
+            clear == true, "Settings/CleanOpened", enabled = clear != null,
+        ) { on -> scope.launch { PlannerSettings.chooseCleanOpened(on) } }
+        PlannerSettings.cleanOpenedNote?.let { Note(it) }
 
         Heading("Reload")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -335,16 +379,17 @@ private fun Setting(name: String, value: String, probe: String, mono: Boolean = 
 
 /** A setting that is on or off: a switch drawn as the Planner's other windows draw theirs, with a line on what it does. */
 @Composable
-private fun Toggle(name: String, what: String, on: Boolean, probe: String, set: (Boolean) -> Unit) {
+private fun Toggle(name: String, what: String, on: Boolean, probe: String, enabled: Boolean = true, set: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().fingerHeight(44.dp).ruled()
-            .plannerPress { set(!on) }.padding(horizontal = 4.dp, vertical = 5.dp).plannerProbe(probe),
+            .plannerPress { if (enabled) set(!on) }.padding(horizontal = 4.dp, vertical = 5.dp).plannerProbe(probe)
+            .then(if (enabled) Modifier else Modifier.alpha(0.45f)),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(name, color = Hud.Text, fontSize = fingerSp(12.5f), fontWeight = FontWeight.SemiBold, maxLines = 1)
-            Text(what, color = Hud.TextDim, fontSize = fingerSp(11f), lineHeight = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(what, color = Hud.TextDim, fontSize = fingerSp(11f), lineHeight = 14.sp, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
         // the switch
         Box(

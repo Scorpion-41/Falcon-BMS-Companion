@@ -49,8 +49,49 @@ data class AfRunway(
     val corners: List<AfPt> = emptyList(),
     val ends: List<AfEnd> = emptyList(),
     val crossings: List<AfPt> = emptyList(),
+    /** the arresting cables laid across it, in order from [ends] 0 (see [AfCable]) */
+    val cables: List<AfCable> = emptyList(),
 ) {
     val name: String get() = ends.joinToString("/") { it.designator }
+
+    /**
+     * How far each cable lies from the end named [designator], nearest first, in feet along the centre line. A
+     * negative distance is a barrier in the overrun before that end.
+     */
+    fun cablesFrom(designator: String): List<Int> {
+        val i = ends.indexOfFirst { it.designator == designator }
+        if (i < 0) return emptyList()
+        return cables.mapNotNull { it.d.getOrNull(i) }.sorted()
+    }
+}
+
+/**
+ * An arresting cable: where it crosses the runway's centre line ([e], [n], field feet), and [d] how far that is from
+ * each end of the runway, in the order of [AfRunway.ends].
+ *
+ * From the "Arrestor System" objects BMS lays across the runway in the field's own feature list — the cable the sim's
+ * hook catches — so the position is exact. BMS does not say which kind of gear it is (BAK-12, BAK-14, MA-1A …).
+ */
+@Serializable
+data class AfCable(val e: Double = 0.0, val n: Double = 0.0, val d: List<Int> = emptyList())
+
+/**
+ * Distances to cables in the words a runway card uses: "1,500 ft", "at the end" (within 100 ft of it), "300 ft before"
+ * (a barrier in the overrun).
+ */
+fun cableDistances(feet: List<Int>): String = feet.joinToString(" · ") { d ->
+    when {
+        d < -100 -> "${thousands(-d)} ft before"
+        d <= 100 -> "at the end"
+        else -> "${thousands(d)} ft"
+    }
+}
+
+private fun thousands(v: Int): String {
+    val s = v.toString()
+    val out = StringBuilder()
+    s.forEachIndexed { i, ch -> if (i > 0 && (s.length - i) % 3 == 0) out.append(','); out.append(ch) }
+    return out.toString()
 }
 
 @Serializable
@@ -132,8 +173,15 @@ data class AfRoute(
  * One object the sim places at the field: a shelter, a hangar, a wall, a patch of apron. [k] is what it is, [h] its
  * heading, and [w] by [l] how large to draw it in plan — across by along, in feet.
  *
- * Position and heading come straight from the field's own data. The footprint does not: BMS keeps that inside the
- * 3D model, so the extractor gives each kind a representative size (see FEATURE_KINDS in airfields.mjs).
+ * Position and heading come straight from the field's own data. The footprint does not, except for a control tower:
+ * BMS keeps it inside the 3D model, so the extractor gives each kind a representative size (see FEATURE_KINDS in
+ * airfields.mjs).
+ *
+ * A **control tower** ([k] `tower`) is drawn as the shape it has from above, because a pilot finds his way round a
+ * field by it: [p] is its outline, rings of east,north pairs in field feet, placed at its own position and heading;
+ * [top] the part that reaches the top of it (the shaft and the cab, where it stands over a building); [ht] its height
+ * in feet. [src] says where the outline came from — `model`: the tower's own BMS 3D model, exact; `box`: the bounding
+ * box the model's Parent.dat states, the right size and heading but a rectangle (tools/extractor/src/footprint.mjs).
  */
 @Serializable
 data class AfFeature(
@@ -143,6 +191,10 @@ data class AfFeature(
     val h: Double = 0.0,
     val w: Double = 60.0,
     val l: Double = 60.0,
+    val p: List<List<Int>> = emptyList(),
+    val top: List<List<Int>> = emptyList(),
+    val ht: Int? = null,
+    val src: String? = null,
 )
 
 /**

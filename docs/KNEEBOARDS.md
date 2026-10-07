@@ -26,7 +26,7 @@ the cockpit pages differs.
 |---|---|---|---|
 | **The cockpit kneeboard** | in the pit, on your knee | **three tools**, below | — |
 | ‣ EZBoards | the pages its `CONFIG_USER.BAT` claims (`SET KNEEBOARD[F16_<n><L\|R>]`), page 1 on a stock setup | EZBoards (by Logic, a separate download from the Falcon BMS forum), at PRINT or with **GENERATE NOW**, **in EZBoards mode** | the **printed briefing** and your **cartridge** (`xbrief.exe` is handed both, `BRIEFING_TXT` and `CALLSIGN_INI`, in EZBoards' own `CONFIG.BAT`) |
-| ‣ Upd Kneeboard | the pages you choose; by default the **Mission set**, your DataCard on page 1 and Coordination Card on page 2 (EZBoards is paused in WDP mode, so its pages are the Planner's); **Browse picture…** puts a picture of your own on any half | the Planner, **in WDP mode** | what the Planner has open: the save's flight, the DTC page as it is (saved or not), the attack page; a picture is a `.jpg`, `.png`, `.bmp` or `.dds` on the BMS PC, read again at each print and drawn by the PC from the file |
+| ‣ Upd Kneeboard | the pages you choose; by default the **Mission set**, Briefing and Weather on page 1, your DataCard on page 2 and Coordination Card on page 3 (EZBoards is paused in WDP mode, so its pages are the Planner's); **Browse picture…** puts a picture of your own on any half | the Planner, **in WDP mode** | what the Planner has open: the save's flight, the DTC page as it is (saved or not), the attack page; a picture is a `.jpg`, `.png`, `.bmp` or `.dds` on the BMS PC, read again at each print and drawn by the PC from the file |
 | ‣ HTML Briefing | pages 1-3, when it exports | UOAF's HTML Briefing tool (a separate download; BMS Companion looks for it in `Tools\html_brief_win`), **in EZBoards mode** (BMS Companion does not start it in WDP mode) | the **campaign save** (`.cam`) and your **cartridge** — *not* the printed briefing |
 | **HTML Briefing pages** | BMS Companion → Kneeboards, the chart viewer, and the `EXPORTED` VR board | the same tool's export | as above |
 | **BMS Companion VR boards** | OpenKneeboard, in the headset | this app, as web pages | live data, and the Mission section's mission (so they follow the mode) |
@@ -45,10 +45,11 @@ as it was. It never creates a page file that does not exist.
 
 **Which pages Upd Kneeboard uses.** Its window opens on the **Mission set**, laid for the mode the Mission section is
 in. In **WDP mode** — where the Planner is used — EZBoards does not run at PRINT, so the Mission set takes the first
-pages: the DataCard on page 1 (both knees) and the Coordination Card on page 2. (In EZBoards mode it would leave EZBoards
-the pages its `CONFIG_USER.BAT` claims and start at the first pair it does not, pages 2 and 3 on a stock setup.) A
-Mission set you have not changed is laid again when the mode changes, and the window says so; a plan you changed by
-hand is kept. **The plan is kept on the device between launches**, as WDP keeps its kneeboard choices: a picture page
+pages: the Briefing (left knee) and the Weather (right knee) on page 1, the DataCard on page 2 (both knees) and the
+Coordination Card on page 3. (In EZBoards mode it would leave EZBoards the pages its `CONFIG_USER.BAT` claims and take
+the first three it does not, pages 2, 3 and 4 on a stock setup; a theater with fewer free pages gets the first pairs
+that fit.) A Mission set you have not changed is laid again when the mode changes, and when an earlier version laid it
+in its older two-page layout, and the window says so; a plan you changed by hand is kept. **The plan is kept on the device between launches**, as WDP keeps its kneeboard choices: a picture page
 you set once is still planned the next evening.
 
 **Pictures of your own** (WDP's Browse Picture): **Browse picture…** opens the Open picture window on the BMS PC
@@ -129,7 +130,7 @@ meanwhile, **LOAD** it before you SAVE it again, and GENERATE NOW after, so the 
 The Planner's **Steps** (on its toolbar) keeps these steps beside the page, with the one you are on lit.
 
 html_brief is not started from BMS Companion in WDP mode (its button is greyed out and the PC refuses it): by default
-it writes pages 1-3, over the Planner's Mission set (pages 1 and 2). If you start it yourself, set it to other pages
+it writes pages 1-3, over the Planner's Mission set (pages 1, 2 and 3). If you start it yourself, set it to other pages
 in its own settings first; its pages already exported stay readable on the Kneeboards page and the `EXPORTED` board.
 
 If you change the weather after you opened the mission: save it in BMS (SAVE WTH in a TE, the campaign save in a

@@ -65,9 +65,10 @@ object Repo {
     }
 
     suspend fun index(): DataIndex = load<DataIndex>("data/index.json").await() ?: DataIndex()
-    suspend fun aircraft(): List<Aircraft> = load<List<Aircraft>>("data/aircraft.json").await().orEmpty()
-    suspend fun weapons(): List<Weapon> = load<List<Weapon>>("data/weapons.json").await().orEmpty()
-    suspend fun encyclopedia(): List<EncyEntry> = load<List<EncyEntry>>("data/encyclopedia.json").await().orEmpty()
+    // BMS's empty slots ("*free", "--Free Slot--") never reach a list: `Placeholders` in Models.kt
+    suspend fun aircraft(): List<Aircraft> = mapCache("aircraftList") { Placeholders.aircraft(load<List<Aircraft>>("data/aircraft.json").await().orEmpty()) }
+    suspend fun weapons(): List<Weapon> = mapCache("weaponList") { Placeholders.weapons(load<List<Weapon>>("data/weapons.json").await().orEmpty()) }
+    suspend fun encyclopedia(): List<EncyEntry> = mapCache("encyList") { Placeholders.named(load<List<EncyEntry>>("data/encyclopedia.json").await().orEmpty()) { it.name } }
     suspend fun airportSet(id: String): AirportSet = load<AirportSet>("data/airports/$id.json").await() ?: AirportSet()
 
     /** Which ground chart file each field uses, by campaign objective id (the airport's own id). */
@@ -91,7 +92,7 @@ object Repo {
         load<ThreatFile>("data/curated/threats_air_sea.json").await(),
     )
 
-    suspend fun threats(): List<Threat> = threatFiles().flatMap { it.threats }
+    suspend fun threats(): List<Threat> = Placeholders.named(threatFiles().flatMap { it.threats }) { it.name }
 
     suspend fun checklists(): List<Checklist> {
         val files = withContext(Dispatchers.IO) { listResources("data/curated") }
@@ -117,6 +118,10 @@ object Repo {
     suspend fun weaponMap(): Map<String, Weapon> = mapCache("weaponMap") { weapons().associateBy { it.key } }
     suspend fun aircraftMap(): Map<String, Aircraft> = mapCache("aircraftMap") { aircraft().associateBy { it.key } }
     suspend fun encyMap(): Map<String, EncyEntry> = mapCache("encyMap") { encyclopedia().associateBy { it.key } }
+    /** The Reference section's photographs and their credits (Wikimedia Commons), by picture id. */
+    suspend fun photoCredits(): Map<String, PhotoCredit> = mapCache("photoCredits") {
+        load<PhotoCredits>("data/credits/photos.json").await()?.photos.orEmpty().associateBy { it.id }
+    }
     suspend fun theater(id: String): Theater? = index().theaters.firstOrNull { it.id == id }
     suspend fun mainTheaters(): List<Theater> = index().theaters.filter { it.primary }
 

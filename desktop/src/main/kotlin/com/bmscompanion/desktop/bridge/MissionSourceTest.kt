@@ -50,6 +50,9 @@ import java.security.MessageDigest
  * 8. **A new mission clears by itself** ([LeftoversTest]): Save to DTC for flight A, nothing drawn as a leftover, a
  *    PRINT of flight B clears exactly A's keys (the VIP among them; one BMS changed meanwhile left alone) with the note
  *    and its Undo, Undo, and the same flight printed again clearing nothing.
+ * 8b. **BMS's copies go too** ([LeftoverCopiesTest], 1.3.9): A's line, PPT and target that BMS wrote back from its DTC
+ *    memory into the cartridge and the mission file LOAD reads are cleared at the next new mission; the pilot's own
+ *    line, B's own Planner line, a line the pilot added to and BMS's route kept.
  * 9. **A switch clears every leftover** ([SwitchResetTest]): flight A planned in WDP mode, B printed, a switch to
  *    EZBoards mode clears every key the Planner wrote (A's and B's; BMS's left alone) and puts BMS's pages back over
  *    Upd Kneeboard's, Undo, the switch back discarding A's snapshot, a same-flight switch clearing B's own Planner key
@@ -107,6 +110,8 @@ internal object MissionSourceTest {
                 it.copy(
                     BmsDirOverride = root.path, EzBoardsDir = null, AutoEzBoardsOnPrint = false, TacviewEnabled = false,
                     MissionSource = MissionMode.EZBOARDS,
+                    // the parts before 1.3.9 check the Planner's own leftovers alone; 8c turns it on for itself
+                    CleanOpenedMission = false,
                 )
             }
             Bridge.startForCheck()
@@ -131,6 +136,10 @@ internal object MissionSourceTest {
                 lifecycle(root, dir, cart, ::ok, ::line)
                 // 8. what the Planner saved for another flight (LeftoversTest), back in EZBoards mode
                 LeftoversTest.run(root, cart, ::ok, ::line)
+                // 8b. and BMS's copies of it, in the cartridge and the mission file LOAD reads (LeftoverCopiesTest)
+                LeftoverCopiesTest.run(root, cart, ::ok, ::line)
+                // 8c. Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints, on and off (ClearLinesTest)
+                ClearLinesTest.run(root, cart, ::ok, ::line)
                 // 9. what a switch of mode resets by itself (SwitchResetTest)
                 SwitchResetTest.run(root, cart, ::ok, ::line)
                 // 10. one mission picture for every map (MissionPictureTest)
@@ -192,6 +201,14 @@ internal object MissionSourceTest {
             file.writeText("""{"Port":47474,"MissionSource":"wdp","MissionSourceSince":5,"SettingsVersion":${BridgeSettings.CURRENT}}""")
             val c = BridgeSettings.load()
             ok(c.MissionSource == MissionMode.WDP && c.MissionSourceSince == 5L, "a current file keeps WDP mode as the pilot left it")
+            // 4 (1.3.9): Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints set on once, a pilot's later off kept
+            file.writeText("""{"Port":47474,"CleanOpenedMission":false,"SettingsVersion":3}""")
+            val d = BridgeSettings.load()
+            ok(d.CleanOpenedMission && d.SettingsVersion == BridgeSettings.CURRENT && BridgeSettings.load().CleanOpenedMission,
+                "a layout-3 file comes forward with Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints on (step 4, once)")
+            file.writeText("""{"Port":47474,"CleanOpenedMission":false,"SettingsVersion":${BridgeSettings.CURRENT}}""")
+            ok(!BridgeSettings.load().CleanOpenedMission, "a current file keeps it off as the pilot left it")
+            ok(BridgeSettings().CleanOpenedMission, "a new install has it on")
         } catch (e: Throwable) {
             ok(false, "the settings part threw: $e")
         } finally {

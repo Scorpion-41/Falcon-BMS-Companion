@@ -7,6 +7,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -800,10 +801,32 @@ internal class MapActions(
     private fun addStpt(p: Place, n: Int? = nextStpt()): MapAction? =
         if (!d.loaded || n == null) null else MapAction("Add as STPT $n") { answer(dtc.placeSteerpoint(n, p, ask = true, done = done)) }
 
-    private fun addOpen(p: Place): MapAction? {
-        val n = nextOpen() ?: return null
-        return if (!d.loaded) null else MapAction("Add as STPT $n") { answer(dtc.placeSteerpoint(n, p, ask = true, done = done)) }
+    /** [p] into the Open bank (STPT 81-99) through the chooser, as [action] unless the pilot picks another type. */
+    private fun addOpen(p: Place, action: Int = OpenBankChooser.PRECISION): MapAction? =
+        openBank(listOf(OpenBankChooser.point(p.name, p.at, action, p.group, elevFt = p.elevFt)))
+
+    /**
+     * **Add to Open bank…** (1.3.9): the chooser of STPT 81-99 ([OpenBankChooser]) over [choices], the first the
+     * default; [start] a slot to open on (a bank steerpoint changing its type). Placed, the new steerpoint's card shows.
+     */
+    internal fun openBank(choices: List<OpenBankChooser.Choice>, start: Int? = null, label: String = OpenBankChooser.LABEL): MapAction? {
+        if (!d.loaded || choices.isEmpty()) return null
+        return MapAction(label) {
+            OpenBankChooser(dtc, choices, x.groundTheater, { at -> where(at).firstOrNull().orEmpty() }, start) { n, msg ->
+                ui.status(msg)
+                ui.select(MapPick.Stpt(n))
+            }.open()
+            null
+        }
     }
+
+    /** The bank chooser for what [p] is, as its card offers it (the phone's list opens it on a long press); null when it offers none. */
+    fun openBankFor(p: MapPick): MapAction? = runCatching { card(p)?.actions?.firstOrNull { it.label == OpenBankChooser.LABEL } }.getOrNull()
+
+    /** A field within 2 nm of [at] (the right-click's own airfield): the one nearest. */
+    private fun fieldNear(at: Pt): Airport? =
+        (d.fields.map { it.airport } + x.airports).distinctBy { it.id }
+            .map { it to Pt(it.x, it.y).dist(at) }.filter { it.second <= 2 * DtcFromMission.NM }.minByOrNull { it.second }?.first
 
     private fun addHarpoon(p: Place): MapAction? {
         val n = nextHarpoon() ?: return null
@@ -1011,7 +1034,7 @@ internal class MapActions(
         val lines = ArrayList<String>()
         lines += when {
             view == 2 -> "The mission file's STPT $n (${s.from}): read only here; Put in the DTC makes it the cartridge's."
-            s.open -> "Open steerpoint: the HSD marks it with a cross."
+            s.open -> "Open steerpoint (${if (n <= 89) "Open 1" else "Open 2"} tab), ${DataCardPlan.actionString(s.action)}: the HSD marks it with a cross."
             s.inDtc && !s.onRoute -> "A precision steerpoint in your cartridge (not joined to the route)."
             s.inDtc -> "In your cartridge; the jet takes it over its own route's."
             else -> "From ${s.from}: Falcon BMS 4.38.1 keeps the flight plan in the mission file, so the jet has it without the cartridge."
@@ -1026,6 +1049,8 @@ internal class MapActions(
         } else {
             if (d.loaded) acts += MapAction("Move", primary = true) { ui.move(MapPick.Stpt(n)); "Tap the map where STPT $n goes." }
             if (d.loaded && s.inDtc) acts += MapAction("Take out of the DTC") { removeStpt(n) }
+            // a bank steerpoint: its type (or slot) changed in the chooser, the point where it is
+            if (s.open && s.inDtc) openBank(listOf(OpenBankChooser.point(s.name ?: "STPT $n", s.at, s.action, "Steerpoints", elevFt = s.elevFt)), start = n, label = "Change type…")?.let { acts += it }
             if (!s.inDtc && d.loaded && DtcFromMission.routeFill(dtc.model!!, d.facts.route).isNotEmpty())
                 acts += MapAction("Put the flight plan in the DTC") { dtc.fillRoute(d.facts) }
             acts += MapAction("Centre the HSD here") { ui.centre(n); null }
@@ -1148,6 +1173,7 @@ internal class MapActions(
         if (st.inPpt == null) st.option?.let { o -> addPpt(o)?.let { acts += it } }
         else acts += MapAction("Show PPT ${st.inPpt}") { ui.select(MapPick.Ppt(st.inPpt)); null }
         addStpt(Place("${s.callsign} (${s.role}) station", st.at, null, DtcMissionFacts.STATIONS))?.let { acts += it }
+        addOpen(Place("${s.callsign} (${s.role}) station", st.at, null, DtcMissionFacts.STATIONS), OpenBankChooser.NAV)?.let { acts += it }
         tacanFor(callsign)?.let { c -> if (d.loaded) acts += MapAction("TACAN ${c.short.substringAfter(' ')}") { dtc.setTacan(c) } }
         acts += orbitActions(x.stations.firstOrNull { it.support.callsign == callsign })
         return MapCard("${s.callsign} station", st.inPpt != null, if (st.inPpt != null) "In your DTC as PPT ${st.inPpt}" else "Not in your DTC", lines, acts, supportInk(s.role))
@@ -1171,6 +1197,7 @@ internal class MapActions(
             }
         }
         addStpt(Place("${s.callsign} (${s.role}) station", st.mid, null, DtcMissionFacts.STATIONS))?.let { acts += it }
+        addOpen(Place("${s.callsign} (${s.role}) station", st.mid, null, DtcMissionFacts.STATIONS), OpenBankChooser.NAV)?.let { acts += it }
         return MapCard("${s.callsign} · ${s.role}", false, "Not in your DTC", lines, acts, supportInk(s.role))
     }
 
@@ -1265,6 +1292,8 @@ internal class MapActions(
         lines += where(at)
         val acts = ArrayList<MapAction>()
         addStpt(Place(a.name + (mine?.let { " (${it.role})" } ?: ""), at, (a.elevationFt ?: 0).toDouble(), if (mine != null) DtcMissionFacts.YOUR_BASES else "Airbases"))?.let { acts += it }
+        // an alternate into STPT 81-99 as Land (the field's name with its ICAO, its elevation)
+        openBank(listOf(OpenBankChooser.field(a)))?.let { acts += it }
         if (d.loaded) {
             val tacan = mine?.tacans?.firstOrNull() ?: a.tacan?.let { t ->
                 DtcFromMission.TacanChoice("${a.name} ${t.channel}${t.band.uppercase()}", "${a.name.take(14)} ${t.channel}${t.band.uppercase()}", t.channel, if (t.band.equals("Y", true)) 1 else 0, 0)
@@ -1300,6 +1329,7 @@ internal class MapActions(
             }
         }
         addStpt(Place(n.name, at, null, "Navaids"))?.let { acts += it }
+        addOpen(Place(n.name, at, null, "Navaids"), OpenBankChooser.NAV)?.let { acts += it }
         acts += pointHere(at)
         return MapCard(n.name, null, "VORTAC", lines, acts, MapInk.onc)
     }
@@ -1311,6 +1341,7 @@ internal class MapActions(
         val acts = ArrayList<MapAction>()
         val row = x.packageRows[flight]
         addStpt(Place("${row?.callsign ?: "Package"} STPT ${if (w.n > 0) w.n else k + 1}", at, w.altFt, "Package"))?.let { acts += it }
+        addOpen(Place("${row?.callsign ?: "Package"} STPT ${if (w.n > 0) w.n else k + 1}", at, null, "Package"), OpenBankChooser.NAV)?.let { acts += it }
         addTarget(Place("${row?.callsign ?: "Package"} STPT ${if (w.n > 0) w.n else k + 1}", at, null, "Package"))?.let { acts += it }
         acts += pointHere(at)
         return MapCard((row?.callsign ?: "Package flight") + " · STPT ${if (w.n > 0) w.n else k + 1}", false, "Your package", lines, acts, MapInk.pack)
@@ -1320,6 +1351,7 @@ internal class MapActions(
         val s = x.liveShips.getOrNull(i) ?: return null
         val acts = ArrayList<MapAction>()
         addHarpoon(s)?.let { acts += it }
+        addOpen(s)?.let { acts += it }
         addTarget(s)?.let { acts += it }
         acts += pointHere(s.at)
         return MapCard(s.name, false, "Hostile ship", listOf("From the Tacview feed: where it is now.") + where(s.at), acts, Hostile)
@@ -1333,6 +1365,8 @@ internal class MapActions(
         val acts = ArrayList<MapAction>()
         val place = Place("Map point", at, null, "Map")
         addStpt(place)?.let { acts += MapAction(it.label, primary = true, run = it.run) }
+        // the Open bank (STPT 81-99): a right-click on an airfield offers the field itself first (Land), then the point (Nav)
+        openBank(listOfNotNull(fieldNear(at)?.let { OpenBankChooser.field(it) }, OpenBankChooser.point("Map point", at, OpenBankChooser.NAV, "Map", label = "This point")))?.let { acts += it }
         pptWindow(at, null, null, "PPT here…")?.let { acts += it }
         if (d.loaded) {
             for (l in 1..4) {
@@ -1352,7 +1386,8 @@ internal class MapActions(
         return when (p) {
             is MapPick.Stpt -> {
                 val s = d.shown.stpt(p.n) ?: return null
-                answer(dtc.placeSteerpoint(p.n, Place(s.name ?: "STPT ${p.n}", at, s.elevFt, ""), ask = false))
+                // an Open bank steerpoint keeps its type (an alternate stays Land); STPT 1-24 go in as Precision, which the jet takes
+                answer(dtc.placeSteerpoint(p.n, Place(s.name ?: "STPT ${p.n}", at, s.elevFt, ""), ask = false, action = if (s.open && s.inDtc) s.action else -1))
             }
             is MapPick.Ppt -> {
                 val o = d.shown.ppt(p.slot) ?: return null
@@ -2418,7 +2453,8 @@ private fun KindTag(text: String, inDtc: Boolean?) {
 private fun ActionButton(a: MapAction, touch: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.heightIn(min = if (touch) 44.dp else 30.dp).clip(RoundedCornerShape(8.dp)).background(if (a.primary) Hud.Amber else Hud.Surface3)
-            .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 6.dp),
+            .clickable(onClick = onClick).then(if (a.label == OpenBankChooser.LABEL) Modifier.mapControl("OpenBank") else Modifier)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         contentAlignment = Alignment.Center,
     ) { Text(a.label, color = if (a.primary) Hud.Bg else Hud.Text, fontSize = if (touch) 14.sp else 12.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1) }
 }
@@ -2462,6 +2498,8 @@ private fun ListScreen(d: WdpMapData, actions: MapActions, touch: Boolean, modif
 private fun PanelContent(d: WdpMapData, actions: MapActions, touch: Boolean) {
     val ui = remember { PageUi() }
     fun pick(p: MapPick) { ui.select(p); WdpMapView.listOpen = false }
+    // a long press on a field or a threat (by finger): straight to the Open bank chooser
+    fun longBank(p: MapPick): (() -> Unit)? = if (!touch) null else actions.openBankFor(p)?.let { a -> { WdpMapView.listOpen = false; runAction(a, ui) } }
     Head("What your HSD will show")
     val plan = d.shown.route
     Row2(
@@ -2474,6 +2512,10 @@ private fun PanelContent(d: WdpMapData, actions: MapActions, touch: Boolean) {
     d.shown.ppts.forEach { p -> Row2("PPT ${p.slot}", p.name + if (p.marker) " (marker)" else " · ${PlannerMap.miles(p.rangeFt)} ring", SamRed.takeIf { !p.marker }) { pick(MapPick.Ppt(p.slot)) } }
     if (d.shown.lines.isEmpty()) Row2("Lines", "none") {}
     d.shown.lines.forEach { l -> Row2("L${l.n}", (l.name ?: "${l.points.size} points")) { pick(MapPick.LinePt(l.n, 0)) } }
+    // the Open bank (DTC page's Open 1 and Open 2 tabs)
+    d.shown.stpts.filter { it.open && it.inDtc }.sortedBy { it.n }.forEach { s ->
+        Row2("STPT ${s.n}", (s.name ?: "a point") + " · " + DataCardPlan.actionString(s.action)) { pick(MapPick.Stpt(s.n)) }
+    }
     if (d.shown.offsets.isNotEmpty()) Row2("Offsets", d.shown.offsets.joinToString(" ") { it.label }) { d.shown.offsets.firstOrNull()?.let { pick(MapPick.Offset(it.label, it.stpt)) } }
     if (d.bull != null) Row2("Bulls", "the campaign's bullseye") { pick(MapPick.Bullseye) }
 
@@ -2491,11 +2533,11 @@ private fun PanelContent(d: WdpMapData, actions: MapActions, touch: Boolean) {
     sites.take(12).forEach { (i, s) ->
         Row2(
             "Threat", s.site.name + (s.ringFt?.let { " · ${PlannerMap.miles(it)}" } ?: "") + (if (s.crossesRoute) " · crosses your route" else s.edgeFt?.let { " · ${PlannerMap.miles(it)} off" }.orEmpty()),
-            SamRed,
+            SamRed, onLong = longBank(MapPick.Site(i)),
         ) { pick(MapPick.Site(i)) }
     }
     if (sites.size > 12) Text("and ${sites.size - 12} more on the map", color = Hud.TextFaint, fontSize = 12.sp)
-    d.fields.forEach { f -> Row2("Field", "${f.airport.name} (${f.role})", Hud.Green) { pick(MapPick.Field(f.airport.id)) } }
+    d.fields.forEach { f -> Row2("Field", "${f.airport.name} (${f.role})", Hud.Green, onLong = longBank(MapPick.Field(f.airport.id))) { pick(MapPick.Field(f.airport.id)) } }
     if (d.attack != null) Row2("Attack", "${d.attack.page} page's offsets", AttackMagenta) { pick(MapPick.Attack) }
     if (tracks.isEmpty() && sites.isEmpty() && d.known.stations.none { it.inPpt == null } && d.fields.isEmpty()) Text("Nothing: the cartridge carries all the mission knows.", color = Hud.TextDim, fontSize = 12.5.sp)
     d.facts.notes.forEach { Text(it, color = Hud.TextFaint, fontSize = 12.sp, lineHeight = 16.sp) }
@@ -2513,11 +2555,14 @@ private fun PanelContent(d: WdpMapData, actions: MapActions, touch: Boolean) {
 private fun Head(text: String) = Text(text.uppercase(), color = Hud.TextFaint, fontSize = 11.sp, fontWeight = FontWeight.Bold)
 
 @Composable
-private fun Row2(key: String, value: String, ink: Color? = null, onClick: () -> Unit) {
-    // by finger (WdpTouch) a row is a finger's height, as the Planner's windows' rows are
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+private fun Row2(key: String, value: String, ink: Color? = null, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
+    // by finger (WdpTouch) a row is a finger's height, as the Planner's windows' rows are; a long press is the row's
+    // second action where it has one (the Open bank chooser, without the card first)
     val touch = WdpTouch.device
     Row(
-        Modifier.fillMaxWidth().heightIn(min = if (touch) 44.dp else 0.dp).clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick)
+        Modifier.fillMaxWidth().heightIn(min = if (touch) 44.dp else 0.dp).clip(RoundedCornerShape(6.dp))
+            .then(if (onLong != null) Modifier.combinedClickable(onLongClick = onLong, onClick = onClick).plannerProbe("Map/ListBank/$value") else Modifier.clickable(onClick = onClick))
             .padding(vertical = 3.dp, horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

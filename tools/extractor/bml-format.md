@@ -90,6 +90,17 @@ are read and the one with more unit normals is kept.
 exactly by three, and the meshes sit end to end in the vertex array in table order, so a mesh of *n* vertices is
 *n/3* triangles taken three consecutive vertices at a time.
 
+## Buildings: one mesh at a time (`modelTriangles`)
+
+A building's model is not one array. Its meshes change record size from one to the next (a control tower's
+glass is a 40-byte mesh between two 36-byte ones; 32 appears too) and a mesh may begin a few bytes past where the
+one before it ended. So `modelTriangles` finds **each mesh** where it starts: from the end of the previous one, the
+first offset at which the mesh's own stride lands on unit normals for **every one** of its first 24 records (a start
+one record early still passes four in five, and reads the whole mesh shifted), and the reading is kept only when the
+last mesh ends where the file does (within 64 bytes). Read so, model 2062 (a control tower) accounts for its file to
+the byte; read with the 80 % rule it was one record off and its cab came out 90 ft to one side. Used for the control
+towers' outlines (`footprint.mjs`), which also hold the reading against the model's `Parent.dat` bounding box.
+
 ## Telling a correct reading from a wrong one
 
 Five checks, in order of how much they prove:

@@ -31,6 +31,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -329,10 +330,44 @@ private fun CreditsCard(open: ((String) -> Unit)?) {
                 "MIT licence, Copyright (c) 2017 Craig Andera.",
             "https://candera.github.io/weathergen/", open,
         )
+        PhotoCreditsList(open)
         Text(
             "The reference pages come from Falcon BMS and from published AIP documents.",
             style = MaterialTheme.typography.bodySmall, color = Hud.TextFaint, modifier = Modifier.padding(top = 8.dp),
         )
+    }
+}
+
+/**
+ * Photo credits: every photograph in the Reference section that is not BMS's own art, with its author, licence and
+ * the file's page on Wikimedia Commons (`data/credits/photos.json`, made by `tools/extractor/src/photos.mjs`).
+ * Folded to one line until opened.
+ */
+@Composable
+private fun PhotoCreditsList(open: ((String) -> Unit)?) {
+    val photos by produceState(emptyList<com.bmscompanion.app.data.PhotoCredit>()) {
+        value = com.bmscompanion.app.data.Repo.photoCredits().values.sortedBy { it.subject.lowercase() }
+    }
+    if (photos.isEmpty()) return
+    var shown by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+        Column(Modifier.fillMaxWidth().clickable { shown = !shown }) {
+            Text("Photo credits", style = MaterialTheme.typography.titleSmall, color = Hud.Text, fontWeight = FontWeight.SemiBold)
+            Text(
+                "${photos.size} photographs in the Reference section are from Wikimedia Commons (public domain, CC0, " +
+                    "CC BY or CC BY-SA), cropped and resized. " + if (shown) "Tap a picture's line to open its page." else "Tap to list them.",
+                style = MaterialTheme.typography.bodySmall, color = Hud.TextDim,
+            )
+        }
+        if (shown) photos.forEach { p ->
+            Column(
+                Modifier.fillMaxWidth().padding(top = 6.dp)
+                    .let { m -> if (open != null && p.source.isNotBlank()) m.clickable { open(p.source) } else m },
+            ) {
+                Text(p.subject, style = MaterialTheme.typography.bodySmall, color = Hud.Text)
+                Text("${p.author} · ${p.licence}", style = LocalExtra.current.monoSmall, color = Hud.Cyan)
+            }
+        }
     }
 }
 

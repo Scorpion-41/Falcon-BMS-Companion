@@ -135,11 +135,10 @@ internal fun ThreatsPage(nav: NavHostController) {
                                 t.rwr.values.any { it?.norm() == nq } || (t.harmAlic?.contains(q.trim()) == true))
                     }
                 }
+                // the search stays at the top however far the list is scrolled; the filters scroll with it
+                com.bmscompanion.app.ui.components.PinnedSearchField(q, { q = it }, "Name, NATO name, RWR symbol, ALIC…")
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
                     item {
-                        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                            SearchField(q, { q = it }, "Name, NATO name, RWR symbol, ALIC…")
-                        }
                         ChipRow(cats, cat, { Labels.threatCategory[it] ?: it }, { cat = it })
                         Spacer(Modifier.height(6.dp))
                         ChipRow(listOf("OPFOR", "BLUEFOR"), side, { it }, { side = it }, allLabel = "Both sides")
@@ -259,10 +258,12 @@ fun ThreatDetailRoute(nav: NavHostController, id: String) = ThreatDetail(nav, id
 @Composable
 fun ThreatDetail(nav: NavHostController, id: String, onBack: (() -> Unit)?) {
     val t by produceState<Threat?>(null, id) { value = Repo.threats().firstOrNull { it.id == id } }
+    // the TacRef entry the threat guide names for this threat, by its exact name (the current theater's copy first);
+    // none rather than a near name: a prefix match gave the SA-2 the Fan Song radar and the F-15C an Israeli Baz
     val ency by produceState<EncyEntry?>(null, t) {
-        val th = t ?: return@produceState
-        val keys = (listOf(th.name) + th.aliases).map { it.norm() }.filter { it.length >= 3 }
-        value = Repo.encyclopedia().firstOrNull { e -> val en = e.name.norm(); keys.any { k -> en.startsWith(k) || k.startsWith(en) } }
+        val name = t?.tacref ?: return@produceState
+        val same = Repo.encyclopedia().filter { it.name == name }
+        value = same.firstOrNull { Repo.selectedTheater.value in it.theaters } ?: same.firstOrNull()
     }
     val th = t
     Column(Modifier.fillMaxSize()) {
@@ -270,7 +271,7 @@ fun ThreatDetail(nav: NavHostController, id: String, onBack: (() -> Unit)?) {
         if (th == null) { LoadingBox(); return@Column }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
             AdaptiveSplit(left = {
-                ency?.pic?.let { HeroImage(it) }
+                (th.pic ?: ency?.pic)?.let { HeroImage(it) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         TagFlow {

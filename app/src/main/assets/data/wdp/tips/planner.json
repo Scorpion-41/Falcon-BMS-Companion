@@ -68,6 +68,7 @@
  "Settings/DefaultDataCards": "Puts the DataCards folder back to DataCards in the Planner folder (User\\BMS Companion Planner). Nothing is moved or deleted.",
  "Settings/Tooltips": "Turns these tips on or off on every Planner page and window.",
  "Settings/AutoLoad": "When the Planner first opens after BMS Companion starts, it opens the save you planned last with its flight and seat picked. Press Plan this flight to plan it again.",
+ "Settings/CleanOpened": "On (the default): when Open mission… or Pick a flight plans another flight, the PC takes every HSD line, PPT and Open 1/Open 2 steerpoint (STPT 81-99) out of your cartridge and the campaign's mission file. The route, the Recon targets and the weapon targets stay; a TE or a training keeps its own. LOAD the DTC in BMS afterwards.",
  "Settings/Reload": "Reads the open save's flight and your cartridge from Falcon BMS again, after BMS changed them. Asks first if you have edits not saved.",
  "Settings/Close": "Closes the settings. Every change is already kept.",
  "Guide/Close": "Closes the guide. The toolbar's Guide opens it again.",

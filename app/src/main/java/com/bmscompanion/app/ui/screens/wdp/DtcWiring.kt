@@ -45,10 +45,10 @@ interface DtcSource {
     suspend fun load(callsign: String?): CartridgeState?
     suspend fun save(callsign: String?, edits: List<CartridgeEdit>): CartridgeState?
     /**
-     * A save while a pilot's own Tactical Engagement is the Planner's source (R3-PLAN A13): the cartridge, and the TE's
-     * `[STPT]` keys also into [te]'s mission file (`<campaigndir>/<TE>.ini`), which BMS loads over the cartridge in a
-     * TE. The answer's `mission` says whether that second file was written, and why not. A source with no PC saves the
-     * cartridge only.
+     * A save while a save opened with Open mission… is the Planner's source (R3-PLAN A13, D46): the cartridge, and its
+     * `[STPT]` keys also into [te]'s mission file (`<campaigndir>/<save>.ini`), from which BMS's DTC window loads
+     * targets, lines and PPTs (a TE, a training or a campaign). The answer's `mission` says whether that second file
+     * was written, and why not. A source with no PC saves the cartridge only.
      */
     suspend fun saveTe(callsign: String?, edits: List<CartridgeEdit>, te: CampRef): CartridgeState? = save(callsign, edits)
     /** BMS's own `*_Def.ini` files in `User/Config` (read only), for the Load buttons' "BMS default"; null where there is no PC. */
@@ -433,15 +433,36 @@ class DtcWiring(private val source: DtcSource = LinkDtcSource) : WdpWiring {
         private set
 
     /**
-     * The mission file of the Tactical Engagement the Planner is planning from, when a save must also go there (A13):
-     * a TE or a training mission opened with Open mission… — the pilot's own or one that ships with BMS, as in WDP. A
-     * campaign's mission file is not written (WDP's copy of the cartridge's empty route into it zeroed BMS's route in
-     * 4.38.1, D46).
+     * The save the Planner is planning from, whose own mission file (`<campaigndir>\<save>.ini`) a save must also reach
+     * (A13, D46): a TE, a training or a campaign opened with Open mission… — the pilot's own or one that ships with
+     * BMS, as in WDP. BMS's DTC window loads targets, lines and PPTs from that file (in a campaign its LOAD reads them
+     * from there and not from the cartridge), so a line saved to the cartridge alone vanished at LOAD and SAVE. The PC
+     * writes only the edited keys there and never takes away a point of BMS's route in a campaign's file.
      */
     private fun teRef(): CampRef? {
         val s = PlannerMissionState
-        if (!s.fromSave || s.flight == null) return null
-        return s.ref?.takeIf { s.kind == CampKind.TE || s.kind == CampKind.TRAINING }
+        if (!s.fromSave) return briefedRef()
+        if (s.flight == null) return null
+        return s.ref?.takeIf { s.kind == CampKind.TE || s.kind == CampKind.TRAINING || s.kind == CampKind.CAMPAIGN }
+    }
+
+    /**
+     * With the printed briefing as the source (the Planner's default), the save BMS printed it from, when the PC has
+     * named it ([BriefedSave]: the newest save that holds the printed flight): its mission file is the one BMS's LOAD
+     * reads then. Only an answer already looked up counts ([teRefForSave] looks it up before a save).
+     */
+    private fun briefedRef(): CampRef? {
+        val b = runCatching { MissionLink.bmsFiles.value?.briefing }.getOrNull()?.takeIf { it.origin == null } ?: return null
+        return BriefedSave.known(BriefedSave.key(b))?.let { CampRef(it.theater, it.file) }
+    }
+
+    /** [teRef], the briefed save looked up first when the printed briefing is the source (a save's own question). */
+    private suspend fun teRefForSave(): CampRef? {
+        if (!PlannerMissionState.fromSave) {
+            val b = runCatching { MissionLink.bmsFiles.value?.briefing }.getOrNull()?.takeIf { it.origin == null }
+            if (b != null) runCatching { BriefedSave.find(BriefedSave.key(b)) }
+        }
+        return teRef()
     }
 
     /**
@@ -488,7 +509,7 @@ class DtcWiring(private val source: DtcSource = LinkDtcSource) : WdpWiring {
         }
         status = "Saving ${st.file}…"
         version++
-        val te = teRef()
+        val te = teRefForSave()
         val file = cartridgeFile
         val back = try {
             when {
@@ -509,10 +530,10 @@ class DtcWiring(private val source: DtcSource = LinkDtcSource) : WdpWiring {
         if (back.modified != st.modified) WdpCartridge.generateBoards = source.generateBoards()
         version++
         loadedText?.let { t -> runCatching { onSaved?.invoke(t) } }
-        // the TE's own mission file (A13): written, or the PC's own sentence. A refusal ends "Only your cartridge was
+        // the save's own mission file (A13, D46): written, or the PC's own sentence. A refusal ends "Only your cartridge was
         // saved."; "no mission file of its own", "already held" and "None of the changes…" are notes, not errors.
         val mission = back.mission?.let { r ->
-            if (r.written) "${r.file.ifBlank { "The mission's own file" }} was written too (its targets, lines and PPTs), as BMS loads it over the cartridge in a TE."
+            if (r.written) "${r.file.ifBlank { "The mission's own file" }} was written too (its targets, lines and PPTs), as BMS's DTC window loads them from it."
             else r.reason?.takeIf { it.isNotBlank() } ?: "The mission's own file was not written."
         }
         return listOfNotNull(back.message ?: "${st.file} saved.", mission).joinToString("\n\n")
@@ -1472,9 +1493,11 @@ class DtcWiring(private val source: DtcSource = LinkDtcSource) : WdpWiring {
     /**
      * Steerpoint [n] — 1-24, or an open one: 81-89 (Open 1), 90-99 (Open 2) — set to [place] as a Precision
      * steerpoint, which Falcon BMS takes over its own. One that holds a point is replaced only once the pilot says so
-     * ([placeLine]). A place whose elevation is not known goes in at 0 ft, and the answer says so.
+     * ([placeLine]). A place whose elevation is not known goes in at 0 ft, and the answer says so. [action] is the
+     * steerpoint's type as the tabs' Change window sets it (`DataCardPlan.actionString`: -1 Precision, 0 Nav, 7 Land…);
+     * the Map page's Add to Open bank… chooses it for STPT 81-99 (an alternate as Land).
      */
-    fun placeSteerpoint(n: Int, place: DtcFromMission.Place, ask: Boolean = true, done: ((String) -> Unit)? = null): String {
+    fun placeSteerpoint(n: Int, place: DtcFromMission.Place, ask: Boolean = true, done: ((String) -> Unit)? = null, action: Int = -1): String {
         if (loadedText == null) return noCartridge()
         val s = stptSlot(n) ?: return "There is no STPT $n to set: the cartridge's are 1-24, 81-89 and 90-99."
         if (ask && !DtcFromMission.stptEmpty(s)) {
@@ -1483,12 +1506,12 @@ class DtcWiring(private val source: DtcSource = LinkDtcSource) : WdpWiring {
                 "STPT $n",
                 "STPT $n holds a point$named. Replace it with ${place.name}?",
                 listOf("Replace", "Cancel"),
-            ) { a -> if (a == "Replace") guard { val r = placeSteerpoint(n, place, ask = false); done?.invoke(r) } }
+            ) { a -> if (a == "Replace") guard { val r = placeSteerpoint(n, place, ask = false, action = action); done?.invoke(r) } }
             return "STPT $n holds a point: $ASKED to replace it."
         }
-        DtcFromMission.writeStpt(s, place.at, place.elevFt ?: 0.0, -1, place.name)
+        DtcFromMission.writeStpt(s, place.at, place.elevFt ?: 0.0, action, place.name)
         relabel()
-        return "STPT $n: ${place.name}, Precision. Save to DTC writes it." + if (place.elevFt == null) "\n\n$NO_ELEVATION" else ""
+        return "STPT $n: ${place.name}, ${DataCardPlan.actionString(action)}. Save to DTC writes it." + if (place.elevFt == null) "\n\n$NO_ELEVATION" else ""
     }
 
     private fun stptSlot(n: Int): DtcStpt? = when (n) {
@@ -1671,7 +1694,7 @@ class DtcWiring(private val source: DtcSource = LinkDtcSource) : WdpWiring {
         fromMission("Change Area") { f -> areaWindow(DtcFromMission.lineOptions(f) + extra, "Change Area", emptyList()) }
     }
 
-    /** The TE's own mission file a save writes too ("TE_Mine.ini"), when a TE or training is open; else null. */
+    /** The save's own mission file a save writes too ("TE_Mine.ini", "Save-Day  1 04 11 35.ini"), when a save is open; else null. */
     fun teIni(): String? = teRef()?.file?.substringBeforeLast('.')?.let { "$it.ini" }
 
     /** A tab's From mission…: what the mission holds read (the airports and towns first, where they are not yet), then [then]. */

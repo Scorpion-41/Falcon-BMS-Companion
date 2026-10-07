@@ -150,6 +150,46 @@ object DivertRender {
                 }
             }
         }
+        listFolds(out)
+    }
+
+    /**
+     * 3. The Airfields page on a wide screen: the list beside the first field, then a field picked from the list — the
+     * list folds away and the field takes the width (its back arrow brings the list back). Pictures only.
+     */
+    private fun StringBuilder.listFolds(out: File) {
+        appendLine()
+        appendLine("3. The Airfields page, wide: the list, then a field picked from it (the list folds away)")
+        for (s in SHAPES.filter { it.w >= 1000 }) {
+            val scene = ImageComposeScene((s.w * s.d).toInt(), (s.h * s.d).toInt(), Density(s.d)) {
+                CompositionLocalProvider(LocalConfiguration provides Configuration(s.w, s.h)) {
+                    BmsTheme {
+                        Row(Modifier.fillMaxSize().background(Hud.Bg)) {
+                            if (s.rail) Box(Modifier.width(RAIL_DP.dp).fillMaxHeight().background(Hud.Surface))
+                            Box(Modifier.weight(1f).fillMaxHeight()) { com.bmscompanion.app.ui.screens.AirfieldsPage(rememberNavController()) }
+                        }
+                    }
+                }
+            }
+            try {
+                var t = 0L
+                fun settle() = repeat(30) { scene.render(t); t += 50_000_000; Thread.sleep(30) }
+                settle()
+                File(out, "airfields-list-${s.name}.png").writeBytes(scene.render(t).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+                // the third row of the list: under the tabs, the search, the kind chips and the count
+                val at = androidx.compose.ui.geometry.Offset(((if (s.rail) RAIL_DP else 0) + 200) * s.d, 330 * s.d)
+                scene.sendPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Press, at)
+                scene.render(t); t += 50_000_000
+                scene.sendPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Release, at)
+                settle()
+                File(out, "airfields-picked-${s.name}.png").writeBytes(scene.render(t).encodeToData(EncodedImageFormat.PNG)!!.bytes)
+                appendLine("     pictures airfields-list-${s.name}.png, airfields-picked-${s.name}.png")
+            } catch (e: Throwable) {
+                appendLine("FAIL airfields page ${s.name}: ${e::class.simpleName}: ${e.message}")
+            } finally {
+                scene.close()
+            }
+        }
     }
 
     /** "N 37°01.699'" → thousandths of a minute from the equator / meridian, signed by the hemisphere. */

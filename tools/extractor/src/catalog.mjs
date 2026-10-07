@@ -1,5 +1,5 @@
 // Aircraft + weapons catalog for one theater (flyable aircraft, stations, allowed weapons).
-import { loadDb, readAcdata, wclassName } from './db.mjs';
+import { loadDb, readAcdata, wclassName, ctName, tacrefHomeDb } from './db.mjs';
 import { slug, num } from './util.mjs';
 
 export const AC_ROLES = { 1: 'Airplane', 2: 'Attack', 3: 'AWACS', 4: 'Bomber', 5: 'Electronic Warfare', 6: 'Fighter', 7: 'Multirole', 8: 'Surveillance', 9: 'Reconnaissance', 10: 'Tanker', 11: 'Transport', 12: 'ELINT' };
@@ -47,9 +47,61 @@ function weaponCategory(ct, w, swd, tac) {
   return 'OTHER';
 }
 
+// a name as words, for comparing an object with a TacRef entry: "F-16C B52+ HAF" → f16c block 52+ haf
+const nameWords = (s) => (s || '').replace(/\([^)]*\)/g, ' ').replace(/\bBlk\b/gi, 'Block').replace(/\bB(?=\d)/g, 'Block ')
+  .split(/[\s/]+/).map((w) => w.toLowerCase().replace(/[^a-z0-9+]/g, '')).filter(Boolean);
+
+/**
+ * The TacRef entry BMS links to class-table row `ct` (the entry's own `ClassTable`), and so its picture, or null.
+ * The link is BMS's own when the TacRef file sits beside the theater's own object files. A theater that borrows
+ * another's TacRef (Hellas, LHTO and Hellas WCP use Data/TerrData's; the Korea 2012 six, LKTO, OFMKTO, TvT and KTO 80s
+ * too; EF2000 BTO uses Balkans's) only borrows the numbers: its row `ct` may be another object altogether (Hellas's
+ * 2421 is its "M2k-5 HAF", the TacRef's is the Mirage 2000EGM; its 2472 is a placeholder). So a borrowed link is
+ * kept only when the row is the same object in both tables (the same name), or the object's name is the entry's
+ * name word for word ("F-15J" → "F-15J Peace Eagle", "F-16C B52+ HAF" → "F-16C Block 52+ HAF w/o CFT").
+ */
+// Borrowed links the rules below would refuse but that are the same store under another name (reviewed, 1.3.9):
+// object name → the TacRef entry it is
+const SAME_STORE = { 'AIM-120C5': 'AIM-120C AMRAAM', 'AIM-2000': 'IRIS-T', 'KEPD350 TAURUS': 'Taurus KEPD 350' };
+
+export function tacrefFor(db, ct, name) {
+  const tac = db.tacref.get(ct);
+  if (!tac) return null;
+  if (db.tacrefOwn) return tac;
+  if (SAME_STORE[name] === tac.name) return tac;
+  const home = tacrefHomeDb(db);
+  const ours = ctName(db, ct) ?? name;
+  const theirs = home ? ctName(home, ct) : null;
+  const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  if (theirs && norm(theirs) === norm(ours)) return tac;
+  const a = nameWords(name), b = nameWords(tac.name);
+  if (a.length && a.length <= b.length && a.every((w, i) => w === b[i])) return tac;
+  // a weapon (EntityType 6) may also carry the entry's designation: "AGM-78 ARM" → "AGM-78 Standard", "YJ-83K" →
+  // "CSS-N-8 Saccade (YJ-83K)", "3M80 (Kh-41)" → "SS-N-22 Sunburn (Kh-41)"; never an aircraft, whose national
+  // variants share a designation
+  if (+db.ct[ct]?.EntityType === 6) {
+    const des = (s) => [(s || '').trim().split(/\s+/)[0], ...[...(s || '').matchAll(/\(([^)]*)\)/g)].map((m) => m[1])]
+      .map((d) => d.toLowerCase().replace(/[^a-z0-9]/g, '')).filter((d) => /\d/.test(d) && /[a-z]/.test(d));
+    const theirsDes = new Set(des(tac.name));
+    if (des(name).some((d) => theirsDes.has(d))) return tac;
+  }
+  return null;
+}
+
+/**
+ * A class-table or TacRef row BMS keeps as an empty slot rather than a real thing: "*free" (in the F-16 family),
+ * "--Free Slot--" (in the Eurofighter's), an empty name, "none", "placeholder". Never listed anywhere, and never a
+ * carrier of a store. Whole-name matches only: "F-5A Freedom Fighter" is real.
+ */
+export function isPlaceholderName(name) {
+  const n = (name || '').trim().replace(/^[-*_.\s]+|[-*_.\s]+$/g, '');
+  return n === '' || /^(free(\s*slot)?|none|empty|unused|n\/?a|aircraft)$/i.test(n) || /placeholder/i.test(n);
+}
+
 /** Is a WCD record a real store (not a rack dummy / placeholder)? */
 function isRealWeapon(w, ct) {
   if (!w || !ct) return false;
+  if (isPlaceholderName(w.Name)) return false;
   if (/^(- No Weapon|R\s|Empty w\/Pylon)/.test(w.Name)) return false;
   if (+ct.Domain === 1 && +ct.Class === 8 && +ct.Type === 4) return false; // racks
   return true;
@@ -72,7 +124,7 @@ function buildWeapon(db, wid) {
   const ct = db.ct[+w.CtIdx];
   if (!isRealWeapon(w, ct)) return null;
   const swd = ct ? db.swd[+ct.MoverDefinitionData] : null;
-  const tac = db.tacref.get(+w.CtIdx);
+  const tac = tacrefFor(db, +w.CtIdx, w.Name.trim());
   const g = +w.Guidance || 0;
   return {
     key: slug(w.Name),
@@ -116,6 +168,7 @@ export function buildCatalog(th) {
     const acd = db.acd[+c.MoverDefinitionData];
     const datName = acd ? db.acTypes[+acd.AirframeDatIdx + 1] : null;
     const name = v.Name.trim();
+    if (isPlaceholderName(name)) continue; // an empty slot, not an aircraft: its stores must not count it a carrier
     const dedupeKey = name + '|' + datName;
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
@@ -166,7 +219,7 @@ export function buildCatalog(th) {
     }
 
     const radar = db.rcd[+v.RadarIdx];
-    const tac = db.tacref.get(+c.Num);
+    const tac = tacrefFor(db, +c.Num, name);
     aircraft.push({
       key: slug(name),
       name,

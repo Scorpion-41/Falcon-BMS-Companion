@@ -103,7 +103,15 @@ data class ChartInks(
     val islandTop: Color,
     val building: Color,
     val fuel: Color,
+    /** masts, radio and water towers: small round things that are not the control tower */
     val tower: Color,
+    /**
+     * The control tower: a violet no other ground object wears, because it is the landmark a pilot finds his way
+     * round a field by — drawn as its own shape from above, with a "TWR" plate in the same ink.
+     */
+    val controlTower: Color,
+    /** an arresting cable across a runway: the amber of the cable markers, bright against the dark runway */
+    val cable: Color,
     val signFill: Color,
     val signInk: Color,
     val accent: Color,
@@ -124,6 +132,7 @@ data class ChartInks(
             deck = Color(0xFF4B5258), deckEdge = Color(0xFFA3AAB0), deckPaint = Color(0xFFF6F7F5),
             deckYellow = Color(0xFFE6BA2C), deckRed = Color(0xFFD8392D), islandTop = Color(0xFFC6CCD0),
             fuel = Color(0xFFB08928), tower = Color(0xFF9C4A63),
+            controlTower = Color(0xFF6A3EC2), cable = Color(0xFFE3A008),
             signFill = Color(0xFFE8C22A), signInk = Color(0xFF1A1A12),
             accent = Color(0xFF1D5A88),
             wingman = Color(0xFF2E9E5B), friendly = Color(0xFF2D6FB5), hostile = Color(0xFFC0392B), neutral = Color(0xFF7A7F84),
@@ -140,6 +149,7 @@ data class ChartInks(
             deck = Color(0xFF2F363C), deckEdge = Color(0xFF5E6870), deckPaint = Color(0xFFCBD3D7),
             deckYellow = Color(0xFFC9A63A), deckRed = Color(0xFFD0564B), islandTop = Color(0xFF7F8A92),
             fuel = Color(0xFF8A6D24), tower = Color(0xFFA85E76),
+            controlTower = Color(0xFF9473E6), cable = Color(0xFFE8B83A),
             signFill = Color(0xFFCBA61F), signInk = Color(0xFF14140E),
             accent = Color(0xFF74B4E2),
             wingman = Color(0xFF4ECF98), friendly = Color(0xFF6FA8DC), hostile = Color(0xFFE06055), neutral = Color(0xFF9AA3A9),
@@ -171,7 +181,17 @@ class ChartState {
      */
     internal var zoomHook: ((Float) -> Unit)? = null
 
-    fun reset() { scale = 1f; panX = 0f; panY = 0f }
+    /** the heading the chart last drew up the page — what a "turn 90°" steps on from when the page fitted it itself */
+    var turnShown: Double = 0.0
+        internal set
+
+    /**
+     * Degrees two fingers have turned the chart by, on top of the page's own turn (north up, a heading, or fitted).
+     * Not kept between launches: a reset (North up, the turn buttons, Fit) puts it back to 0.
+     */
+    var twist by mutableFloatStateOf(0f)
+
+    fun reset() { scale = 1f; panX = 0f; panY = 0f; twist = 0f }
     fun zoomBy(factor: Float) {
         val hook = zoomHook
         if (hook != null) hook(factor) else scale = (scale * factor).coerceIn(1f, 40f)
@@ -273,7 +293,7 @@ private fun fitTo(pts: DoubleArray, rot: Double): Fit {
  * gives the largest scale wins. On a kneeboard, which is far taller than it is wide, that stands a single-runway
  * field upright whatever its real heading, and typically doubles how large it is drawn.
  */
-private fun bestFitHeading(pts: DoubleArray, aspect: Float): Double {
+private fun bestFitHeading(pts: DoubleArray, aspect: Float, step: Int = 2): Double {
     if (pts.size < 4 || aspect <= 0f) return 0.0
     var best = 0.0
     var bestK = -1.0
@@ -282,7 +302,7 @@ private fun bestFitHeading(pts: DoubleArray, aspect: Float): Double {
         val f = fitTo(pts, deg * kotlin.math.PI / 180.0)
         val k = min(aspect / f.spanX, 1.0 / f.spanY)
         if (k > bestK) { bestK = k; best = deg.toDouble() }
-        deg += 2
+        deg += step
     }
     return best
 }
@@ -372,10 +392,16 @@ fun AirfieldChart(
             when {
                 follow != null || !fitRotation -> (upHeading ?: 0.0)
                 w <= 0f || h <= 0f -> (upHeading ?: 0.0)
+                // a deck is fitted bow up or bow across, never at a slant: its angled landing area fits a hair
+                // better diagonally, and a carrier drawn askew reads as wrong
+                field.ship != null -> bestFitHeading(pts, w / h, step = 90)
                 else -> bestFitHeading(pts, w / h)
             }
         }
         val rot = turn * kotlin.math.PI / 180.0
+        // what is drawn: the page's turn plus two fingers' twist (the fit stays the page's, so a twist never rescales)
+        val shownTurn = if (follow != null) turn else turn + state.twist
+        val shownRot = shownTurn * kotlin.math.PI / 180.0
 
         val fit = remember(pts, w, h, rot) { fitTo(pts, rot) }
         val fitK = remember(fit, w, h) {
@@ -391,7 +417,7 @@ fun AirfieldChart(
             else -> ChartView(
                 cx = w / 2 + state.panX, cy = h / 2 + state.panY,
                 midE = fit.midE, midN = fit.midN,
-                k = fitK * state.scale, rot = rot, deck = field.ship != null,
+                k = fitK * state.scale, rot = shownRot, deck = field.ship != null,
             )
         }
 
@@ -410,6 +436,7 @@ fun AirfieldChart(
         val glide = rememberZoomGlide { f, at -> zoomAt(state.scale * f, at) }
 
         androidx.compose.runtime.SideEffect {
+            state.turnShown = shownTurn
             state.zoomHook = if (follow != null) null else { factor ->
                 val v = view()
                 val anchor = zoomAnchor?.let { v.at(it.x.toDouble(), it.y.toDouble()) } ?: Offset(w / 2, h / 2)
@@ -419,9 +446,21 @@ fun AirfieldChart(
 
         val gestures = if (!interactive || follow != null) Modifier else Modifier
             .pointerInput(field.id, w, h) {
-                detectTransformGestures { centroid, pan, zoom, _ ->
+                // two fingers also turn the chart about the point between them; panZoomLock keeps a pinch or a drag
+                // from turning it unless the turn came first (a mouse has one pointer and never turns it)
+                detectTransformGestures(panZoomLock = true) { centroid, pan, zoom, rotation ->
                     glide.stop()
                     zoomAt(state.scale * ZoomMath.pinch(zoom), centroid, pan)
+                    if (rotation != 0f) {
+                        // the picture turns clockwise with the fingers (y down), so the heading up the page goes down
+                        val a = rotation * (kotlin.math.PI / 180.0)
+                        val ox = w / 2 + state.panX - centroid.x
+                        val oy = h / 2 + state.panY - centroid.y
+                        val c = kotlin.math.cos(a).toFloat(); val s = kotlin.math.sin(a).toFloat()
+                        state.panX = centroid.x + ox * c - oy * s - w / 2
+                        state.panY = centroid.y + ox * s + oy * c - h / 2
+                        state.twist = ((state.twist - rotation) % 360f + 360f) % 360f
+                    }
                 }
             }
             // A mouse wheel is how this is zoomed on a PC, and a trackpad on a laptop; the gesture detector above
@@ -466,6 +505,7 @@ fun AirfieldChart(
                 drawPavement(field, v, inks)
                 drawDeckMarks(field, v, inks, tm)
                 drawRunways(field, v, inks)
+                drawCables(field, v, inks)
                 drawCentreline(field, v, inks)
             }
             // The island stands on the deck, so it goes on after the markings — but before the spots, which on
@@ -488,10 +528,12 @@ fun AirfieldChart(
             if (field.ship == null) route?.let { r -> spotLabels(r, v, inks, labels, labelScale, selectedSpot, destinationSpot) }
             taxiwayLabels(field, route, v, inks, labels, labelScale)
             runwayLabels(field, v, inks, labels, labelScale)
+            towerLabels(field, v, inks, labels, labelScale)
+            cableLabels(field, v, inks, labels, labelScale)
             labels.draw(this, tm)
             drawScaleBar(v, inks, tm, labelScale)
             // Turned to the jet's heading, the page no longer has north at the top: say where it went.
-            if (upHeading != null || fitRotation) chartNorthArrow(Offset(size.width - 26f, 26f), turn, inks, 13f)
+            if (upHeading != null || fitRotation || state.twist != 0f) chartNorthArrow(Offset(size.width - 26f, 26f), shownTurn, inks, 13f)
         }
     }
 }
@@ -1263,10 +1305,7 @@ private fun DrawScope.drawBuiltFeatures(field: Airfield, v: ChartView, inks: Cha
             "hangar" -> box(inks.hangar)
             "building" -> box(inks.building, 0.9f)
             "fuel" -> drawCircle(inks.fuel, radius = max(1.5f, v.ft(f.w / 2)), center = c)
-            "tower" -> {
-                drawCircle(inks.tower, radius = max(2.5f, v.ft(f.w / 2)), center = c)
-                drawCircle(inks.ground, radius = max(1f, v.ft(f.w / 5)), center = c)
-            }
+            "tower" -> drawControlTower(f, c, v, inks)
             "mast" -> drawCircle(inks.tower, radius = max(1.5f, v.ft(f.w / 2)), center = c, alpha = 0.8f)
             // a wall is a line on the ground, and is what tells a pilot where a ramp ends
             "wall" -> rotate(angle, c) {
@@ -1279,6 +1318,117 @@ private fun DrawScope.drawBuiltFeatures(field: Airfield, v: ChartView, inks: Cha
                 )
             }
             "light" -> if (v.ft(60.0) > 2f) drawCircle(inks.dim, radius = 1.2f, center = c, alpha = 0.6f)
+        }
+    }
+}
+
+/** Rings of east,north pairs in field feet as one even-odd path on the page. */
+private fun ringsPath(rings: List<List<Int>>, v: ChartView): Path? {
+    val path = Path()
+    path.fillType = PathFillType.EvenOdd
+    var any = false
+    for (r in rings) {
+        if (r.size < 6) continue
+        path.moveTo(v.x(r[0].toDouble(), r[1].toDouble()), v.y(r[0].toDouble(), r[1].toDouble()))
+        var i = 2
+        while (i + 1 < r.size) { path.lineTo(v.x(r[i].toDouble(), r[i + 1].toDouble()), v.y(r[i].toDouble(), r[i + 1].toDouble())); i += 2 }
+        path.close()
+        any = true
+    }
+    return if (any) path else null
+}
+
+/**
+ * A control tower, as the shape it has from above: its outline out of its own BMS model (or the model's stated box),
+ * at its own position and heading, in the tower's violet with a dark rim and a shadow so it stands off the ground;
+ * the shaft and the cab, where the tower stands over a building, solid on top. Too small on the page to show a
+ * shape, it is a dot that still reads as the tower; the "TWR" plate is placed with the other labels ([towerLabels]).
+ */
+private fun DrawScope.drawControlTower(f: com.bmscompanion.app.data.airfield.AfFeature, c: Offset, v: ChartView, inks: ChartInks) {
+    val outline = if (f.p.isNotEmpty()) ringsPath(f.p, v) else null
+    val across = max(v.ft(f.w), v.ft(f.l))
+    if (outline == null || across < 5f) {
+        drawCircle(Color.Black, radius = max(3.5f, across / 2) + 1.2f, center = c, alpha = 0.45f)
+        drawCircle(inks.controlTower, radius = max(3.5f, across / 2), center = c)
+        return
+    }
+    val lift = max(1f, min(4f, v.ft(8.0)))
+    translate(lift, lift) { drawPath(outline, Color.Black, alpha = 0.3f) }
+    val top = if (f.top.isNotEmpty()) ringsPath(f.top, v) else null
+    drawPath(outline, inks.controlTower, alpha = if (top != null) 0.55f else 1f)
+    if (top != null) drawPath(top, inks.controlTower)
+    drawPath(outline, lerp(inks.controlTower, Color.Black, 0.45f), style = Stroke(width = max(0.8f, v.ft(1.5)), join = StrokeJoin.Round))
+}
+
+/** Where a tower's middle is on the page: its outline's, or its position. */
+private fun towerCentre(f: com.bmscompanion.app.data.airfield.AfFeature): Pair<Double, Double> {
+    var se = 0.0; var sn = 0.0; var k = 0
+    for (r in f.top.ifEmpty { f.p }) { var i = 0; while (i + 1 < r.size) { se += r[i]; sn += r[i + 1]; k++; i += 2 } }
+    return if (k > 0) (se / k) to (sn / k) else f.e to f.n
+}
+
+/**
+ * "TWR" beside each control tower, in the tower's violet. Placed by the [LabelBoard] like every other label, so it
+ * steps aside for the spot numbers rather than covering them, with a leader back to the tower when it has to.
+ */
+private fun towerLabels(field: Airfield, v: ChartView, inks: ChartInks, labels: LabelBoard, labelScale: Float) {
+    for (f in field.features) {
+        if (f.k != "tower") continue
+        val (e, n) = towerCentre(f)
+        val c = v.at(e, n)
+        val r = max(4f, max(v.ft(f.w), v.ft(f.l)) / 2)
+        labels.add(
+            ChartLabel(
+                text = "TWR", anchor = c + Offset(0f, -(r + 9f)), away = Offset(0f, -1f),
+                size = 9.5f * labelScale, ink = Color.White, fill = inks.controlTower,
+                weight = FontWeight.Bold, leader = true, priority = 12,
+            ),
+        )
+    }
+}
+
+/**
+ * The arresting cables: a line across the runway where each lies, with the housings either side, in the amber of the
+ * cable markers. Labelled "CABLE" once the runway is wide enough on the page to carry it.
+ */
+private fun DrawScope.drawCables(field: Airfield, v: ChartView, inks: ChartInks) {
+    for (rwy in chartRunways(field)) {
+        val a = rwy.ends.getOrNull(0) ?: continue
+        val b = rwy.ends.getOrNull(1) ?: continue
+        val brg = bearingOf(a.at.e, a.at.n, b.at.e, b.at.n) * kotlin.math.PI / 180.0
+        val pe = cos(brg); val pn = -sin(brg)          // across the runway
+        val half = rwy.widthFt / 2.0 + 18.0
+        for (cab in rwy.cables) {
+            val p = v.at(cab.e - pe * half, cab.n - pn * half)
+            val q = v.at(cab.e + pe * half, cab.n + pn * half)
+            drawLine(Color.Black, p, q, strokeWidth = max(2.4f, v.ft(9.0)), alpha = 0.35f)
+            drawLine(inks.cable, p, q, strokeWidth = max(1.4f, v.ft(5.0)))
+            val box = max(1.6f, v.ft(9.0))
+            for (end in listOf(p, q)) drawRect(inks.cable, topLeft = Offset(end.x - box, end.y - box), size = Size(box * 2, box * 2))
+        }
+    }
+}
+
+private fun cableLabels(field: Airfield, v: ChartView, inks: ChartInks, labels: LabelBoard, labelScale: Float) {
+    for (rwy in chartRunways(field)) {
+        // only once the runway is wide enough on the page to be read across: at a whole field's zoom the amber lines
+        // and the legend's distances say it, and four more plates were clutter
+        if (rwy.cables.isEmpty() || v.ft(rwy.widthFt.toDouble()) < 10f) continue
+        val a = rwy.ends.getOrNull(0) ?: continue
+        val b = rwy.ends.getOrNull(1) ?: continue
+        val brg = bearingOf(a.at.e, a.at.n, b.at.e, b.at.n) * kotlin.math.PI / 180.0
+        val pe = cos(brg); val pn = -sin(brg)
+        val out = rwy.widthFt / 2.0 + 60.0
+        for (cab in rwy.cables) {
+            val at = v.at(cab.e + pe * out, cab.n + pn * out)
+            val dir = at - v.at(cab.e, cab.n)
+            labels.add(
+                ChartLabel(
+                    text = "CABLE", anchor = at, away = dir, size = 8.5f * labelScale,
+                    // below the spot numbers: a cable label steps aside, or is left off, rather than move a stand's
+                    ink = inks.signInk, fill = inks.cable, weight = FontWeight.Bold, leader = true, priority = 9,
+                ),
+            )
         }
     }
 }

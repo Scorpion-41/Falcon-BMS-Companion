@@ -55,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -197,6 +198,8 @@ internal fun AirfieldsPage(nav: NavHostController) {
     var saved by rememberSaveable { mutableIntStateOf(0) }
     val tab = saved.coerceIn(0, 2)
     var selected by rememberSaveable(theaterId) { mutableStateOf<Int?>(null) }
+    // wide screens: the list beside the field until one is picked, then the field alone (back arrow = the list)
+    var listOpen by rememberSaveable(theaterId) { mutableStateOf(true) }
     val wide = isWide()
     val open: (Int) -> Unit = { id -> if (wide) selected = id else nav.go(Routes.airport(theaterId, id)) }
 
@@ -219,10 +222,19 @@ internal fun AirfieldsPage(nav: NavHostController) {
             header()
             val (th, s) = data ?: run { LoadingBox(); return@Column }
             when (tab) {
+                // Picking a field folds the list away and gives the field the whole width; the airfield's back
+                // arrow brings the list back, with the search and the scroll as they were.
                 0 -> Row(Modifier.fillMaxSize()) {
-                    Box(Modifier.width(400.dp).fillMaxHeight()) { AirportList(s.airports, selected) { selected = it } }
-                    Box(Modifier.width(1.dp).fillMaxHeight().background(Hud.Outline.copy(alpha = 0.5f)))
-                    Box(Modifier.weight(1f).fillMaxHeight()) { selected?.let { AirportDetail(nav, theaterId, it, null) } ?: EmptyState("Select an airfield") }
+                    val showList = listOpen || selected == null
+                    // folded to no width rather than taken away, so the search and the scroll survive
+                    Box(Modifier.width(if (showList) 400.dp else 0.dp).fillMaxHeight().clipToBounds()) { AirportList(s.airports, selected) { selected = it; listOpen = false } }
+                    if (showList) Box(Modifier.width(1.dp).fillMaxHeight().background(Hud.Outline.copy(alpha = 0.5f)))
+                    androidx.activity.compose.BackHandler(enabled = !showList) { listOpen = true }
+                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                        selected?.let { id ->
+                            AirportDetail(nav, theaterId, id, if (listOpen) null else ({ listOpen = true }))
+                        } ?: EmptyState("Select an airfield")
+                    }
                 }
                 1 -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) { Box(Modifier.widthIn(max = 900.dp)) { NavaidList(s) } }
                 else -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) { Box(Modifier.widthIn(max = 900.dp)) { RadioList(th) } }
@@ -284,10 +296,12 @@ private fun AirportList(list: List<Airport>, selected: Int?, onOpen: (Int) -> Un
         }
     }
     val rows = rememberLazyListState()
+    // the search stays at the top however far the list is scrolled; the kinds and the count scroll with it
+    Column(Modifier.fillMaxSize()) {
+    com.bmscompanion.app.ui.components.PinnedSearchField(q, { q = it }, "Name, ICAO, TACAN (75X), ILS or frequency")
     Box(Modifier.fillMaxSize()) {
     LazyColumn(Modifier.fillMaxSize(), state = rows, contentPadding = PaddingValues(bottom = 24.dp, end = 20.dp)) {
         item {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) { SearchField(q, { q = it }, "Name, ICAO, TACAN (75X), ILS or frequency") }
             com.bmscompanion.app.ui.components.ChipRow(types, type, { it }, { type = it })
             Text("${filtered.size} airfields", style = LocalExtra.current.monoSmall, color = Hud.TextFaint, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
         }
@@ -309,8 +323,9 @@ private fun AirportList(list: List<Airport>, selected: Int?, onOpen: (Int) -> Un
             )
         }
     }
-    // one row above the airfields: the search field and the count
+    // one row above the airfields: the kinds and the count (the search is pinned above the list)
     AlphabetScrubber(filtered, rows, { it.name }, before = 1)
+    }
     }
 }
 
@@ -508,8 +523,9 @@ private fun NavaidList(set: AirportSet) {
     var q by rememberSaveable { mutableStateOf("") }
     val nav = remember(set, q) { set.navaids.filter { q.isBlank() || it.name.norm().contains(q.norm()) || it.tacan?.label?.norm() == q.norm() }.sortedBy { it.name } }
     val tacanFields = remember(set, q) { set.airports.filter { it.tacan != null && (q.isBlank() || it.name.norm().contains(q.norm()) || it.tacan.label.norm() == q.norm()) }.sortedBy { it.tacan!!.channel } }
+    Column(Modifier.fillMaxSize()) {
+    com.bmscompanion.app.ui.components.PinnedSearchField(q, { q = it }, "Station name or channel")
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
-        item { Column(Modifier.padding(16.dp)) { SearchField(q, { q = it }, "Station name or channel") } }
         item { com.bmscompanion.app.ui.components.GroupHeader("VOR / TACAN stations", nav.size) }
         items(nav) { n ->
             ListRow(n.name, n.objective?.takeIf { it != n.name }, trailing = { n.tacan?.let { Tag(it.label, Hud.Green, filled = true) } }, onClick = {})
@@ -519,6 +535,7 @@ private fun NavaidList(set: AirportSet) {
             ListRow(a.name, listOfNotNull(a.icao, a.tacan?.station, a.tacan?.rangeNm?.let { "$it nm" }).joinToString(" · "), trailing = { Tag(a.tacan!!.label, Hud.Green, filled = true) }, onClick = {})
         }
     }
+    }
 }
 
 @Composable
@@ -527,10 +544,11 @@ private fun RadioList(th: Theater) {
     var q by rememberSaveable { mutableStateOf("") }
     val l = list ?: return LoadingBox()
     val filtered = remember(l, q) { l.filter { q.isBlank() || it.agency.norm().contains(q.norm()) } }
+    Column(Modifier.fillMaxSize()) {
+    com.bmscompanion.app.ui.components.PinnedSearchField(q, { q = it }, "Callsign (Cowboy, Magic, Texaco…)")
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                SearchField(q, { q = it }, "Callsign (Cowboy, Magic, Texaco…)")
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Flight / agency frequencies from RadioMap.dat — UHF1 = package tactical, VHF = intra-flight, UHF2 = backup.", style = MaterialTheme.typography.bodySmall, color = Hud.TextDim)
             }
             Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
@@ -543,6 +561,7 @@ private fun RadioList(th: Theater) {
                 listOf(r.uhf1, r.vhf, r.uhf2).forEach { Text(it ?: "—", Modifier.weight(1f), style = LocalExtra.current.monoSmall, color = if (it == null) Hud.TextFaint else Hud.Text) }
             }
         }
+    }
     }
 }
 
@@ -588,7 +607,15 @@ fun AirportDetail(nav: NavHostController, theaterId: String, id: Int, onBack: ((
                             }
                         }
                         Spacer(Modifier.height(10.dp))
-                        a.runways.flatMap { it.ends }.forEach { e -> RunwayEndCard(e) }
+                        // the arresting cables come with the ground chart (BMS's own "Arrestor System" objects)
+                        val chart by produceState<com.bmscompanion.app.data.airfield.Airfield?>(null, th?.airfieldSet, a.id) {
+                            value = th?.airfieldSet?.let { Repo.airfield(it, a.id) }
+                        }
+                        a.runways.flatMap { it.ends }.forEach { e ->
+                            val cables = chart?.takeIf { it.ship == null }?.runways?.firstOrNull { r -> r.ends.any { it.designator == e.designator } }
+                                ?.takeIf { it.cables.isNotEmpty() }?.cablesFrom(e.designator)
+                            RunwayEndCard(e, cables, cablesKnown = chart?.runways?.any { it.cables.isNotEmpty() } == true)
+                        }
                     }
                 }
                 a.atc?.let { atc ->
@@ -685,13 +712,22 @@ private fun GroundChartCard(nav: NavHostController, theaterId: String, a: Airpor
 }
 
 @Composable
-private fun RunwayEndCard(e: RunwayEnd) {
+private fun RunwayEndCard(e: RunwayEnd, cables: List<Int>? = null, cablesKnown: Boolean = false) {
     Column(Modifier.fillMaxWidth().padding(vertical = 5.dp).clip(RoundedCornerShape(10.dp)).background(Hud.Surface2).padding(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("RWY ${e.designator}", style = LocalExtra.current.mono, color = Hud.Amber, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             Text("${Fmt.hdg(e.headingTrue)} T", style = LocalExtra.current.monoSmall, color = Hud.TextDim)
             Spacer(Modifier.width(10.dp))
             if (e.ils != null) Tag("ILS ${e.ils}", Hud.Cyan, filled = true) else Tag("no ILS", Hud.TextFaint)
+        }
+        // Where the hook catches: the distance of each cable from this end, the way it is rolled out over after landing.
+        // Said for an end without one only where the field has cables elsewhere, so "none" means none on this runway.
+        if (!cables.isNullOrEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            KeyValueRow("Arresting cables", com.bmscompanion.app.data.airfield.cableDistances(cables) + " from the end", mono = true)
+        } else if (cablesKnown) {
+            Spacer(Modifier.height(6.dp))
+            KeyValueRow("Arresting cables", "none on this runway", mono = true)
         }
         e.pattern?.let { p ->
             Spacer(Modifier.height(6.dp))

@@ -132,7 +132,12 @@ object MapLayers {
      * without it.
      */
     var plan by mutableStateOf(Repo.getInt("m_plan", 1) == 1)
+    /** Your own jet's symbol on the map (Follow still follows it when hidden). */
+    var ownship by mutableStateOf(Repo.getInt("m_ownship", 1) == 1)
+    /** The OWNSHIP figures beside the map (or the strip under it on a phone). */
+    var ownInfo by mutableStateOf(Repo.getInt("m_owninfo", 1) == 1)
     fun save() {
+        Repo.putInt("m_ownship", if (ownship) 1 else 0); Repo.putInt("m_owninfo", if (ownInfo) 1 else 0)
         Repo.putInt("m_follow", if (follow) 1 else 0); Repo.putInt("m_route", if (route) 1 else 0)
         Repo.putInt("m_traffic", if (traffic) 1 else 0); Repo.putInt("m_hostiles", if (hostiles) 1 else 0); Repo.putInt("m_labels", if (labels) 1 else 0)
         Repo.putInt("m_allfields", if (fields) 1 else 0)
@@ -325,7 +330,7 @@ fun MissionMapPane(env: MissionEnv, state: MapState, sel: MapSel?, onSel: (MapSe
             Box(Modifier.width(1.dp).fillMaxHeight().background(Hud.Outline.copy(alpha = 0.5f)))
             Column(Modifier.width(400.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (sel != null) SelectionCard(env, sel, d, Modifier.fillMaxWidth()) { onSel(null) }
-                FlightTiles(d.live, d.bull, compact = true)
+                if (MapLayers.ownInfo) FlightTiles(d.live, d.bull, compact = true)
                 // the Map tab drops the card while hostile contacts are off (the Dashboard's keeps its note)
                 if (rememberHostilesOn()) PictureCard(d.ctcs, d.ownPos, d.ownHdg, d.bull, onPick = { onSel(MapSel.Ctc(it.id)) })
                 SteerpointList(d.stpts, d.ownPos, d.bull, selected = (sel as? MapSel.Stp)?.n) { s -> onSel(MapSel.Stp(s.n)); state.flyTo(s.x!!, s.y!!, maxOf(state.scale, 4f)); MapLayers.follow = false }
@@ -604,13 +609,13 @@ fun LiveMap(
             names.place(this, tm, placed)
 
             // ownship
-            d.ownPos?.let { (ox, oy) -> drawOwnship(pr.toScreen(ox, oy), d.ownHdg, pr) }
+            if (MapLayers.ownship) d.ownPos?.let { (ox, oy) -> drawOwnship(pr.toScreen(ox, oy), d.ownHdg, pr) }
 
             // selection
             selPos?.let { (sx, sy) ->
                 val p = pr.toScreen(sx, sy)
                 drawSelection(p)
-                d.ownPos?.let { (ox, oy) -> drawDashedLine(Hud.Magenta.copy(alpha = 0.6f), pr.toScreen(ox, oy), p, 2f, floatArrayOf(10f, 8f)) }
+                if (MapLayers.ownship) d.ownPos?.let { (ox, oy) -> drawDashedLine(Hud.Magenta.copy(alpha = 0.6f), pr.toScreen(ox, oy), p, 2f, floatArrayOf(10f, 8f)) }
             }
         } }
 
@@ -650,9 +655,11 @@ fun LiveMap(
                     if (hostilesOn) HudChip("Hostiles", MapLayers.hostiles) { MapLayers.hostiles = !MapLayers.hostiles; MapLayers.save() }
                     HudChip("Labels", MapLayers.labels) { MapLayers.labels = !MapLayers.labels; MapLayers.save() }
                     HudChip("All fields", MapLayers.fields) { MapLayers.fields = !MapLayers.fields; MapLayers.save() }
+                    HudChip("My jet", MapLayers.ownship) { MapLayers.ownship = !MapLayers.ownship; MapLayers.save() }
+                    HudChip("Ownship box", MapLayers.ownInfo) { MapLayers.ownInfo = !MapLayers.ownInfo; MapLayers.save() }
                 }
             }
-            if (flightStrip) FlightStrip(d.live, d.bull)
+            if (flightStrip && MapLayers.ownInfo) FlightStrip(d.live, d.bull)
         }
         // The picture is missing whenever BMS is not recording, and a VR board has no pointer to dismiss a corner
         // pill with, so the warning sits in the middle of the map on every copy of it and leaves when data arrives.
@@ -691,6 +698,8 @@ private fun MapOptionsButton() {
             else Text(HostileContacts.OFF, color = Hud.TextDim, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             LayerRow("Labels", MapLayers.labels) { MapLayers.labels = it }
             LayerRow("All airfields", MapLayers.fields) { MapLayers.fields = it }
+            LayerRow("My jet", MapLayers.ownship) { MapLayers.ownship = it }
+            LayerRow("Ownship box", MapLayers.ownInfo) { MapLayers.ownInfo = it }
             HorizontalDivider(color = Hud.Outline.copy(alpha = 0.6f))
             MapLookMenuItems()
         }

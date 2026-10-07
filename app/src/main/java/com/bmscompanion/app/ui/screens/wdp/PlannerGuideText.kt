@@ -100,7 +100,7 @@ internal object PlannerGuideText {
                         why = "without LOAD, FLY saves BMS's old copy of the cartridge over the Planner's.",
                     ),
                     i("**Planner:** **Populate from Planner**: the app's Mission section and the VR boards show your flight on every device."),
-                    i("**Planner:** **Upd Kneeboard**: your DataCard on page 1 and the Coordination Card on page 2 of the cockpit kneeboard (EZBoards is paused in WDP mode)."),
+                    i("**Planner:** **Upd Kneeboard**: the Briefing and Weather on page 1, your DataCard on page 2 and the Coordination Card on page 3 of the cockpit kneeboard (EZBoards is paused in WDP mode)."),
                     i(
                         "**In BMS:** **FLY**. In the jet, from a cold ramp start, load the cartridge on the MFD **DTE** page " +
                             "with **LOAD**; from a taxi or runway start BMS has already loaded it.",
@@ -150,7 +150,10 @@ internal object PlannerGuideText {
                         "Settings…",
                         "WDP's Settings, as the Planner has them. **Show tooltips** explains a control when the mouse rests " +
                             "on it, or on a long press by finger; **Auto load last mission on startup** opens the flight you " +
-                            "planned last when the Planner first opens; **Reload from BMS** reads the save and your cartridge " +
+                            "planned last when the Planner first opens; **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (on by default) " +
+                            "takes every HSD line, PPT and Open 1/Open 2 steerpoint (STPT 81-99) out of your cartridge and the campaign's mission file when **Open " +
+                            "mission…** or **Pick a flight** plans another flight (a TE keeps its own); the maps still suggest " +
+                            "the mission's threats and tracks to add; **Reload from BMS** reads the save and your cartridge " +
                             "again. It also shows the Planner's own folder, User\\BMS Companion Planner inside Falcon BMS, and " +
                             "its DataCards folder, which **Browse…** changes.",
                     ),
@@ -441,12 +444,14 @@ internal object PlannerGuideText {
                     i("**It writes at once, as WDP does**: no question first and no copy of the file kept."),
                     i("It writes only the settings you changed, onto the file as BMS last left it, so anything BMS changed meanwhile stays."),
                     i(
-                        "For a **Tactical Engagement** opened with **Open mission…**, it also updates the TE's own `.ini` " +
-                            "beside the `.tac` (your own TE, or a TE or training that ships with Falcon BMS, as in WDP). " +
-                            "A copy renamed in Windows and a TE whose name a later campaign save shares (“Auto Save”) " +
-                            "are not written, and the answer says why. A TE with no `.ini` of its own is flown on your " +
-                            "cartridge alone, and none is made for it.",
-                        why = "BMS loads that file on top of your cartridge every time the TE is opened.",
+                        "For a save opened with **Open mission…** (a campaign, a TE or a training), it also writes your " +
+                            "target steerpoints, lines and threats into the save's own mission file, the `.ini` beside it " +
+                            "in the theater's Campaign folder, as WDP does. In a campaign it never takes away a steerpoint " +
+                            "of BMS's route there. A copy renamed in Windows and a save whose name a later save of another " +
+                            "kind shares (“Auto Save”) are not written, and the answer says why. A save with no `.ini` of " +
+                            "its own is flown on your cartridge alone, and none is made for it.",
+                        why = "BMS's DTC window loads targets, lines and threats from that file: in a campaign its LOAD reads them " +
+                            "from there, not from your cartridge.",
                     ),
                     i(
                         "Its menu has **Re-read DTC from BMS**, for when BMS has saved the cartridge again (it asks first " +
@@ -524,10 +529,11 @@ internal object PlannerGuideText {
                     ),
                 ),
                 p(
-                    "**In WDP mode Upd Kneeboard starts at page 1** (**Mission set**): the DataCard on page 1 and the " +
-                        "Coordination Card on page 2, of both knees. EZBoards is paused in WDP mode, so the pages it " +
-                        "writes in EZBoards mode are yours. (In EZBoards mode the Mission set leaves EZBoards its pages " +
-                        "and starts at the first pair it does not use, pages 2 and 3 on a stock install.) Whichever wrote " +
+                    "**In WDP mode Upd Kneeboard starts at page 1** (**Mission set**): the Briefing on the left and the " +
+                        "Weather on the right of page 1, the DataCard on page 2 and the Coordination Card on page 3. EZBoards " +
+                        "is paused in WDP mode, so the pages it writes in EZBoards mode are yours. (In EZBoards mode the " +
+                        "Mission set leaves EZBoards its pages and takes the first three it does not use, pages 2, 3 and 4 " +
+                        "on a stock install.) Whichever wrote " +
                         "a page last is what you see, so print after html_brief if you use it. The window shows who wrote " +
                         "each page last.",
                 ),
@@ -760,6 +766,7 @@ internal object PlannerGuideText {
                     i("The strip at the top left says where the pointer is: X/Y, latitude and longitude, the ground, the variation and, with Cursor bullseye, bullseye. Rest the mouse on anything for its facts; by finger the strip follows your tap."),
                     i("**Tap** a tanker's track, a threat, a station or a field: its card says what it is and offers **Add as line**, **Add as PPT**, **Add as PPT…** (WDP's PPT window), **Add as STPT**, **Add to targets**, a TACAN, an ILS or **Charts…**. A tanker's or AWACS's **Add as line** lays its track as WDP does: the box 30,000 ft either side of the leg it holds on, closed, as the map draws it; one of the side's outside your package offers **Orbit box as line**."),
                     i("**Tap an empty spot** (or right-click anywhere) to add a steerpoint, a PPT or a point to a line there."),
+                    i("**Add to Open bank…** (on a field's, a threat's or any point's card) puts it into STPT 81-99, the DTC page's **Open 1** and **Open 2** tabs: pick the slot (each says what it holds) and the steerpoint type. A field goes in as **Land** with its name and elevation, ready as an alternate; a right-click on a field offers the field itself. By finger, a long press on a field or threat in the list opens it directly."),
                     i("A DTC item's card offers **Move** (then tap where it goes), **Change…** and **Take out**."),
                     i("**Auto PPT** fills PPT 56-70 with the threats nearest your route; **Clear PPT** empties them; **Change Area…** and **Clear Lines** are WDP's line tools. Each asks before it replaces anything."),
                     i("**Measure** gives the track and distance between two points; **Save Map** saves the view as a JPEG on the BMS PC; **Fit** goes back to your flight."),
@@ -1082,10 +1089,12 @@ internal object PlannerGuideText {
                         "(`vrp` or `vip`), with WDP's profile name; the other mode's four keep what the cartridge holds.",
                 ),
                 p(
-                    "**In a TE** opened with **Open mission…**, the target steerpoints, lines, threats and weapon targets " +
-                        "also go into the TE's own `.ini`, in place and with no copy, as WDP does (your own TE, or one " +
-                        "that ships with Falcon BMS). A renamed copy and a TE whose name a later campaign save shares " +
-                        "are not written; a TE with no `.ini` gets none.",
+                    "**The save's own mission file:** with a campaign, a TE or a training opened with **Open mission…**, " +
+                        "the target steerpoints, lines, threats and weapon targets also go into the save's own `.ini`, in " +
+                        "place and with no copy, as WDP does (your own save, or one that ships with Falcon BMS), because " +
+                        "BMS's DTC window loads them from that file. In a campaign's file a steerpoint of BMS's route is " +
+                        "never set to 0. A renamed copy and a save whose name a later save of another kind shares are not " +
+                        "written; a save with no `.ini` gets none.",
                 ),
                 p(
                     "**The next mission:** Falcon BMS keeps lines, PPTs, targets and nav offsets in the cartridge until " +
@@ -1200,16 +1209,34 @@ internal object PlannerGuideText {
                             "**Re-read DTC from BMS** (in Save to DTC's menu).",
                     ),
                     row(
-                        "Save to DTC will not write a TE",
+                        "Save to DTC will not write the save's mission file",
                         "The answer says why: a copy renamed in Windows (open it in BMS, SAVE it under the name you want " +
-                            "and open that), a TE whose name a later campaign save shares (“Auto Save”), or a TE with no " +
-                            "`.ini` of its own, which BMS flies on your cartridge alone.",
+                            "and open that), a save whose name a later save of another kind shares (“Auto Save”), or a save " +
+                            "with no `.ini` of its own, which BMS flies on your cartridge alone.",
                         "step5",
+                    ),
+                    row(
+                        "A line or threat vanishes when I press LOAD and SAVE in BMS",
+                        "BMS's LOAD reads lines, threats and target steerpoints from the save's own mission file (the `.ini` " +
+                            "beside the save), not from your cartridge, and SAVE writes back what it loaded. Save to DTC writes " +
+                            "both when the Planner knows the save: open it with **Open mission…** (or PRINT the briefing of the " +
+                            "newest save), Save to DTC again, then LOAD and SAVE in BMS.",
+                        "step6",
                     ),
                     row(
                         "My threats or lines are not in the jet",
                         "LOAD was not pressed in BMS's DTC window before TAKEOFF (step 6), or another flight or seat was " +
-                            "picked after it. On a ramp start, check that you pressed LOAD on the DTE page.",
+                            "picked after it. On a ramp start, check that you pressed LOAD on the DTE page. A line is drawn " +
+                            "on the HSD only while its LINE option (LINE1-4) is selected on the HSD's control page (CNTL).",
+                        "step6",
+                    ),
+                    row(
+                        "A line or threat from an earlier mission comes back",
+                        "BMS's DTC window keeps what you last loaded until you LOAD again, and writes it into the next " +
+                            "save. The Planner clears what it saved for an earlier mission when a new one begins, and with " +
+                            "**Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (Settings, on by default) **Open mission…** " +
+                            "takes every line, threat and STPT 81-99 out, whoever made it: press **LOAD** in BMS's DTC window after " +
+                            "opening the new mission, then **SAVE**.",
                         "step6",
                     ),
                     row(

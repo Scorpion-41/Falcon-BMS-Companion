@@ -126,8 +126,9 @@ object GuideOutcome {
     private val NAMES = listOf(
         "Open mission…", "Save to DTC", "Populate from Planner", "Upd Kneeboard", "Guide", "Full window",
         "Back to BMS briefing", "Re-read DTC from BMS", "Save to DTC and populate", "WDP mode", "EZBoards mode",
-        // the toolbar's Options menu (WDP's: Settings…, About WDP), and the Settings window's two switches
-        "Options", "Settings…", "About WDP", "Show tooltips", "Auto load last mission on startup",
+        // the toolbar's Options menu (WDP's: Settings…, About WDP), and the Settings window's switches (1.3.9: the PC's
+        // Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints)
+        "Options", "Settings…", "About WDP", "Show tooltips", "Auto load last mission on startup", "Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints",
         // 1.3.8: the toolbar's Steps (the evening in ten lines) and WDP's ATO Target List as the last page tab
         "Steps", "ATO Targets",
         // 1.3.8: Pop-up, HADB and TOSS under one Attack tab (a rail beside the page)

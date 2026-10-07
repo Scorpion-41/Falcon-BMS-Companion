@@ -67,5 +67,11 @@
  "Section/tools": "Measure, Save Map and Fit.",
  "Section/lines": "The cartridge's four lines.",
  "Section/legend": "What each colour means.",
- "Section/cheats": "What BMS holds that your side has not seen."
+ "Section/cheats": "What BMS holds that your side has not seen.",
+ "OpenBank": "Puts this point into STPT 81-99, the DTC page's Open 1 and Open 2 tabs: choose the slot and the steerpoint type. An airfield goes in as Land with its name and elevation (an alternate); a threat as Precision; anything else as Nav. On a phone, a long press on a field or threat in the list opens it directly.",
+ "OpenBankWhat": "What goes in: the airfield under a right-click, or the exact point clicked.",
+ "OpenBankType": "The steerpoint's type, as the Open tabs' Change window sets it. Land for an alternate, Precision for a target.",
+ "OpenBankMore": "Every type the DTC's Change window offers.",
+ "OpenBankSlot": "The slot it goes into, with what each slot holds now. An occupied slot is replaced only after a question.",
+ "OpenBankAdd": "Places it on the DTC page as its own edit; Save to DTC writes it to the cartridge."
 }

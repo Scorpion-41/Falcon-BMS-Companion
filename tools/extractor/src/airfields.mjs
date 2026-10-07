@@ -34,6 +34,10 @@ import crypto from 'node:crypto';
 import { parseRecords, findFileCI, DATA, num } from './util.mjs';
 import { fieldTriangles, pavementShapes } from './pavement.mjs';
 import { shipShapes } from './ships.mjs';
+import { modelFootprint, placeFootprint } from './footprint.mjs';
+
+/** What this run made of the towers and the cables; airfieldrun.mjs prints it. */
+export const groundStats = { towers: 0, towerModel: 0, towerBox: 0, towerKind: 0, cables: 0, cableFields: 0, strayCables: 0 };
 
 const TYPE = {
   RUNWAY_END: 1, TAXI_START: 2, TAXI: 3, RUNWAY_EDGE: 8, RUNWAY_CROSS: 9,
@@ -56,11 +60,22 @@ const RUNWAY_HEADER = 8;
  * The asphalt itself cannot be drawn from data: a field's pavement is one custom model — Osan's is a single object
  * called "RKSO Taxiways" — so the taxiways on the chart are BMS's own ground network drawn at real width.
  */
+const CONTROL_TOWER = /control tower|ctrl tower|cntrl tower|\bATC$/i;
+
+/**
+ * BMS's arresting gear: "Arrestor System 1", "2", "4", "5", each an object laid across a runway at the cable's own
+ * position, its heading across the strip. "Arrestor Cable Sign" is the marker beside one (two per cable).
+ */
+const ARRESTOR = /^Arrestor System\b/i;
+
 const FEATURE_KINDS = [
   // pavement first: patches of apron and taxiway, drawn under everything else
   [/taxiway (extension|curve)|pk area|parking area|apron/i, 'pavement', 220, 150],
   [/runway (section|stopway)/i, 'pavement', 300, 170],
-  [/control tower/i, 'tower', 60, 60],
+  // BMS's own names for a control tower: "Control Tower", "Control Tower_02", "Istrana Ctrl Tower", "Cervia Cntrl
+  // Tower", "LGAV ATC" — never a watchtower, a water or radio tower, or "RKSS Old ATC Part 3" (a piece of a terminal).
+  // Drawn as the shape the tower's own model has from above (footprint.mjs), not at the size given here.
+  [CONTROL_TOWER, 'tower', 60, 60],
   [/\bHAS\b|shelter/i, 'shelter', 84, 66],
   [/hangar|advance maintenance/i, 'hangar', 200, 140],
   [/fuel|\bpol\b|tank/i, 'fuel', 70, 70],
@@ -144,11 +159,12 @@ function readHeaders(dir, id) {
   }));
 }
 
-function readFeatures(dir, id, db, heading) {
+function readFeatures(th, dir, id, db, heading) {
   const raw = parseRecords(findFileCI(dir, `FED_${id}.XML`), 'FED') || [];
   const c = Math.cos(rad(heading)), s = Math.sin(rad(heading));
   const out = [];
   const signs = [];
+  const arrestors = [];
   for (const f of raw.filter(Boolean)) {
     const ct = db.ct[+f.FeatureCtIdx];
     const name = ct ? db.fcd[+ct.EntityIdx]?.Name || '' : '';
@@ -159,13 +175,82 @@ function readFeatures(dir, id, db, heading) {
 
     const sign = name.match(TAXI_SIGN);
     if (sign) { signs.push({ l: sign[1], e, n }); continue; }
+    if (ARRESTOR.test(name)) { arrestors.push({ e, n, h: norm360((num(f.Heading) ?? 0) - heading) }); continue; }
 
     const hit = FEATURE_KINDS.find(([re]) => re.test(name));
     if (!hit) continue;
     const [, kind, w, l] = hit;
-    out.push({ k: kind, e, n, h, w, l });
+    const feature = { k: kind, e, n, h, w, l };
+    if (kind === 'tower' && ct) {
+      // the tower as it is from above, out of its own model; see footprint.mjs
+      const fp = modelFootprint(th, +ct.GraphicsNormal);
+      if (fp && fp.rings.length) {
+        // placed as the field's pavement models are (by the object's own heading, at its own offset), then turned
+        // by the objective's heading as its points are
+        const place = (rings) => placeFootprint(rings, e0, n0, num(f.Heading) ?? 0).map((r) => (heading ? turnRing(r, heading) : r));
+        feature.p = place(fp.rings);
+        if (fp.top?.length) feature.top = place(fp.top);
+        feature.src = fp.src;
+        if (fp.height) feature.ht = fp.height;
+        // the box it fills, across and along its own heading, so a cull has a size to go by
+        const ext = extentAlong(fp.rings);
+        feature.w = Math.max(4, Math.round(ext.w));
+        feature.l = Math.max(4, Math.round(ext.l));
+      }
+    }
+    out.push(feature);
   }
-  return { features: out, signs };
+  return { features: out, signs, arrestors };
+}
+
+/** A ring in field feet turned by the objective's own heading, the way its points are (every stock field has 0). */
+function turnRing(r, heading) {
+  const c = Math.cos(rad(heading)), s = Math.sin(rad(heading));
+  const out = [];
+  for (let i = 0; i + 1 < r.length; i += 2) out.push(Math.round(r[i] * c + r[i + 1] * s), Math.round(-r[i] * s + r[i + 1] * c));
+  return out;
+}
+
+/** How wide (model x) and long (model z) a set of model rings is. */
+function extentAlong(rings) {
+  let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const r of rings) for (let i = 0; i + 1 < r.length; i += 2) {
+    x0 = Math.min(x0, r[i]); x1 = Math.max(x1, r[i]);
+    z0 = Math.min(z0, r[i + 1]); z1 = Math.max(z1, r[i + 1]);
+  }
+  return { w: x1 - x0, l: z1 - z0 };
+}
+
+/**
+ * The arresting cables of each runway, from the "Arrestor System" objects BMS lays across it.
+ *
+ * Each object goes to the runway it lies across: within the strip's width (plus a margin for the housings either
+ * side) and along it from 1,500 ft short of one end to 1,500 ft past the other, since some fields put a barrier in
+ * the overrun. The distance is measured along the centre line from each end of the runway rectangle — the ends BMS
+ * draws, which on every stock field are the thresholds. Returns the objects no runway would take, for the report.
+ */
+function assignCables(runways, arrestors) {
+  const stray = [];
+  for (const a of arrestors) {
+    let best = null;
+    for (const r of runways) {
+      const [p, q] = r.ends;
+      if (!p || !q) continue;
+      const len = span(p.at, q.at);
+      if (len < 1) continue;
+      const ue = (q.at.e - p.at.e) / len, un = (q.at.n - p.at.n) / len;
+      const along = (a.e - p.at.e) * ue + (a.n - p.at.n) * un;
+      const across = (a.e - p.at.e) * un - (a.n - p.at.n) * ue;
+      if (Math.abs(across) > r.widthFt / 2 + 60 || along < -1500 || along > len + 1500) continue;
+      if (!best || Math.abs(across) < Math.abs(best.across)) best = { r, along, across, len, ue, un, p };
+    }
+    if (!best) { stray.push(a); continue; }
+    // on the centre line, where the cable crosses it
+    const at = { e: Math.round(best.p.at.e + best.ue * best.along), n: Math.round(best.p.at.n + best.un * best.along) };
+    (best.r.cables ||= []).push({ e: at.e, n: at.n, d: [Math.round(best.along), Math.round(best.len - best.along)] });
+  }
+  for (const r of runways) if (r.cables) r.cables.sort((x, y) => x.d[0] - y.d[0]);
+  return stray;
 }
 
 /**
@@ -468,7 +553,16 @@ export async function buildAirfields(th, airports, geo, db) {
       return r;
     }).filter((r) => r.nodes.length > 1);
 
-    const furniture = readFeatures(dir, id, db, heading);
+    const furniture = readFeatures(th, dir, id, db, heading);
+    // the arresting cables, to the runway each lies across
+    const strayCables = assignCables(runways, furniture.arrestors);
+    groundStats.strayCables += strayCables.length;
+    for (const a of strayCables) warnings.push(`${airport.name}: an arresting cable at ${a.e},${a.n} lies across none of its runways`);
+    {
+      const n = runways.reduce((t, r) => t + (r.cables?.length ?? 0), 0);
+      groundStats.cables += n;
+      if (n) groundStats.cableFields++;
+    }
 
     // The asphalt: the real triangles out of the field's own 3D models — the taxiways, the aprons, the
     // dispersals and the turnarounds joining the runway ends, none of which the ground network describes. The
@@ -543,6 +637,13 @@ export async function buildAirfields(th, airports, geo, db) {
     for (const r of runways) for (const c of r.corners) near.push(c.e, c.n);
     for (const r of paved || []) for (let i = 0; i + 1 < r.length; i += 2) near.push(r[i], r[i + 1]);
     const kept = furniture.features.filter((f) => nearTheField(f.e, f.n, near));
+    for (const f of kept) {
+      if (f.k !== 'tower') continue;
+      groundStats.towers++;
+      if (f.src === 'model') groundStats.towerModel++;
+      else if (f.src === 'box') groundStats.towerBox++;
+      else groundStats.towerKind++;
+    }
     const keptSigns = furniture.signs.filter((f) => nearTheField(f.e, f.n, near));
 
     // Which spots have a roof over them, so the chart can show it and the clearance can say it.

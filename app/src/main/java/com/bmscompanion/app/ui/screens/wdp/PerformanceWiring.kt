@@ -633,7 +633,14 @@ class PerformanceWiring(
         loadout = l
         val f16 = !onOtherAircraft() && plan.cboType.text.contains("F-16", ignoreCase = true)
         // another aircraft is shown as the app's aircraft reference pictures it, where WDP's window has its F-16
-        val pic = if (f16) null else aircraftFor(plan.cboType.text)?.pic
+        // (by its own name; by the flight model only when every aircraft flying it has the same picture, since a
+        // flight model is shared by national variants)
+        val pic = if (f16) null else plan.cboType.text.let { type ->
+            val n = PerformancePlan.norm(type)
+            aircraftList.firstOrNull { PerformancePlan.norm(it.name) == n }?.pic
+                ?: aircraftList.filter { a -> a.variants.any { v -> v.spec.datFile?.let { PerformancePlan.norm(it) } == n } }
+                    .map { it.pic }.distinct().singleOrNull()
+        }
         // WDP asks its question whenever a mission is open (`fclsMain.blnMissionLoaded`): a printed briefing or a save's flight
         val missionOpen = mission?.briefing != null || mission?.flight != null
         // the jet's conformal tanks, when it carries them, are part of its drag in the window as on the page

@@ -272,11 +272,12 @@ fun EncyclopediaScreen(nav: NavHostController) {
                     }
                 }
                 val rows = rememberLazyListState()
+                // the search stays at the top however far the list is scrolled; the filters scroll with it
+                com.bmscompanion.app.ui.components.PinnedSearchField(q, { q = it }, "Search vehicles, ships, aircraft, munitions")
                 Box(Modifier.fillMaxSize()) {
                 LazyColumn(Modifier.fillMaxSize(), state = rows, contentPadding = PaddingValues(bottom = 24.dp, end = 20.dp)) {
                     item {
-                        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SearchField(q, { q = it }, "Search vehicles, ships, aircraft, munitions")
+                        Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 com.bmscompanion.app.ui.components.HudChip(if (theaterOnly) "Current theater only" else "All theaters", theaterOnly) { theaterOnly = !theaterOnly }
                                 Spacer(Modifier.weight(1f))

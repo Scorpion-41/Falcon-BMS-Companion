@@ -22,7 +22,7 @@ import kotlin.math.sqrt
  * | WDP source (campaign / main form) | the card's fields | the app's source |
  * |---|---|---|
  * | `FlightTable[Sel].waypoints[i]` `.GridX/.GridY` (km cells, x east) | flight plan heading, distance, speed | `WdpMission.steerpoints[i]` feet (per slot: the cartridge's, else BMS's mission file route, else the save's cell), laid along the briefing's own legs where none places it: `GridX = ⌊y/3279.98⌋`, `GridY = ⌊x/3279.98⌋` (a campaign waypoint sits mid-cell, so this recovers the cell) |
- * | `.GridZ` (tens of feet) | `lblAltN`, the fuel ladder | `Dtc.steerpoints[i].altFt / 10` |
+ * | `.GridZ` (tens of feet) | `lblAltN`, the fuel ladder | the save's waypoint `CampWaypoint.altFt / 10`, else the briefing's ALT column ("24.0M"); never a steerpoint's z, which BMS 4.38.1 writes as the point's ground elevation |
  * | `.Arrive/.Depart` (campaign ms) | `lblTOSN`, speed | `BriefSteerpoint.time` (and the "Departure:" time a hold's comment carries), as ms from the start of a first campaign day ([dayStart]: a taxi time before it is blank) |
  * | `.Action` | `lblActionN`, landing and refuel rules | `BriefSteerpoint.desc`/`action` mapped to BMS's waypoint actions (`actionOf`) |
  * | `.Formation` | `txtFormationN` | `BriefSteerpoint.formation` (`formationOf`) |

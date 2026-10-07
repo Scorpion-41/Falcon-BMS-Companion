@@ -380,6 +380,44 @@ object ShellOutcome {
                 "Options opens WDP's Options menu: Settings…, About WDP (the ATO Target List is a tab now)", { "items drawn: $inMenu" })
             d.png(File(dir, "pc-options.png"))
             window("Options/Settings", PlannerWindow.SETTINGS, null, "Options → Settings… opens the Planner's settings (WDP's Settings window)")
+            // Settings: its switches pressed; Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints is the PC's (1.3.9), read and set over
+            // /api/planner/settings — pressed where the check reaches a PC, else shown greyed with the reason
+            run {
+                val ps = com.bmscompanion.app.ui.screens.wdp.PlannerSettings
+                edt { PlannerWindows.show(PlannerWindow.SETTINGS) }
+                d.settle(6, 20)
+                val until = System.currentTimeMillis() + 3_000
+                while (edt { ps.cleanOpened == null && ps.cleanOpenedNote == null } && System.currentTimeMillis() < until) { Thread.sleep(50); d.settle(1) }
+                d.settle(3)
+                r.check(d.rect("planner/Settings/CleanOpened") != null && d.rect("planner/Settings/Tooltips") != null && d.rect("planner/Settings/AutoLoad") != null,
+                    "Settings shows Show tooltips, Auto load last mission and Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints")
+                for (key in listOf("Tooltips", "AutoLoad")) {
+                    val before = edt { if (key == "Tooltips") ps.tooltips else ps.autoLoad }
+                    d.clickKey("planner/Settings/$key")
+                    val flipped = edt { if (key == "Tooltips") ps.tooltips else ps.autoLoad } != before
+                    d.clickKey("planner/Settings/$key")
+                    r.check(flipped && edt { if (key == "Tooltips") ps.tooltips else ps.autoLoad } == before, "Settings: $key pressed turns it over, pressed again back")
+                }
+                val c0 = edt { ps.cleanOpened }
+                if (c0 != null) {
+                    d.clickKey("planner/Settings/CleanOpened"); d.settle(4, 30)
+                    val w = System.currentTimeMillis() + 2_000
+                    while (edt { ps.cleanOpened } == c0 && System.currentTimeMillis() < w) { Thread.sleep(50); d.settle(1) }
+                    val flipped = edt { ps.cleanOpened } == !c0 && Bridge.settings.value.CleanOpenedMission == !c0
+                    d.clickKey("planner/Settings/CleanOpened"); d.settle(4, 30)
+                    val w2 = System.currentTimeMillis() + 2_000
+                    while (edt { ps.cleanOpened } != c0 && System.currentTimeMillis() < w2) { Thread.sleep(50); d.settle(1) }
+                    r.check(flipped && edt { ps.cleanOpened } == c0 && Bridge.settings.value.CleanOpenedMission == c0,
+                        "Settings: Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints pressed turns the PC's setting over, pressed again back (was $c0)")
+                } else {
+                    d.clickKey("planner/Settings/CleanOpened"); d.settle(3, 20)
+                    r.check(edt { ps.cleanOpened } == null && edt { ps.cleanOpenedNote } != null,
+                        "Settings: with no PC reached, Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints is greyed and says why (\"${edt { ps.cleanOpenedNote }}\")")
+                }
+                d.png(File(dir, "pc-settings.png"))
+                edt { PlannerWindows.close() }
+                d.settle(3)
+            }
             d.clickKey("planner/Shell/Options")
             window("Options/Credit", PlannerWindow.GUIDE, "credit", "Options → About WDP (Falcas) opens the guide's credit page")
             r.check(d.rect("planner/Shell/Menu/OPTIONS") == null, "a pick closes the Options menu")
@@ -603,7 +641,8 @@ object ShellOutcome {
             edt { PlannerMissionState.kind = CampKind.CAMPAIGN; s.dtc.onValue("mxtBingo", "3500"); s.dtc.onValue("mxtBingo.leave", "") }
             d.settle(2)
             d.clickKey("planner/Shell/SaveToDtc")
-            r.check(rec.teSaves.size == te + 2, "a campaign save: the cartridge only (its mission file is BMS's route)")
+            r.check(rec.teSaves.size == te + 3, "a campaign save: named to the PC too, whose LOAD takes lines, PPTs and targets from its mission file (D46)",
+                { "TE saves ${rec.teSaves.size - te}" })
             dismissAll(); d.settle(2)
             d.clickKey("planner/Shell/Identity", settleAfter = false)
             d.settle(4)

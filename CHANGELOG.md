@@ -1,5 +1,87 @@
 # Changelog
 
+## 1.3.9 (BMS 4.38) — unreleased
+
+**Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install**; existing settings are kept.
+
+This release reworks how the Planner's lines, threat rings and steerpoints reach the jet, adds towers, arresting
+cables and free rotation to the ground charts, and replaces many Reference pictures with checked photographs.
+
+### Lines, PPTs and steerpoints: from the Planner to the HSD
+
+Falcon BMS keeps the HSD's four lines, the threat rings (PPTs), the precision targets and the Open 1/Open 2
+steerpoints (STPT 81-99) in two places: the pilot's **callsign file** (`User\Config\<callsign>.ini`) and, in a
+campaign, the save's **mission file** (`Data\Campaign\<save name>.ini`). In a campaign, the DTC window's **LOAD** reads
+lines, PPTs and targets from the mission file; **SAVE** writes BMS's copy to both files; **FLY** writes BMS's copy to
+the callsign file. In 1.3.8 the Planner wrote only the callsign file, so LOAD followed by SAVE replaced what had been
+planned with the mission file's contents, and lines and threat rings disappeared from BMS and from the Planner.
+
+How it works in 1.3.9:
+
+- **Open mission… starts clean.** When Open mission… or Pick a flight plans another flight, every line, PPT and
+  Open 1/Open 2 steerpoint is removed from the callsign file and the save's mission file. Kept: the route, precision
+  and Recon targets (STPT 15-22), weapon targets, what the Planner already saved for that flight, and everything in a
+  TE's or a training's own file. The setting **Start each opened mission with clean lines, PPTs and Open 1/2
+  steerpoints** (Planner → Options → Settings) is on by default; turn it off to keep lines drawn in BMS from mission to
+  mission.
+- **The maps suggest; the pilot chooses.** After opening, the Mission map still draws the briefed threats and the
+  tanker and AWACS tracks, and the Planner's Map page offers each as a one-tap **Add as PPT** or **Add as line**.
+  Nothing is added to the DTC until the pilot adds it.
+- **Save to DTC writes both files.** Lines, PPTs and target steerpoints go to the callsign file and the open save's
+  mission file, so BMS's LOAD finds them.
+- **Then in BMS:** open the DTC window, press **LOAD**, check the tabs, press **SAVE**, then FLY. FLY without LOAD
+  writes BMS's earlier copy over the callsign file. In the cockpit, a line shows on the HSD while its LINE1-4 option
+  is selected on the HSD control page.
+- **Until the next Open mission…** everything stays as saved, including the pilot's own additions. A PRINT or a mode
+  switch removes only items the Planner saved for other flights.
+
+### Planner
+
+- **Open 1 and Open 2 from the Map page.** **Add to Open bank…** on any point, airfield, threat or navaid places it in
+  STPT 81-99 with a chosen slot and steerpoint type. An airfield goes in as Land with its name and elevation, ready as
+  an alternate; the point appears on the DTC page's Open 1/Open 2 tab and is saved with Save to DTC.
+- **Upd Kneeboard's Mission set** is three pages: Briefing and Weather, the DataCard, then the Coordination Card
+  (pages 1-3 in WDP mode; the first three pages EZBoards does not use in EZBoards mode). An unchanged plan from an
+  earlier version is laid again in the new order; a plan changed by hand is kept.
+
+### Ground charts and airfields
+
+- **Control towers** are drawn as their shape from above, from each tower's BMS 3D model, with a **TWR** label that
+  never covers a spot number.
+- **Arresting cables** are drawn across the runway where BMS places them and listed with their distance from each
+  runway end, on the Taxi page and in the airfield page's runway cards. BMS does not identify the type of gear.
+- **Turning the chart.** Two buttons turn the field to fill the screen or by 90°, and two fingers turn it freely on a
+  touch screen; labels stay upright and the north arrow returns the chart to north up. Held upright, the chart opens
+  turned to fill the page, and a carrier's deck always does (bow up or across).
+- **Larger chart in portrait.** On a tablet or phone held upright the chart takes most of the page; the clearance and
+  ramp spots sit in a panel below it that can be dragged up or folded away.
+- **Nothing drawn over the chart.** The field's name, runways, cables and ramp details are a card under the chart.
+- **Hide your own jet.** **My jet** on the Mission map and the Taxi page hides the ownship symbol; **Ownship box**
+  hides the ownship figures beside the map.
+- **Reference on wide screens.** Picking an airfield folds the list away so the airfield uses the full width; the back
+  arrow brings the list back with its search intact. A frequency the field does not have reads "none".
+
+### Reference
+
+- **Photographs.** Many aircraft, helicopters, air defences and stores, including most that had no picture, show a
+  higher-resolution photograph of the same type and air arm from Wikimedia Commons (public domain or Creative
+  Commons), with a credit line under it; About → Credits lists every photograph with its author and licence.
+- **Pictures match their own entry.** An entry shows the picture BMS links to it, one of the same type in the same air
+  arm's markings, or none; it no longer borrows another nation's or variant's. The add-on theaters' own TacRef pictures
+  are included.
+- **Arsenal.** BMS's empty placeholder slots ("*free", "--Free Slot--") no longer appear. The search field stays at the
+  top of every Reference list. A store's page shows its picture, Tactical reference and General info first, then
+  **Carried by** as a folded tree of aircraft families. An aircraft's theater variant is chosen from a drop-down, and
+  its stations wrap instead of running off the card.
+
+### Fixed
+
+- **Lines and PPTs disappeared after LOAD and SAVE in BMS's DTC window** in a campaign (see above).
+- **The DataCard's Alt column** showed the ground elevation under each steerpoint instead of its planned altitude
+  whenever the cartridge held the route; the Performance page's cruise altitude and fuel figures followed it.
+- **Hellenic F-16s showed a Turkish F-16** in the Reference section, and several other entries showed another type's
+  or nation's picture.
+
 ## 1.3.8 (BMS 4.38) — October 2026
 
 **Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install**; existing settings are kept.

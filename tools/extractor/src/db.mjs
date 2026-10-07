@@ -39,6 +39,11 @@ export function loadDb(th) {
   const tacrefFile = findFileCI(th.terrDataDir, 'TacRefDB.xml') || path.join(DATA, 'TerrData/TacRefDB.xml');
   db.files.tacref = tacrefFile;
   db.tacref = parseTacRef(tacrefFile);
+  // the class table a TacRef file was written against: the Objects folder beside it (Data/TerrData/TacRefDB.xml →
+  // Data/TerrData/Objects). Many theaters borrow another's TacRef, whose ClassTable numbers then name rows of a
+  // table that is not theirs (`tacrefFor` in catalog.mjs).
+  db.files.tacrefObjects = findFileCI(path.dirname(tacrefFile), 'Objects');
+  db.tacrefOwn = !!db.files.tacrefObjects && path.resolve(db.files.tacrefObjects).toLowerCase() === path.resolve(th.objectDir).toLowerCase();
   dbCache.set(key, db);
   return db;
 }
@@ -73,6 +78,23 @@ export function parseBmsRack(text) {
     }
   }
   return { racks, groups };
+}
+
+/** The class-table row `n` of a theater's database, by what it is: its entity record's name (EntityType 5 = VCD, a vehicle; 6 = WCD, a weapon). */
+const ENTITY_TABLE = { 5: 'vcd', 6: 'wcd' };
+export function ctName(db, n) {
+  const c = db.ct[n];
+  if (!c) return null;
+  return db[ENTITY_TABLE[+c.EntityType]]?.[+c.EntityIdx]?.Name?.trim() ?? null;
+}
+
+/** The database a borrowed TacRef was written for (its own Objects folder), loaded once. */
+export function tacrefHomeDb(db) {
+  if (db.tacrefOwn || !db.files.tacrefObjects) return null;
+  if (!db.tacrefHome) {
+    db.tacrefHome = loadDb({ objectDir: db.files.tacrefObjects, simDir: DEFAULT_SIM, terrDataDir: path.dirname(db.files.tacref) });
+  }
+  return db.tacrefHome;
 }
 
 const WCLASS = ['aim', 'rocket', 'bomb', 'gun', 'ecm', 'tank', 'agm', 'harm', 'sam', 'gbu', 'camera'];

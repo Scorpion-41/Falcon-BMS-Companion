@@ -476,6 +476,7 @@ object CampTest {
                 blocks(made).zip(blocks(printed)).forEach { (m, p) -> appendLine("emergency made    $m" + if (m != p) "\nemergency printed $p" else "") }
                 check("[10] the emergency procedures (distress call, CSAR, the alternate and where it is) are the printed ones", blocks(made) == blocks(printed), "")
                 check("[10] WDP's intelligence is made for the flight (the team part read)", flight.intel != null && flight.intel!!.ground.isNotEmpty(), "${flight.intel}")
+                cardAltitudes(th.appTheater, th.name, file.name, flight, printed, check)
                 appendLine()
                 appendLine("CampFlight JSON (${Bridge.json.encodeToString(com.bmscompanion.app.data.mission.CampFlight.serializer(), flight).length} characters):")
                 appendLine(Bridge.json.encodeToString(com.bmscompanion.app.data.mission.CampFlight.serializer(), flight))
@@ -768,6 +769,48 @@ object CampTest {
             (1..5).map { "txtBrfSituation$it" } + (1..9).map { "txtBrfIntel$it" } + (1..10).map { "txtBrfObjective$it" } + (1..5).map { "txtRoe$it" } +
             listOf("lblAtis1", "pnlWx.lines")
         for (n in boxes) appendLine("  %-22s %s".format(n, v[n]?.replace("\n", " | ") ?: "(none)"))
+    }
+
+    /**
+     * The DataCard's Alt column for the briefed flight of a real save: every row the card prints an altitude on (not a
+     * landing, not after one) is the save's planned altitude (GridZ × 10 ft, as WDP's CreateFlightplan), whatever the
+     * cartridge and BMS's mission file hold as the steerpoints' z — which BMS 4.38.1 writes as the ground elevation
+     * (1.3.8's card printed those). Three ways in: Open mission… with Precision Yes and the cartridge holding the route,
+     * the same with No, and the printed briefing with the cartridge and BMS's route.
+     */
+    private fun cardAltitudes(
+        appTheater: String?, theaterName: String, fileName: String, flight: com.bmscompanion.app.data.mission.CampFlight,
+        printed: com.bmscompanion.app.data.mission.Briefing, check: (String, Boolean, String) -> Unit,
+    ) {
+        val theater = kotlinx.coroutines.runBlocking { com.bmscompanion.app.data.Repo.index().theaters.firstOrNull { it.id == appTheater } }
+        val route = flight.route.take(24)
+        // the route as BMS writes it into the cartridge and the mission file: each point's z its ground elevation
+        val ground = route.withIndex().map { (i, w) ->
+            com.bmscompanion.app.data.mission.DtcPoint(n = if (w.n > 0) w.n else i + 1, x = w.x, y = w.y, altFt = 123.0 + i, action = w.action)
+        }
+        val dtc = com.bmscompanion.app.data.mission.Dtc(steerpoints = ground)
+        val ref = com.bmscompanion.app.data.mission.CampRef(theaterName, fileName, flight.row.id)
+        val ways = listOf(
+            "Open mission…, Precision Yes" to com.bmscompanion.app.ui.screens.wdp.WdpMission(briefing = flight.briefing, dtc = dtc, theater = theater, flight = flight, ref = ref, precision = true),
+            "Open mission…, Precision No" to com.bmscompanion.app.ui.screens.wdp.WdpMission(briefing = flight.briefing, dtc = dtc, theater = theater, flight = flight, ref = ref, precision = false),
+            "the printed briefing" to com.bmscompanion.app.ui.screens.wdp.WdpMission(briefing = printed, dtc = dtc, theater = theater,
+                route = com.bmscompanion.app.data.mission.MissionRoute(steerpoints = ground)),
+        )
+        for ((way, mission) in ways) {
+            val w = com.bmscompanion.app.ui.screens.wdp.DataCardWiring()
+            kotlinx.coroutines.runBlocking { w.prepare(mission) { "" } }
+            val v = w.values(emptyList())
+            var rows = 0
+            val bad = ArrayList<String>()
+            for (r in 2..route.size) {
+                if (route[r - 2].action == 7 || route[r - 1].action == 7) continue
+                rows++
+                val want = ((route[r - 1].altFt / 10.0).toInt() * 10).toString()
+                if (v["lblAlt$r"] != want) bad += "row $r '${v["lblAlt$r"]}', want $want"
+            }
+            check("[10] the DataCard's Alt column is the save's planned altitude, not the steerpoints' ground elevation ($way, $rows rows)",
+                rows > 0 && bad.isEmpty(), if (bad.isEmpty()) (2..route.size).joinToString(" ") { "${it}:${v["lblAlt$it"]}" } else bad.joinToString("; "))
+        }
     }
 
     /** The BMS folder above [file]: the first parent that holds `Data/TerrData/TheaterDefinition/theater.lst`. */

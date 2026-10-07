@@ -1,6 +1,13 @@
 package com.bmscompanion.app.ui.screens
 
 import androidx.compose.material.icons.filled.FitScreen
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.automirrored.filled.RotateRight
+import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,6 +35,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -80,6 +88,57 @@ object TaxiPrefs {
         set(v) { night = if (v) 1 else 0; Repo.putInt(NIGHT_KEY, night) }
 
     val inks: ChartInks get() = if (darkChart) ChartInks.night else ChartInks.day
+
+    private const val TURN_KEY = "taxi_chart_turn"
+    private const val TURN_TALL_KEY = "taxi_chart_turn_tall"
+    private var turnPref by mutableStateOf(Repo.getInt(TURN_KEY, 0))
+    // an upright chart (a tablet or phone held upright) opens turned to fit: a field drawn north up there filled a third
+    private var turnTallPref by mutableStateOf(Repo.getInt(TURN_TALL_KEY, TURN_FIT))
+
+    // a carrier's deck always opens turned to fit: its "north" is the bow, so north up has no meaning there and a long
+    // deck drawn upright in a wide box filled a sliver of it
+    private const val TURN_DECK_KEY = "taxi_chart_turn_deck"
+    private var turnDeckPref by mutableStateOf(Repo.getInt(TURN_DECK_KEY, TURN_FIT))
+
+    /** The chart box is taller than wide: set after each layout by the chart (SideEffect), never during composition. */
+    var tall by mutableStateOf(false)
+
+    /** The chart shows a ship's deck: set by the page (SideEffect), never during composition. */
+    var deck by mutableStateOf(false)
+
+    /**
+     * Which way the chart is turned on this device, kept apart for a carrier's deck ([deck]), an upright chart ([tall])
+     * and any other: [TURN_FIT] turns the field to whatever angle fills the page (the boards' `bestFitHeading`), 0 is
+     * north up, 90, 180 and 270 the heading put up the page. A deck and an upright chart start at [TURN_FIT], otherwise
+     * north up. Kept between launches.
+     */
+    var turn: Int
+        get() = when { deck -> turnDeckPref; tall -> turnTallPref; else -> turnPref }
+        set(v) {
+            when {
+                deck -> { turnDeckPref = v; Repo.putInt(TURN_DECK_KEY, v) }
+                tall -> { turnTallPref = v; Repo.putInt(TURN_TALL_KEY, v) }
+                else -> { turnPref = v; Repo.putInt(TURN_KEY, v) }
+            }
+        }
+
+    const val TURN_FIT = -1
+
+    private const val JET_KEY = "taxi_show_jet"
+    private var jetPref by mutableStateOf(Repo.getInt(JET_KEY, 1))
+
+    /** Your own jet's symbol on the chart (the page still works out the spot and route from where it stands). */
+    var showJet: Boolean
+        get() = jetPref != 0
+        set(v) { jetPref = if (v) 1 else 0; Repo.putInt(JET_KEY, jetPref) }
+
+    private const val SHEET_KEY = "taxi_sheet_pct"
+    private var sheetPct by mutableStateOf(Repo.getInt(SHEET_KEY, (TAXI_SHEET_SHARE * 100).toInt()))
+
+    /** How much of a stacked page the cards' panel takes, 0 when it is folded down to its handle. Kept between launches. */
+    var sheetShare: Float
+        get() = sheetPct / 100f
+        set(v) { sheetPct = (v * 100).roundToInt().coerceIn(0, 70); Repo.putInt(SHEET_KEY, sheetPct) }
 }
 
 /** What the jet is doing, when there is a jet. The chart works the same without it. */
@@ -249,6 +308,7 @@ fun TaxiView(
                 TaxiPill("Taxi in", !outbound) { outbound = false }
             }
             TaxiPill(if (TaxiPrefs.darkChart) "Night chart" else "Day chart", false) { TaxiPrefs.darkChart = !TaxiPrefs.darkChart }
+            TaxiPill("My jet", TaxiPrefs.showJet) { TaxiPrefs.showJet = !TaxiPrefs.showJet }
         }
         // what the radio last said to the flight, and so what the page took from it
         radioLine?.takeIf { !isShip }?.let { line ->
@@ -258,7 +318,14 @@ fun TaxiView(
         Spacer(Modifier.height(8.dp))
 
         val chart = @Composable { m: Modifier ->
-            Box(m.border(1.dp, Hud.Outline.copy(alpha = 0.6f), RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp))) {
+            BoxWithConstraints(m.border(1.dp, Hud.Outline.copy(alpha = 0.6f), RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp))) {
+                // a short chart (a tablet on its side under the Mission header) puts the turn buttons beside the zoom ones
+                val shortChart = maxHeight < 330.dp
+                val tallNow = maxHeight > maxWidth
+                SideEffect {
+                    if (TaxiPrefs.tall != tallNow) TaxiPrefs.tall = tallNow
+                    if (TaxiPrefs.deck != isShip) TaxiPrefs.deck = isShip
+                }
                 AirfieldChart(
                     field = field,
                     route = if (isShip) null else route,
@@ -266,17 +333,25 @@ fun TaxiView(
                     modifier = Modifier.fillMaxSize(),
                     path = path?.nodes,
                     highlight = highlight,
-                    you = live.you,
+                    you = live.you.takeIf { TaxiPrefs.showJet },
                     youHeading = live.heading,
                     traffic = live.traffic,
                     selectedSpot = if (outbound) spot?.n else liveSpot,
                     destinationSpot = if (outbound) null else spot?.n,
                     state = chartState,
                     zoomAnchor = spot?.let { p -> route?.nodes?.getOrNull(p.k)?.let { Offset(it.e.toFloat(), it.n.toFloat()) } } ?: live.you,
+                    // the page's own turn (TaxiPrefs.turn): fitted to the box, or a heading put up the page
+                    upHeading = TaxiPrefs.turn.takeIf { it > 0 }?.toDouble(),
+                    fitRotation = TaxiPrefs.turn == TaxiPrefs.TURN_FIT,
                     onTapSpot = if (isShip) null else ({ spot -> pickedSpot = spot.n }),
                 )
-                ChartLegend(Modifier.align(Alignment.TopStart).padding(8.dp), inks, field, route, live, if (outbound) null else chosenRunway)
-                ZoomButtons(Modifier.align(Alignment.BottomEnd).padding(8.dp), inks, chartState)
+                // nothing is drawn over the chart: the field's details are a card under it (FieldCard)
+                // turned, the north arrow in the corner puts it back north up
+                if (TaxiPrefs.turn != 0 || chartState.twist != 0f) Box(
+                    Modifier.align(Alignment.TopEnd).size(52.dp).clip(RoundedCornerShape(10.dp))
+                        .clickable { TaxiPrefs.turn = 0; chartState.reset() }.semantics { contentDescription = "North up" },
+                )
+                ZoomButtons(Modifier.align(Alignment.BottomEnd).padding(8.dp), inks, chartState, sideBySide = shortChart)
             }
         }
 
@@ -284,6 +359,7 @@ fun TaxiView(
             Column(m.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 ClearanceCard(live, spot, outbound, route, liveSpot, clearance, chosenRunway) { highlight = it }
                 SpotCard(route, spot, liveSpot, outbound, chosenRunway) { pickedSpot = it }
+                FieldCard(field, route, live, if (outbound) null else chosenRunway, chosenRunway)
             }
         }
 
@@ -296,20 +372,85 @@ fun TaxiView(
             val h = if (constraints.hasBoundedHeight) maxHeight else 10_000.dp
             when (taxiLayout(w.value, h.value, isShip, wide)) {
                 // the deck gets the whole page: there is no clearance to put beside it
-                TaxiLayout.DECK -> chart(Modifier.fillMaxSize())
+                TaxiLayout.DECK -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    chart(Modifier.fillMaxWidth().weight(1f))
+                    FieldCard(field, route, live, null, chosenRunway)
+                }
                 TaxiLayout.SIDE -> Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     chart(Modifier.weight(1f).fillMaxHeight())
                     cards(Modifier.width(taxiCardsWidth(w.value).dp).fillMaxHeight())
                 }
+                // Upright, the chart takes the page and the cards sit in a panel under it that the pilot drags up
+                // or folds down to its handle (TaxiSheet): a chart held to a third of a tablet was the complaint.
                 TaxiLayout.STACK -> Column(Modifier.fillMaxSize()) {
-                    chart(Modifier.fillMaxWidth().height(taxiChartHeight(h.value).dp))
-                    Spacer(Modifier.height(10.dp))
-                    cards(Modifier.fillMaxWidth().weight(1f))
+                    chart(Modifier.fillMaxWidth().weight(1f))
+                    TaxiSheet(
+                        h.value,
+                        title = when {
+                            clearance != null -> clearance.line
+                            outbound -> "Taxi clearance and ramp spots"
+                            else -> "Taxi in and ramp spots"
+                        },
+                    ) { m -> cards(m) }
                 }
             }
         }
     }
 }
+
+/**
+ * The cards' panel under a stacked chart: a handle the pilot drags (or taps) to raise the panel or fold it away, and
+ * the cards scrolling in what it has. Its share of the page is kept between launches ([TaxiPrefs.sheetShare]).
+ */
+@Composable
+private fun TaxiSheet(pageDp: Float, title: String, content: @Composable (Modifier) -> Unit) {
+    var panel by remember(pageDp) { mutableStateOf(taxiSheetHeight(pageDp, TaxiPrefs.sheetShare)) }
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val most = pageDp * TAXI_SHEET_MAX
+    val drag = androidx.compose.foundation.gestures.rememberDraggableState { px ->
+        panel = (panel - with(density) { px.toDp().value }).coerceIn(0f, most)
+    }
+    val settle = {
+        // a panel dragged nearly shut folds away rather than leaving a sliver of card
+        if (panel < 90f) panel = 0f
+        TaxiPrefs.sheetShare = if (pageDp > 0f) panel / pageDp else TAXI_SHEET_SHARE
+    }
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().height(TAXI_SHEET_HANDLE_DP.dp)
+                .draggable(drag, androidx.compose.foundation.gestures.Orientation.Vertical, onDragStopped = { settle() })
+                .clickable {
+                    panel = if (panel > 0f) 0f else taxiSheetHeight(pageDp, TAXI_SHEET_SHARE)
+                    settle()
+                }
+                .semantics { contentDescription = if (panel > 0f) "Fold the cards away" else "Show the cards" },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Spacer(Modifier.width(4.dp))
+            Box(Modifier.size(width = 34.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(Hud.TextFaint))
+            Spacer(Modifier.width(12.dp))
+            Text(title, Modifier.weight(1f), color = Hud.Text, fontSize = 12.5.sp, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+            androidx.compose.material3.Icon(
+                if (panel > 0f) androidx.compose.material.icons.Icons.Default.ExpandMore else androidx.compose.material.icons.Icons.Default.ExpandLess,
+                null, tint = Hud.Cyan, modifier = Modifier.padding(horizontal = 10.dp).size(22.dp),
+            )
+        }
+        if (panel > 0f) content(Modifier.fillMaxWidth().height(panel.dp))
+    }
+}
+
+/** The handle of the cards' panel under a stacked chart, in dp. */
+const val TAXI_SHEET_HANDLE_DP = 40f
+
+/** The panel's share of a stacked page to begin with: the chart keeps about three fifths, far more on a tall tablet. */
+const val TAXI_SHEET_SHARE = 0.34f
+
+/** The most of the page the panel may be raised to: the chart always keeps the rest. */
+const val TAXI_SHEET_MAX = 0.7f
+
+/** The cards' panel at [share] of a stacked page of [hDp], in dp: never under a card's worth unless folded away. */
+fun taxiSheetHeight(hDp: Float, share: Float): Float =
+    if (share <= 0f) 0f else (hDp * share).coerceIn(minOf(150f, hDp * TAXI_SHEET_MAX), hDp * TAXI_SHEET_MAX)
 
 /** How the Taxi page sets out its chart and its two cards (the clearance and the ramp spots). */
 enum class TaxiLayout {
@@ -317,7 +458,7 @@ enum class TaxiLayout {
     DECK,
     /** the chart on the left taking the whole height, the cards in their own scrolling column on the right */
     SIDE,
-    /** the chart above, held well short of the page's height, the cards scrolling below it */
+    /** the chart above taking most of the page, the cards in a panel under it that drags up or folds away ([TaxiSheet]) */
     STACK,
 }
 
@@ -329,7 +470,7 @@ enum class TaxiLayout {
  * the Mission section's header, source bar, tab strip and the pills, has well under 340 dp of height left — so the
  * chart took all of it, the cards got none, and since the chart keeps every finger for panning there was nothing
  * left to scroll by. So: side by side whenever the room is wider than it is tall (or the screen is wide, as before),
- * and when stacked the chart never takes more than [STACK_CHART_SHARE] of the height.
+ * and when stacked the cards have a panel of their own under the chart ([TaxiSheet], [taxiChartHeight]).
  */
 fun taxiLayout(wDp: Float, hDp: Float, ship: Boolean, wideScreen: Boolean): TaxiLayout = when {
     ship -> TaxiLayout.DECK
@@ -340,11 +481,11 @@ fun taxiLayout(wDp: Float, hDp: Float, ship: Boolean, wideScreen: Boolean): Taxi
 /** The cards' column beside the chart: about two fifths of the width, never so narrow the steps wrap every word. */
 fun taxiCardsWidth(wDp: Float): Float = (wDp * 0.385f).coerceIn(260f, 420f).coerceAtMost(wDp * 0.5f)
 
-/** The share of the height a stacked chart may take: the rest is the cards', always enough to drag. */
-const val STACK_CHART_SHARE = 0.6f
-
-/** A stacked chart: 340 dp as it always was on a phone held upright, less when the page is short. */
-fun taxiChartHeight(hDp: Float): Float = minOf(340f, hDp * STACK_CHART_SHARE)
+/**
+ * A stacked chart's height with the cards' panel at [share] of the page: everything the panel and its handle leave.
+ * Up to 1.3.8 a stacked chart was held to 340 dp, a third of a tablet held upright.
+ */
+fun taxiChartHeight(hDp: Float, share: Float = TAXI_SHEET_SHARE): Float = hDp - TAXI_SHEET_HANDLE_DP - taxiSheetHeight(hDp, share)
 
 @Composable
 fun TaxiPill(text: String, selected: Boolean, onClick: () -> Unit) {
@@ -363,50 +504,94 @@ fun TaxiPill(text: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ZoomButtons(modifier: Modifier, inks: ChartInks, state: com.bmscompanion.app.ui.components.ChartState) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        // the fit button is an icon: the browser's font has no ⤢ (CLAUDE.md, the glyph gotcha)
-        for ((label, action) in listOf<Pair<String, () -> Unit>>(
-            "+" to { state.zoomBy(com.bmscompanion.app.ui.components.ZoomMath.BUTTON) },
-            "−" to { state.zoomBy(1f / com.bmscompanion.app.ui.components.ZoomMath.BUTTON) },
-            "" to { state.reset() },
-        )) {
-            Box(
-                Modifier.size(34.dp).clip(RoundedCornerShape(8.dp))
-                    .background(inks.ground.copy(alpha = 0.88f))
-                    .border(1.dp, inks.dim.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                    .clickable(onClick = action),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (label.isEmpty()) androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Default.FitScreen, "Fit the chart", tint = inks.ink, modifier = Modifier.size(18.dp))
-                else Text(label, color = inks.ink, fontSize = 15.sp)
-            }
+private fun ZoomButtons(modifier: Modifier, inks: ChartInks, state: com.bmscompanion.app.ui.components.ChartState, sideBySide: Boolean = false) {
+    // Turning the chart: the field turned to fill the box (pressed again, north up), and a quarter turn at a time from
+    // whatever the page shows. Remembered on the device (TaxiPrefs.turn); the north arrow says where north went.
+    val turnButtons = @Composable {
+        val fit = TaxiPrefs.turn == TaxiPrefs.TURN_FIT
+        buttonFace(inks, fit, if (fit) "North up" else "Turn the field to fill the chart", {
+            TaxiPrefs.turn = if (fit) 0 else TaxiPrefs.TURN_FIT
+            state.reset()
+        }) { iconFace(inks, androidx.compose.material.icons.Icons.Default.ScreenRotation, fit) }
+        buttonFace(inks, false, "Turn the chart 90 degrees", {
+            TaxiPrefs.turn = ((state.turnShown.roundToInt() + 90) % 360 + 360) % 360
+            state.reset()
+        }) { iconFace(inks, androidx.compose.material.icons.Icons.AutoMirrored.Filled.RotateRight, false) }
+    }
+    // the turn buttons in a column of their own beside the zoom ones when the chart is short, else above them
+    if (sideBySide) {
+        Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { turnButtons() }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { zoomColumn(inks, state) }
+        }
+    } else {
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            turnButtons()
+            Spacer(Modifier.height(4.dp))
+            zoomColumn(inks, state)
         }
     }
 }
 
 @Composable
-private fun ChartLegend(modifier: Modifier, inks: ChartInks, field: Airfield, route: AfRoute?, live: TaxiLive, landedOn: String?) {
-    Column(
-        modifier.clip(RoundedCornerShape(8.dp)).background(inks.ground.copy(alpha = 0.84f)).padding(horizontal = 8.dp, vertical = 5.dp),
-    ) {
-        Text(field.icao?.let { "${field.name} · $it" } ?: field.name, color = inks.ink, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+private fun buttonFace(inks: ChartInks, on: Boolean, describe: String, action: () -> Unit, face: @Composable () -> Unit) = Box(
+    Modifier.size(34.dp).clip(RoundedCornerShape(8.dp))
+        .background(if (on) inks.accent.copy(alpha = 0.9f) else inks.ground.copy(alpha = 0.88f))
+        .border(1.dp, inks.dim.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+        .clickable(onClick = action)
+        .semantics { contentDescription = describe },
+    contentAlignment = Alignment.Center,
+) { face() }
+
+@Composable
+private fun iconFace(inks: ChartInks, v: androidx.compose.ui.graphics.vector.ImageVector, on: Boolean) =
+    androidx.compose.material3.Icon(v, null, tint = if (on) inks.ground else inks.ink, modifier = Modifier.size(18.dp))
+
+/** Zoom in, zoom out, fit — the fit button an icon: the browser's font has no ⤢ (CLAUDE.md, the glyph gotcha). */
+@Composable
+private fun zoomColumn(inks: ChartInks, state: com.bmscompanion.app.ui.components.ChartState) {
+    buttonFace(inks, false, "Zoom in", { state.zoomBy(com.bmscompanion.app.ui.components.ZoomMath.BUTTON) }) { Text("+", color = inks.ink, fontSize = 15.sp) }
+    buttonFace(inks, false, "Zoom out", { state.zoomBy(1f / com.bmscompanion.app.ui.components.ZoomMath.BUTTON) }) { Text("−", color = inks.ink, fontSize = 15.sp) }
+    buttonFace(inks, false, "Fit the chart", { state.reset() }) { iconFace(inks, androidx.compose.material.icons.Icons.Default.FitScreen, false) }
+}
+
+/**
+ * The field's details — name and ICAO, runways and their size, the arresting cables, how the ramp is numbered and made
+ * up (a ship: its class and deck) — as a card under the chart. Up to 1.3.8 they were a translucent box drawn over the
+ * chart's top corner, which covered part of the field.
+ */
+@Composable
+private fun FieldCard(field: Airfield, route: AfRoute?, live: TaxiLive, landedOn: String?, runwayInUse: String?) {
+    SectionCard(field.icao?.let { "${field.name} · $it" } ?: field.name, accent = Hud.Green) {
+        FieldFacts(field, route, live, landedOn, runwayInUse, ink = Hud.Text, dim = Hud.TextDim, accent = Hud.Amber)
+    }
+}
+
+@Composable
+private fun FieldFacts(
+    field: Airfield, route: AfRoute?, live: TaxiLive, landedOn: String?, runwayInUse: String?,
+    ink: androidx.compose.ui.graphics.Color, dim: androidx.compose.ui.graphics.Color, accent: androidx.compose.ui.graphics.Color,
+) {
+    val inks = object { val ink = ink; val dim = dim; val accent = accent }
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         // A ship says what it is instead: BMS's runway record for a carrier is the approach path, a catapult and
         // sometimes a rectangle of no width, and the deck the chart draws comes from the real ship.
         val ship = field.ship
         if (ship != null) {
-            Text(ship.cls, color = inks.dim, fontSize = 10.sp)
+            Text(ship.cls, color = inks.dim, fontSize = 12.sp)
             // where the drawing comes from, and what the ramp does, in the words a deck chart would use
             val about = listOfNotNull(
                 ship.model.takeIf { it.isNotEmpty() }?.let { "deck from $it" },
                 ship.skiDeg?.let { "${it.roundToInt()}° ski jump" },
             )
-            if (about.isNotEmpty()) Text(about.joinToString(" · "), color = inks.dim, fontSize = 10.sp)
+            if (about.isNotEmpty()) Text(about.joinToString(" · "), color = inks.dim, fontSize = 12.sp)
             // A ship's page has no clearance card to carry the note, so it goes here: on a deck the Tacview feed is
             // what puts the jet on the chart at all.
-            live.note?.let { Text(it, color = inks.accent, fontSize = 10.sp, modifier = Modifier.widthIn(max = 280.dp)) }
+            live.note?.let { Text(it, color = inks.accent, fontSize = 12.sp, modifier = Modifier.widthIn(max = 280.dp)) }
         }
-        else Text(chartRunways(field).joinToString("   ") { "${it.name}  ${it.lengthFt} × ${it.widthFt} ft" }, color = inks.dim, fontSize = 10.sp)
+        else Text(chartRunways(field).joinToString("   ") { "${it.name}  ${it.lengthFt} × ${it.widthFt} ft" }, color = inks.dim, fontSize = 12.sp)
+        // The arresting cables, from the end in use (or every end with one), as the distance from that end
+        if (ship == null) cablesLines(field, runwayInUse).forEach { Text(it, color = inks.ink, fontSize = 12.sp, modifier = Modifier.widthIn(max = 320.dp)) }
         // A ship has no ramp on the chart, so it has nothing to say about one.
         if (ship == null) route?.let {
             // Say how the ramp splits, because the chart draws the two differently and a pilot wants to know
@@ -421,9 +606,26 @@ private fun ChartLegend(modifier: Modifier, inks: ChartInks, field: Airfield, ro
             // the numbers are BMS's for this network: for the way in, the ones Ground says after landing on landedOn
             val numbered = if (landedOn != null && landedOn != it.designator) "Ground's numbers after landing on $landedOn (runway ${it.designator}'s ramp)"
                 else "Ramp numbered for runway ${it.designator}"
-            Text("$numbered · ${it.parking.size} spots$sizes$split$cell", color = inks.dim, fontSize = 10.sp)
+            Text("$numbered · ${it.parking.size} spots$sizes$split$cell", color = inks.dim, fontSize = 12.sp)
         }
-        if (live.traffic.isNotEmpty()) Text("${live.traffic.size} aircraft on the field", color = inks.dim, fontSize = 10.sp)
+        if (live.traffic.isNotEmpty()) Text("${live.traffic.size} aircraft on the field", color = inks.dim, fontSize = 12.sp)
+    }
+}
+
+/**
+ * The arresting cables as lines of text: for the runway in use only ("Cables from 36: 1,500 ft · 7,500 ft"), else one
+ * line per runway with the distances from each of its ends. Empty where BMS lays no cable.
+ */
+fun cablesLines(field: Airfield, runwayInUse: String?): List<String> {
+    val withCables = field.runways.filter { it.cables.isNotEmpty() }
+    if (withCables.isEmpty()) return emptyList()
+    val inUse = runwayInUse?.let { d -> withCables.firstOrNull { r -> r.ends.any { it.designator == d } } }
+    if (runwayInUse != null) {
+        val r = inUse ?: return listOf("No arresting cables on runway $runwayInUse")
+        return listOf("Cables from $runwayInUse: " + com.bmscompanion.app.data.airfield.cableDistances(r.cablesFrom(runwayInUse)))
+    }
+    return withCables.map { r ->
+        "Cables " + r.ends.joinToString("  ") { e -> "from ${e.designator}: " + com.bmscompanion.app.data.airfield.cableDistances(r.cablesFrom(e.designator)) }
     }
 }
 

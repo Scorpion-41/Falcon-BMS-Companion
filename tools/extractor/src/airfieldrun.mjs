@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { loadTheaters } from './theaters.mjs';
 import { buildAirports } from './airports.mjs';
-import { buildAirfields } from './airfields.mjs';
+import { buildAirfields, groundStats } from './airfields.mjs';
 import { stats as pavementStats } from './pavement.mjs';
 import { loadDb } from './db.mjs';
 import { writeJson } from './util.mjs';
@@ -63,6 +63,9 @@ const size = [...files.values()].reduce((a, f) => a + JSON.stringify(f).length, 
 console.log(`\n${charts} charts across ${index.theaters.length} theaters -> ${files.size} distinct files, ${indexes.size} indexes, ${(size / 1024 / 1024).toFixed(1)} MB`);
 const ps = pavementStats;
 console.log(`pavement: ${ps.withGround} usable surfaces of ${ps.models} models opened (${ps.doesNotTile} did not tile, ${ps.unreadable} would not read)`);
+const gs = groundStats;
+console.log(`control towers: ${gs.towers} placed — ${gs.towerModel} drawn from their model, ${gs.towerBox} from Parent.dat's box, ${gs.towerKind} at a representative size`);
+console.log(`arresting cables: ${gs.cables} across ${gs.cableFields} fields' runways (${gs.strayCables} on no runway)`);
 
 if (warnings.length) {
   console.log(`\n${warnings.length} field(s) disagree with their airport record:`);

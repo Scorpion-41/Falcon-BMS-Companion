@@ -354,9 +354,9 @@ object MissionLink {
         )
 
     /** The Planner here opened [mission]: in WDP mode another flight is a new mission (`POST /api/mission/opened`). */
-    suspend fun missionOpened(mission: LedgerMission): PcAnswer<MissionSourceInfo> =
+    suspend fun missionOpened(mission: LedgerMission, clean: Boolean = false): PcAnswer<MissionSourceInfo> =
         answer(
-            "POST", "/api/mission/opened?for=" + enc(Repo.json.encodeToString(LedgerMission.serializer(), mission)),
+            "POST", "/api/mission/opened?for=" + enc(Repo.json.encodeToString(LedgerMission.serializer(), mission)) + (if (clean) "&clean=1" else ""),
             MissionSourceInfo.serializer(), timeoutMs = 30_000,
         ).alsoRefreshAll()
 
@@ -575,6 +575,14 @@ object MissionLink {
      */
     suspend fun filesSetDataCards(path: String?): PcAnswer<PcPlannerFolders> =
         answer("POST", "/api/files/planner?datacards=" + enc(path?.trim().orEmpty()), PcPlannerFolders.serializer(), timeoutMs = 15_000)
+
+    /** The Planner's settings the PC keeps because it acts on them (`GET /api/planner/settings`; an older PC: 404). */
+    suspend fun plannerSettings(): PcAnswer<PlannerPcSettings> =
+        answer("GET", "/api/planner/settings", PlannerPcSettings.serializer(), timeoutMs = 8_000)
+
+    /** Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints on or off (`POST /api/planner/settings?cleanOpened=1|0`). */
+    suspend fun setCleanOpened(on: Boolean): PcAnswer<PlannerPcSettings> =
+        answer("POST", "/api/planner/settings?cleanOpened=" + (if (on) "1" else "0"), PlannerPcSettings.serializer(), timeoutMs = 8_000)
 
 
     /** The browser's fetch keeps the status and the body of a refusal in [HttpException]; -1 and -2 are "never reached". */

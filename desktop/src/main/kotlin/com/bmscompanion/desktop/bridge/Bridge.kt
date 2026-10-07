@@ -466,6 +466,9 @@ object Bridge {
         }
     }
 
+    /** `GET /api/planner/settings`: the Planner's settings the PC keeps because it acts on them. */
+    private fun plannerSettings() = com.bmscompanion.app.data.mission.PlannerPcSettings(cleanOpened = _settings.value.CleanOpenedMission)
+
     /**
      * What `/api/contacts` serves of one snapshot of the feed: a hostile air defence only at a site the mission knows
      * ([KnownSams]), and no other hostile contact unless the pilot turned them on (`ShowHostiles`, [HostileContacts]).
@@ -607,6 +610,17 @@ object Bridge {
                 update(reapply = false) { it.copy(ShowHostiles = on) }
                 BridgeLog.info(if (on) "Hostile contacts from the live feed are on" else "Hostile contacts from the live feed are off")
                 encode(com.bmscompanion.app.data.mission.TacviewStatus.serializer(), info().tacview)
+            }
+            // The Planner's settings the PC acts on (1.3.9: Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints, ModeSwitchReset), from the
+            // Planner's Settings window on any device
+            "GET" to "/api/planner/settings" -> encode(com.bmscompanion.app.data.mission.PlannerPcSettings.serializer(), plannerSettings())
+            "POST" to "/api/planner/settings" -> {
+                val on = req.query["cleanOpened"]?.let { it == "1" || it.equals("true", true) }
+                if (on != null) {
+                    update(reapply = false) { it.copy(CleanOpenedMission = on) }
+                    BridgeLog.info(if (on) "Each opened mission starts with clean lines, PPTs and Open 1/2 steerpoints" else "Lines and PPTs are kept when the Planner opens a mission")
+                }
+                encode(com.bmscompanion.app.data.mission.PlannerPcSettings.serializer(), plannerSettings())
             }
             // The Mission section's data, in the mode it is in (MissionSource): EZBoards mode is Falcon BMS's own files
             // as they are now; WDP mode is the snapshot Populate from Planner took (or, before one, only the mode).
@@ -797,8 +811,9 @@ object Bridge {
                 val edits = runCatching {
                     json.decodeFromString(ListSerializer(com.bmscompanion.app.data.mission.CartridgeEdit.serializer()), req.body.decodeToString())
                 }.getOrNull()
-                // a Tactical Engagement named as well (te=<theater>|<file>, split on the first '|'): BMS loads that TE's own
-                // mission file over the cartridge, so a save has to reach both (CartridgeStore.saveTe)
+                // the save named as well (te=<theater>|<file>, split on the first '|'; a TE, training or, since 1.3.8's
+                // fix, a campaign): BMS's DTC window loads targets, lines and PPTs from that save's own mission file, so a
+                // save has to reach both (CartridgeStore.saveTe)
                 val te = req.query["te"]?.takeIf { it.isNotBlank() }?.let { v ->
                     com.bmscompanion.app.data.mission.CampRef(theater = v.substringBefore('|'), file = v.substringAfter('|', ""))
                 }

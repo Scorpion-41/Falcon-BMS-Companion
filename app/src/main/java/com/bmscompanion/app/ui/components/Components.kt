@@ -176,6 +176,17 @@ fun SearchField(
     SearchInput(value, onValueChange, placeholder, modifier)
 }
 
+/**
+ * A list's search field, pinned: put it in a Column above the list's `LazyColumn`, never inside it, so it stays at the
+ * top however far the list is scrolled (the Reference section's lists). Filters and counts may scroll with the list.
+ */
+@Composable
+fun PinnedSearchField(value: String, onValueChange: (String) -> Unit, placeholder: String, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().background(Hud.Bg).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 6.dp)) {
+        SearchField(value, onValueChange, placeholder)
+    }
+}
+
 @Composable
 private fun SearchInput(
     value: String,

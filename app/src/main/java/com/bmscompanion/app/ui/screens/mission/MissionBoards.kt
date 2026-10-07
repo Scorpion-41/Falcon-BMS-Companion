@@ -511,7 +511,7 @@ private fun WhichKneeboard(wdp: Boolean) {
             "In the cockpit, on your knee",
             "BMS's own pages, sixteen a knee. Three tools can write them: EZBoards, below, at every PRINT in EZBoards " +
                 "mode (page 1 as it is set up; paused in WDP mode); the Planner's Upd Kneeboard in WDP mode, on the " +
-                "pages you choose there (1 and 2 unless you pick others; Browse picture… puts a picture of your own " +
+                "pages you choose there (1, 2 and 3 unless you pick others; Browse picture… puts a picture of your own " +
                 "on one); and the HTML Briefing tool when it exports " +
                 "(pages 1-3; in WDP mode it is not started from here, so it does not overwrite the Planner's pages). " +
                 "Whichever wrote a page last is what you see, and Upd Kneeboard shows who made each one.",

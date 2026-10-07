@@ -696,6 +696,8 @@ class DataCardWiring : WdpWiring, WdpControlContent {
         var last = -1L
         // campaign time runs from the first day: a take-off at 00:03 is not "before" the taxi time (FillCommCard)
         var day = DAY
+        // the save's own waypoints of this flight, by steerpoint number: their planned altitudes
+        val saveAlt = saveFlight(mission)?.route.orEmpty().withIndex().associate { (i, w) -> (if (w.n > 0) w.n else i + 1) to w.altFt }
         for ((i, r) in rows.withIndex()) {
             val known = mission.steerpoints.firstOrNull { it.n == r.n }?.takeIf { it.x != 0.0 || it.y != 0.0 }
             if (known != null) {
@@ -713,9 +715,11 @@ class DataCardWiring : WdpWiring, WdpControlContent {
                     unknownLegs += i + 1
                 }
             }
-            // BMS's mission file writes a steerpoint's ground elevation as its z, not the altitude to fly (the Refuel point
-            // flown at 20.0M reads -3479): there the briefing's own altitude is the one to plan with
-            val altFt = known?.takeIf { mission.source(r.n) != StptSource.ROUTE }?.altFt ?: briefAlt(r.alt)
+            // the altitude to fly, as WDP's CreateFlightplan takes it: the save's waypoint (GridZ × 10 ft), else the
+            // briefing's own ALT column. Never the steerpoint's z: BMS 4.38.1 writes a route point's ground elevation
+            // there, in the cartridge and in the mission file alike (a Nav point briefed at 24.0M reads -891.7), so
+            // the 1.3.8 card, which took it from a cartridge slot, showed ground elevations in the Alt column
+            val altFt = saveAlt[r.n] ?: briefAlt(r.alt)
             var arrive = clock(r.time)?.let { it + day } ?: 0L
             if (arrive in 1 until last) { day += DAY; arrive += DAY }
             if (arrive > 0) last = arrive

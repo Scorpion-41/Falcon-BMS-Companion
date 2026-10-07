@@ -611,6 +611,12 @@ object SelfTest {
                 val dir = File(args[1])
                 report(File(dir.also { it.mkdirs() }, "divertrender.txt"), DivertRender.run(dir))
             }
+            // --arsenalrender <folder> : the Arsenal — no placeholder aircraft, the pinned search, a store's page with its
+            // Carried by tree, at phone, tablet and PC sizes (ArsenalRender.kt; writes fold prefs: run with a scratch APPDATA)
+            args.size >= 2 && args[0] == "--arsenalrender" -> {
+                val dir = File(args[1])
+                report(File(dir.also { it.mkdirs() }, "arsenalrender.txt"), ArsenalRender.run(dir))
+            }
             // --docshots <a copy of the BMS folder> <out folder> [shot…] : the whole app drawn headless for the README's
             // pictures, the copy read through the built-in bridge (DocShotsRender.kt)
             args.size >= 3 && args[0] == "--docshots" -> File(args[2]).let { d ->

@@ -58,13 +58,16 @@ object PlannerLeftovers {
     /**
      * After Open mission… or Pick a flight ([PlannerMissionState.plan]): the PC is told which flight was opened. In WDP
      * mode another flight than the last one is a new mission, and the PC clears by itself what the Planner saved for an
-     * earlier flight; the DTC page then reads the cartridge again (asking first over edits not saved).
+     * earlier flight; the DTC page then reads the cartridge again (asking first over edits not saved). [clean]: another
+     * flight than the one planned before — with **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** on, the PC
+     * cleans the cartridge and the campaign's mission file of lines and PPTs (1.3.9, in either mode), and the DTC page
+     * reads it again the same way; the maps go on suggesting the mission's threats and tracks.
      */
-    fun planned() {
+    fun planned(clean: Boolean = false) {
         openedAt = java.util.Date().time
         val now = openFlight() ?: return
         scope.launch {
-            val a = runCatching { MissionLink.missionOpened(now) }.getOrNull()
+            val a = runCatching { MissionLink.missionOpened(now, clean) }.getOrNull()
             if (a?.value?.reset?.let { it.kind == com.bmscompanion.app.data.mission.SwitchReset.MISSION && it.keys.isNotEmpty() && it.now?.sameFlight(now) == true } == true) {
                 runCatching { WdpCartridge.reload?.invoke() }
             }

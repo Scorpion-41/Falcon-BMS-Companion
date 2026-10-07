@@ -34,7 +34,7 @@ The app sends the UDP datagram `BMSC_DISCOVER` to the broadcast address(es) on p
 | POST | `/api/mission/source?mode=ezboards\|wdp[&for=<LedgerMission JSON>]` | on user tap (the EZBoards \| WDP switch) | `MissionSourceInfo` with `reset` (what the switch reset by itself, 1.3.8); HTTP 400 for another word. Asks nothing; clears every leftover of the Planner's in the cartridge, the other mode's cockpit pages from an earlier flight and a snapshot of another flight (see *Switching*); the app shows none of it |
 | POST | `/api/mission/source/undo?at=<reset.at>` | – (kept for compatibility; the app no longer offers it) | `MissionSourceInfo`, its `reset` with `undone`/`undoMessage`: the cartridge keys that switch cleared written back where each still holds the empty value (1.3.8); 400 without `at`, 409 when that switch is not the last |
 | POST | `/api/mission/populate` | on user tap (Populate from Planner, WDP mode) | body: `PopulateSend` → `MissionSourceInfo`; refusals in words (400/409, see *Mission source*) |
-| POST | `/api/mission/opened?for=<LedgerMission JSON>` | when the Planner opens a flight (Open mission… / Pick a flight) | `MissionSourceInfo`; in WDP mode another flight than the last one opened is a **new mission**: the PC clears what the Planner saved for any other flight and discards a snapshot of another flight by itself, the summary in `reset` (`kind` `mission`); nothing in EZBoards mode; 400 without `for` (1.3.8, see *Mission source*) |
+| POST | `/api/mission/opened?for=<LedgerMission JSON>[&clean=1]` | when the Planner opens a flight (Open mission… / Pick a flight) | `MissionSourceInfo`; in WDP mode another flight than the last one opened is a **new mission**: the PC clears what the Planner saved for any other flight and discards a snapshot of another flight by itself, the summary in `reset` (`kind` `mission`); nothing in EZBoards mode; 400 without `for` (1.3.8, see *Mission source*). `clean=1` (1.3.9, either mode: another flight than the Planner had): **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (see *The cartridge ledger*) |
 | POST | `/api/ezboards/generate` | on user tap (blocks until EZBoards exits, max 90 s) | `EzRun` (HTTP 409 when it failed, and — without running anything — in WDP mode, `message` saying why) |
 | GET | `/api/ezboards/status` | – | `EzStatus` |
 | GET | `/api/media` | when `info.media.count` or `info.media.latest` changes, while Media is open | `{dir, available, shots[{name, time, size, w?, h?}]}` newest first |
@@ -51,7 +51,7 @@ The app sends the UDP datagram `BMSC_DISCOVER` to the broadcast address(es) on p
 | POST | `/api/cfg/copy?kind=&from=&to=` | on user tap | `CfgFile` |
 | POST | `/api/cfg/restore?kind=&profile=` | on user tap | `CfgFile` — back to the copy taken before any of this |
 | GET | `/api/cartridge[?callsign=]` | when the Planner opens, on Open Callsign.ini, when BMS rewrites the file | `CartridgeState` |
-| POST | `/api/cartridge/save[?callsign=&te=<theater>\|<file>&for=<LedgerMission JSON>]` (all optional) | on user tap (Save to DTC) | body: `CartridgeEdit[]` → `CartridgeState` (with `mission` when `te` names a Tactical Engagement; see *Planner integration*). Written at once, as WDP writes it: there is no backup call before it (`/api/cartridge/backup` of the 1.3.8 test builds is gone). `for` (1.3.8) names the mission the save is for, kept in the cartridge ledger |
+| POST | `/api/cartridge/save[?callsign=&te=<theater>\|<file>&for=<LedgerMission JSON>]` (all optional) | on user tap (Save to DTC) | body: `CartridgeEdit[]` → `CartridgeState` (with `mission` when `te` names a save — a TE, a training or a campaign; see *Planner integration*). Written at once, as WDP writes it: there is no backup call before it (`/api/cartridge/backup` of the 1.3.8 test builds is gone). `for` (1.3.8) names the mission the save is for, kept in the cartridge ledger |
 | POST | `/api/cartridge/leftovers?do=clear\|keep[&callsign=&for=<LedgerMission JSON>]` | never by a 1.3.8 device (kept for the first 1.3.8 test builds; the clearing is automatic now) | `CartridgeState` — what the Planner saved for another flight than `for` (default: the mission the Mission section shows) and is still in the cartridge, cleared or kept for `for` (1.3.8, *The cartridge ledger*) |
 | GET | `/api/attack` | every 2 s, by a VR board's map and the kneeboard layout | `AttackOverlay` — follows the Mission section's mode: in WDP mode the attack of the snapshot Populate from Planner took (`plan.attack`), in EZBoards mode (1.3.8) the cartridge's own, its `[NAV OFFSETS]` laid out on BMS's route (`AttackDrawing.fromCartridge`, what the Mission map draws there too); `cues` empty when there is none; `theater` the id of the theater it was planned in (empty if unknown), and a map of another theater does not draw it |
 | POST | `/api/attack` | before 1.3.8: when a Planner attack page's figures settled. Kept so an older client is not refused; since the two modes (1.3.8) what it posts is no longer drawn | body: `AttackOverlay` → the same (HTTP 400 when it is not one); kept in memory only, like the Taxi page's choice |
@@ -177,14 +177,14 @@ PPT names and ranges. Without `callsign`, the pilot BMS has selected; a callsign
 remove the key — → `CartridgeState` (`message` on success, `error` in words otherwise). **Written at once, the way
 WDP's Save DTC writes it**: no question, nothing to switch on, no copy kept. The edits are applied to the file as it
 is at that moment, one key at a time, through a temporary file and one atomic move; every other line stays byte for
-byte, and applying the same edits twice changes nothing. From 1.3.8 an optional `te=<theater>|<file>` also writes a
-Tactical Engagement's own mission file, and the answer carries `mission` (see *Planner integration → Save to DTC in a
-Tactical Engagement*).
+byte, and applying the same edits twice changes nothing. From 1.3.8 an optional `te=<theater>|<file>` also writes that
+save's own mission file (a TE's, a training's or a campaign's), and the answer carries `mission` (see *Planner
+integration → Save to DTC in a Tactical Engagement*).
 
 ### The cartridge ledger (1.3.8): what the Planner wrote, for which mission
 Falcon BMS keeps lines, PPTs and targets in the cartridge until something overwrites them, so what the Planner saved
 for one flight is still there for the next. The PC keeps a **ledger** per pilot,
-`<BMS>\User\BMS Companion Planner\Ledger\<callsign>.json` (`CartridgeLedger {callsign, writes[]}`; each `LedgerWrite
+`<BMS>\User\BMS Companion Planner\Ledger\<callsign>.json` (`CartridgeLedger {callsign, writes[], cleared[]}`; each `LedgerWrite
 {file, section, key, value, at, mission?}`, `file` empty for the cartridge or a TE's `.ini` name): the last value Save
 to DTC wrote to every key, and the mission it was for. All additive:
 - `POST /api/cartridge/save` takes `for=` — a `LedgerMission {callsign, packageId?, flightId?, theater?, save?, seat?,
@@ -212,6 +212,23 @@ to DTC wrote to every key, and the mission it was for. All additive:
   (at a new mission all but the new flight's own), silently (*Mission
   source*, "What a switch resets"): `CartridgeLedger.cleared` keeps what was cleared for its Undo, and `Leftover.file`
   names a TE's `.ini` there. No device calls `/api/cartridge/leftovers` any more.
+- Since 1.3.9 they also clear **BMS's copies** of the Planner's items (BMS's DTC memory writes what was LOADed into the
+  cartridge and the next save's mission file): a `[STPT]` value the ledger names for another flight — a PPT, target
+  or weapon target compared as numbers (`Leftovers.sameItem`) against the live `writes` and the `cleared` rows, a line
+  point exactly against the live `writes` — in the cartridge, the ledger's mission files, the mission file BMS's LOAD
+  reads and `Auto Save.ini`; a line only whole. No log of past values is kept (a 1.3.9 test build's `history[]` in the
+  ledger file is passed over when read and dropped at the next write).
+- **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (1.3.9, `GET /api/planner/settings` → `PlannerPcSettings
+  { cleanOpened }`, `POST /api/planner/settings?cleanOpened=1|0`, the same answer; `BridgeSettings.CleanOpenedMission`,
+  on by default and set on once by settings layout 4; an older PC answers 404): `POST /api/mission/opened` takes
+  `clean=1` (in either mode) when the Planner planned **another flight** than it had (Open mission… or Pick a flight),
+  and with the setting on the PC then cleans every line, every PPT and every Open 1/Open 2 steerpoint (STPT 81-99,
+  `target_80…98`), whoever made them, from the cartridge and the campaign mission file BMS's LOAD reads for that
+  flight — never in a TE or a training, never one the Planner saved for that flight, never STPT 1-24 (the route, the
+  precision and Recon targets) or a weapon target. The answer's `reset` (kind `mission`, `now` the
+  flight) names the keys, so the Planner reads its cartridge again; the cleaned points go into `cleared` with
+  `mission` null when the Planner did not write them (the Undo puts them back; they never become the Planner's rows).
+  A PRINT or a switch of mode never cleans them. Shown in the Planner's Settings window on every device.
 
 The 1.3.8 test builds asked first: they had `POST /api/cartridge/backup[?callsign=]` (a one-time copy into
 `User/Config/BMS Companion Backup/` that switched saving on) and `enabled`, `backedUp` and `backupDir` in
@@ -819,16 +836,18 @@ are true degrees; ranges and elevations feet.
 ### Save to DTC in a Tactical Engagement
 `POST /api/cartridge/save?te=<theater>|<file>` (`theater` a theater-definition name, `file` a save name from
 `/api/campaign/files`) saves the cartridge as before and also applies the `[STPT]` keys among the edits (`target_`,
-`lineSTPT_`, `ppt_`, `wpntarget_`) to that TE's own mission file, `<campaign folder>/<file>.ini`, which BMS loads over
-the cartridge in a TE. That file is written in place, with no backup (like WDP), through a temporary file and an
-atomic move, keeping BMS's own formatting — the TEs and trainings that ship with BMS (`TE_BMS_*`, `TR_BMS_*`) the same
-as the pilot's own; only when the save's own `SaveFile` agrees with the file's name. The answer is `CartridgeState`
-with `mission: MissionIniResult {file, written, reason?}`; `written` false with a `reason` when it was refused — a
-campaign start (which the Planner never opens), a campaign save (a campaign's route stays in BMS's hands; only the
-cartridge is saved), a copy renamed since BMS saved it, a read-only file. The cartridge part follows the cartridge's
-own rules above whatever happens to the TE's file.
+`lineSTPT_`, `ppt_`, `wpntarget_`) to that save's own mission file, `<campaign folder>/<file>.ini`, from which BMS's
+DTC window loads targets, lines and PPTs (in a campaign its LOAD reads them from there and not from the cartridge).
+`file` may be a TE (`.tac`), a training (`.trn`) or, since the fix after 1.3.8's release, a campaign save (`.cam`); in
+a campaign's file a `target_n` edit that would zero a point the file places (BMS's route) is left out, and no
+`target_n` of it enters the ledger. That file is written in place, with no backup (like WDP), through a temporary file
+and an atomic move, keeping BMS's own formatting — the TEs and trainings that ship with BMS (`TE_BMS_*`, `TR_BMS_*`)
+the same as the pilot's own; only when the save's own `SaveFile` agrees with the file's name. The answer is
+`CartridgeState` with `mission: MissionIniResult {file, written, reason?}`; `written` false with a `reason` when it was
+refused — a campaign start (which the Planner never opens), a copy renamed since BMS saved it, a read-only file. The
+cartridge part follows the cartridge's own rules above whatever happens to the mission file.
 
-The sentences, word for word: a refusal ends "Only your cartridge was saved." ("No Tactical Engagement was named." when
+The sentences, word for word: a refusal ends "Only your cartridge was saved." ("No save was named." when
 `te` has no `|`); when the cartridge itself was not saved, "Not written, because your cartridge was not saved either.".
 `written` is also false, with no refusal, for "… has no mission file of its own (<ini>), so BMS flies it on your
 cartridge alone: there was nothing more to write." (none is created), "<ini> already held these steerpoints: nothing
@@ -980,6 +999,7 @@ a program, a script — is refused with 400, the sentence listing the types.
 |---|---|---|
 | POST | `/api/ezboards/auto?on=1\|0` | turns EZBoards on PRINT on or off from any device → `EzStatus` (in WDP mode it stays suspended whatever it is set to) |
 | POST | `/api/contacts/hostiles?on=1\|0` | **Show hostile contacts (live)** on or off from any device's Setup page (1.3.8) → `TacviewStatus`, whose `hostiles` (also `info.tacview.hostiles`, additive; absent from an older PC = off) says which it is. Kept on the PC (`BridgeSettings.ShowHostiles`, off by default, set off once by settings layout 3), so every device and VR board follows it; while off `/api/contacts` carries no hostile contact (see the table above), and each device strips the same again and says so on its map, Picture card, AWACS page and Picture board |
+| GET / POST | `/api/planner/settings[?cleanOpened=1\|0]` | the Planner's settings the PC keeps because it acts on them (1.3.9) → `PlannerPcSettings {cleanOpened}`: **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (`BridgeSettings.CleanOpenedMission`, on by default, set on once by settings layout 4; acted on at `POST /api/mission/opened?clean=1`), shown and set in the Planner's Settings window on every device; an older PC answers 404 and the window greys the switch. See *The cartridge ledger* |
 | GET / POST | `/api/taxi` | what the Taxi page is showing (`TaxiSelection {airportId, runway, outbound, spot?, at, radio?}`), so a VR board can follow it. `radio` (1.3.8, additive, GET only): the last controller's call to the pilot's own flight from BMS's debug log (`RadioTaxi`, see *The radio*), served only when the PC heard it after the last POST; the live taxi board applies it over the selection. A POSTed `radio` is ignored. `runway` is the runway taxied to, or for the way in (`outbound` false) the runway landed on; `spot` is BMS Ground's number in the network drawn for that trip — the runway's own, or for the way in the reciprocal end's taxi-in network (`routeShown` in `TaxiRouting.kt`); POST sets it (400 for anything else). In memory only, and **per mission**: a GET answers an empty selection once the mission it was made for is no longer the one `/api/mission` serves (a new PRINT in EZBoards mode, a Populate or a switch of mode — `MissionData.missionKey`), so the last mission's runway and spot never stand for the next |
 | GET / POST | `/api/boards` | the VR boards' configuration (`BoardConfig`), set by the PC's VR boards page and kept in `bridge-settings.json` as `Boards` |
 | GET | `/api/kneeboard/page?i=<n>&max=<px>` | page `n` of the kneeboard UOAF's HTML Briefing tool exported, as `image/jpeg` (`max` 320-3000, default 1400); 404 when there is none |
@@ -1059,7 +1079,7 @@ With browser access off, `/` shows a short status page instead.
 Everything is meant for a trusted home LAN. The server provides read-only data; the actions it exposes to devices are running the configured `EZBOARDS.BAT` (no arguments from the client), moving chosen screenshots to the Recycle Bin, and the writes into the BMS folder below. Each is off until the pilot switches it on where the ground rules ask for it, never writes a file in place without a temporary file and an atomic move, and answers a refusal in words:
 - Falcon BMS's own config files, through `/api/cfg`, once the pilot has taken the backup: `User/Config` and nothing else, keys limited to `[A-Za-z0-9_]`, values to a single line, the original kept in `User/Config/BackUp`.
 - Weather maps, through `/api/weather`, once that theater's originals have been copied aside into its `Campaign/BMS Companion Backup/`.
-- The pilot's cartridge, through `/api/cartridge/save`, written at once as WDP writes it (only the edited keys, no backup); with `te=`, also a Tactical Engagement's own mission file in its campaign folder, in place with no backup, and never a campaign start.
+- The pilot's cartridge, through `/api/cartridge/save`, written at once as WDP writes it (only the edited keys, no backup); with `te=`, also that save's own mission file (a TE's, a training's or a campaign's; in a campaign's never a zeroed route point) in its campaign folder, in place with no backup, and never a campaign start.
 - The F-16's 3D kneeboard pages, through `/api/kbprint`, in place with no backup (they are made again by EZBoards, BMS's PRINT or this Print); a page file that does not exist is never created.
 - The Planner's own files, through `/api/files/write`, where the pilot saved them in the Planner's file window: only the types WDP's Save dialogs write (`.ini`, `.ppi`, `.bdc`, the DTC's backup files, `.txt`, `.jpg`, `.png`), never a program, a script, a `.cfg` or a weather map; a file already there only after the pilot said Replace. The folders WDP makes for them (`DataCards\<mission>\<package>\<callsign>`, `Files\<part>`, `SavedMaps`), through `/api/files/mkdir`. A Callsign.ini the pilot opened from outside `User\Config` with Open Callsign.ini File is that page's cartridge, and Save to DTC writes it there the same way.
 

@@ -34,6 +34,15 @@ import java.io.File
  * `POST /api/mission/opened`, which also discards another flight's snapshot) or populated ([opened] from the
  * Populate). It clears everything the Planner saved for **any other flight**, whenever (a key saved with no flight
  * known is kept), and never touches the cockpit pages.
+ *
+ * Both also clear **BMS's copies** of the Planner's items (1.3.9): what BMS's DTC memory wrote back into the cartridge,
+ * the mission file its LOAD reads now ([loadIni]) and `Auto Save.ini` — recognised by value, a line only whole
+ * ([CartridgeStore.resetForSwitch]).
+ *
+ * **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (1.3.9, the Planner's Settings,
+ * `BridgeSettings.CleanOpenedMission`, on by default) is not one of these: it runs only when the Planner plans another
+ * flight (Open mission… or Pick a flight, `POST /api/mission/opened?clean=1`, [cleanOpened]), never at a PRINT or a
+ * switch of mode.
  */
 object ModeSwitchReset {
     /** How long `/api/info` keeps carrying the last switch's summary, so a device that looks a little later sees it too. */
@@ -151,7 +160,7 @@ object ModeSwitchReset {
      */
     private fun newMission(mode: String, now: LedgerMission, dropped: String?, teSave: String?): SwitchReset? {
         val at = maxOf(System.currentTimeMillis(), (last?.at ?: 0L) + 1)
-        val cart = Bridge.cartridge.resetForSwitch(null, now, at, teSave, now.theater?.takeIf { it.isNotBlank() } ?: Bridge.install.theater)
+        val cart = Bridge.cartridge.resetForSwitch(null, now, at, teSave, now.theater?.takeIf { it.isNotBlank() } ?: Bridge.install.theater, loadIni())
         // what a Planner before 1.3.8 posted by itself to the VR boards' map goes with the mission (never drawn now)
         runCatching { Bridge.forgetPostedAttack() }
         val done = ArrayList<String>()
@@ -214,7 +223,7 @@ object ModeSwitchReset {
         // the current flight's TE file too, for its delivery data (the printed flight's TE when it is the briefing's)
         val teSave = now?.save?.takeIf { it.isNotBlank() }
             ?: if (now != null && now === brief) safe(null) { MissionDtcFile.current()?.save?.takeIf { it.isNotBlank() } } else null
-        val cart = Bridge.cartridge.resetForSwitch(null, null, at, teSave, now?.theater?.takeIf { it.isNotBlank() } ?: theater)
+        val cart = Bridge.cartridge.resetForSwitch(null, null, at, teSave, now?.theater?.takeIf { it.isNotBlank() } ?: theater, loadIni())
         runCatching { Bridge.forgetPostedAttack() }
         if (cart.keys.isNotEmpty()) {
             val files = cart.keys.map { it.file.ifEmpty { cart.file ?: "the cartridge" } }.distinct().joinToString(" and ")
@@ -270,6 +279,94 @@ object ModeSwitchReset {
             done = done, left = left, undo = cart.keys.isNotEmpty(),
         )
     }
+
+    /**
+     * The mission file Falcon BMS's DTC LOAD reads now: `<SaveFile>.ini` beside the newest save of the theater BMS is
+     * on ([MissionDtcFile]), where a reset also clears BMS's copies of what the Planner saved for another flight
+     * (1.3.9, [CartridgeStore.resetForSwitch]). Null when there is none.
+     */
+    private fun loadIni(): File? = safe(null) { MissionDtcFile.verdict().ini?.takeIf { it.isFile } }
+
+    // ------------------------------------------- Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints (1.3.9)
+
+    /**
+     * The Planner planned [planner], another flight than it had (Open mission… or Pick a flight; `POST
+     * /api/mission/opened?clean=1`): with the setting on, every line and every PPT, whoever wrote them, cleaned from the
+     * cartridge and the mission file BMS's LOAD reads for that flight ([openFiles], [CartridgeStore.cleanForOpen]) — never
+     * a line or PPT the Planner saved for that flight, never a target or weapon target, never in a TE or a training.
+     * Kept as the last summary (kind [SwitchReset.MISSION], so the Planner reads its cartridge again); null when nothing
+     * was cleaned. In either mode. Never throws.
+     */
+    @Synchronized
+    fun cleanOpened(planner: LedgerMission): SwitchReset? = try {
+        val files = openFiles(planner)
+        if (files == null) null
+        else {
+            val at = maxOf(System.currentTimeMillis(), (last?.at ?: 0L) + 1)
+            val c = Bridge.cartridge.cleanForOpen(null, planner, at, files)
+            if (c.keys.isEmpty()) null
+            else {
+                val where = c.keys.map { it.file.ifEmpty { c.file ?: "the cartridge" } }.distinct().joinToString(" and ")
+                val r = SwitchReset(
+                    at = at, to = MissionSource.mode(), now = planner, keys = c.keys, cartridge = c.file,
+                    done = listOf("Cleaned ${Leftovers.summary(c.keys)} from $where for ${planner.label}: each opened mission starts with clean lines, PPTs and Open 1/2 steerpoints. LOAD the DTC in BMS."),
+                    left = c.left, undo = true, kind = SwitchReset.MISSION,
+                )
+                last = r
+                r
+            }
+        }
+    } catch (e: Throwable) {
+        BridgeLog.warn("Opened mission: the lines and PPTs were not cleaned: ${e.message}")
+        null
+    }
+
+    /**
+     * Which mission file BMS's LOAD reads the lines and PPTs from for the flight [now] — and whether to clean any at all:
+     * - the setting off (`BridgeSettings.CleanOpenedMission`) → null;
+     * - **a TE or a training** (the save holding the flight is a `.tac`/`.trn`) → null, the cartridge too. Falcon BMS
+     *   builds a TE's lines itself: when its 2D map is built (`C_Map::AddListsToWindow`) it empties the four lines, loads
+     *   them from the TE's own `<TE>.ini` and saves the cartridge, and in a TE the DTC's LOAD reads lines and PPTs from
+     *   that cartridge — so cleaning the cartridge after the map was built (the briefing's PRINT comes after it) would
+     *   take the TE's authored lines and threats from the jet;
+     * - a campaign: the cartridge, and the mission file beside the save holding the flight (`<SaveFile>.ini`, the file
+     *   LOAD reads in a campaign whenever it exists and the 2D map loads the lines from) — the save the Planner opened,
+     *   else the newest one holding the flight (callsign, package and flight number), so `Auto Save.ini` when that is it;
+     *   not when a save of the same name and another kind was saved later (`Auto Save.tac`: the file is then that TE's);
+     * - no save holding the flight found: the cartridge alone when the newest save is a campaign's, else null.
+     */
+    internal fun openFiles(now: LedgerMission?): List<File>? = safe(null) {
+        if (!Bridge.settings.value.CleanOpenedMission) return@safe null
+        val install = Bridge.install
+        val set = Theaters.of(install) ?: return@safe null
+        val t = now?.theater?.takeIf { it.isNotBlank() }?.let { set.byName(it) } ?: set.current(install.theater) ?: return@safe null
+        val saves = set.saves(t)
+        val names = CampaignArchive.names(set, t)
+        val named = now?.save?.trim()?.takeIf { it.isNotEmpty() }?.let { n -> saves.firstOrNull { it.name.equals(n, ignoreCase = true) } }
+        val holding = named ?: now?.let { m ->
+            saves.filter { CampaignStarts.byName(it.name) == null }.take(HOLDING_LOOK).firstOrNull { f -> holds(CampaignArchive.cached(f, names), names, m) }
+        }
+        val kindOf = holding ?: MissionDtcFile.verdict().save ?: return@safe null
+        if (CampaignArchive.kindOfName(kindOf.name) != com.bmscompanion.app.data.mission.CampKind.CAMPAIGN) {
+            BridgeLog.info("Opened mission: ${kindOf.name} is a TE or a training, so its own lines and PPTs are kept (BMS loads them itself)")
+            return@safe null
+        }
+        if (holding == null) return@safe emptyList()
+        if (CampaignStarts.byName(holding.name) != null) return@safe emptyList()
+        val twin = saves.any { !it.name.equals(holding.name, true) && it.nameWithoutExtension.equals(holding.nameWithoutExtension, true) && it.lastModified() > holding.lastModified() }
+        if (twin) return@safe emptyList()
+        listOfNotNull(MissionDtcFile.iniFor(CampaignArchive.cached(holding, names)))
+    }
+
+    /** How many of the newest saves are looked through for the one holding the flight. */
+    private const val HOLDING_LOOK = 8
+
+    /** [save] holds the flight [m]: its callsign, and its package and flight number where [m] says them. */
+    private fun holds(save: CampaignArchive.Save, names: CampaignArchive.Names, m: LedgerMission): Boolean =
+        m.callsign.isNotBlank() && save.flights.any { f ->
+            names.callsign(f)?.trim()?.equals(m.callsign.trim(), ignoreCase = true) == true &&
+                (m.packageId == null || save.packageOf(f)?.campId == m.packageId) && (m.flightId == null || f.campId == m.flightId)
+        }
 
     private fun plural(items: List<String>, one: String, many: String): String = when (items.size) {
         0 -> many

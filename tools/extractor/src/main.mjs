@@ -5,14 +5,14 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { loadTheaters, readPptTable } from './theaters.mjs';
 import { theaterProjection } from './projection.mjs';
-import { buildCatalog } from './catalog.mjs';
+import { buildReference, writePictures, withThreatPictures, TACREF_CATS, TACREF_SUBCATS } from './reference.mjs';
 import { buildCatalog as buildCfgCatalog } from './cfgcatalog.mjs';
 import { buildAirports } from './airports.mjs';
 import { buildAirfields } from './airfields.mjs';
 import { loadDb } from './db.mjs';
 import { terrainInfo } from './terrain.mjs';
-import { findTacRefImage, tgaToWebp } from './images.mjs';
 import { wdpTerrain } from './wdpterrain.mjs';
+import { applyPhotos } from './photos.mjs';
 import { slug, writeJson } from './util.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -26,18 +26,6 @@ const CURATED = path.join(ROOT, 'tools/curated');
 const hash = (o) => crypto.createHash('sha1').update(JSON.stringify(o)).digest('hex').slice(0, 10);
 const skipImages = process.argv.includes('--no-images');
 const DATA_DIR = path.join(process.env.BMS_ROOT || 'G:/Falcon BMS 4.38', 'Data');
-const TACREF_CATS = {
-  8100: 'Aircraft', 8200: 'Ground Units', 8300: 'Ships', 8400: 'Missiles', 8500: 'Bombs', 8600: 'Stores & Pods', 8700: 'Other',
-};
-const TACREF_SUBCATS = {
-  8110: 'Fighters', 8120: 'Multirole', 8130: 'Attack', 8140: 'Bombers', 8150: 'Helicopters', 8160: 'Support & EW', 8170: 'Transports',
-  8210: 'Tanks', 8220: 'IFV / APC', 8230: 'Artillery', 8240: 'SAM Systems', 8250: 'AAA', 8260: 'Radars', 8270: 'Support Vehicles',
-  8310: 'Carriers', 8320: 'Cruisers', 8330: 'Frigates', 8340: 'Destroyers', 8350: 'Submarines', 8360: 'Amphibious & Patrol', 8370: 'Civilian',
-  8410: 'IR Air-to-Air', 8420: 'Radar Air-to-Air', 8430: 'Anti-Ship', 8440: 'Anti-Radiation', 8450: 'Air-to-Ground', 8460: 'Surface-to-Air', 8470: 'Anti-Tank',
-  8510: 'General Purpose', 8520: 'Laser Guided', 8530: 'Guided (GPS/TV/Glide)', 8540: 'Cluster', 8550: 'Incendiary / FAE', 8560: 'Special Purpose', 8570: 'Nuclear',
-  8610: 'Fuel Tanks', 8620: 'Recon Pods', 8630: 'ECM Pods', 8640: 'Countermeasure Pods', 8650: 'Targeting Pods', 8660: 'Rocket Pods', 8670: 'Nav / Datalink / Training Pods',
-  8710: 'Other',
-};
 
 /**
  * The version BMS's own executable carries (`Bin/x64/Falcon BMS.exe`, the VS_FIXEDFILEINFO block of its version
@@ -57,13 +45,6 @@ function readBmsBuild() {
   return null;
 }
 
-function familyTitle(names) {
-  const rx = /^(F\/A-18|Mirage 2000|Mirage F1|Mirage III|Tornado|Jaguar|Harrier|Typhoon|Eurofighter|Rafale|[A-Za-z]{1,4}-\d+|[A-Z][a-z]+ ?\d*)/;
-  const counts = new Map();
-  for (const n of names) { const m = n.match(rx); const k = m ? m[1] : n; counts.set(k, (counts.get(k) || 0) + 1); }
-  return [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
-}
-
 async function main() {
   for (const d of ['airports', 'airfields', 'radio', 'ppt', 'curated']) fs.rmSync(path.join(OUT, d), { recursive: true, force: true });
   fs.mkdirSync(OUT, { recursive: true });
@@ -71,9 +52,8 @@ async function main() {
   fs.mkdirSync(MAPS, { recursive: true });
   fs.mkdirSync(path.join(OUT, 'airfields'), { recursive: true });
   const theaters = loadTheaters();
-  const aircraft = new Map(); // key -> { base, variants: Map(hash -> variant) }
-  const weapons = new Map();
-  const encyclopedia = new Map(); // key -> {entry, hash}
+  // encyclopedia, aircraft, weapons and their pictures (reference.mjs; referencerun.mjs builds them alone)
+  const { acList, wpList, encList, aircraftCount, imageJobs } = buildReference(theaters);
   const airportSets = new Map();
   const airfieldFiles = new Map();   // af-hash -> one field's ground chart
   const airfieldIndexes = new Map(); // ai-hash -> { campId: af-hash }
@@ -81,60 +61,12 @@ async function main() {
   const radioSets = new Map();
   const pptSets = new Map(); // pp-hash -> a theater's PPT type table (Campaign/Ppt.ini)
   const maps = new Map();
-  const imageJobs = new Map(); // pic -> source tga
   const theaterIndex = [];
 
   for (const th of theaters) {
     const t0 = Date.now();
     const db = loadDb(th);
-    const { aircraft: acs, weapons: wps } = buildCatalog(th);
     const { airports, navaids, radio, places, geo } = buildAirports(th);
-
-    // --- encyclopedia (TacRef) ---
-    const tacKeyByNum = new Map();
-    for (const e of db.tacref.values()) {
-      const content = { name: e.name, cat: e.category, sub: e.subCategory, pic: e.pic, sections: e.sections.map((s) => ({ title: s.title, lines: s.lines.filter((l) => l !== '') })), description: e.description, rwr: e.rwr?.name && e.rwr.name !== 'No Radar' ? e.rwr.name : null };
-      const h = hash(content);
-      let key = slug(e.name) + '-' + e.category;
-      const existing = encyclopedia.get(key);
-      if (existing && existing.hash !== h) {
-        const alt = key + '-' + th.id;
-        key = alt;
-      }
-      if (!encyclopedia.has(key)) encyclopedia.set(key, { hash: h, entry: { key, ...content, catName: TACREF_CATS[e.category] || 'Other', subName: TACREF_SUBCATS[e.subCategory] || null, theaters: [] } });
-      encyclopedia.get(key).entry.theaters.push(th.id);
-      tacKeyByNum.set(e.num, key);
-      if (e.pic && !imageJobs.has(e.pic.toLowerCase())) {
-        const src = findTacRefImage(th, e.pic);
-        if (src) imageJobs.set(e.pic.toLowerCase(), src);
-      }
-    }
-
-    // --- weapons ---
-    for (const w of wps) {
-      const rec = { ...w, tacref: w.tacref != null ? tacKeyByNum.get(w.tacref) ?? null : null };
-      delete rec.wid;
-      if (!weapons.has(w.key)) weapons.set(w.key, { ...rec, theaters: [], carriedBy: new Set() });
-      weapons.get(w.key).theaters.push(th.id);
-    }
-
-    // --- aircraft ---
-    for (const a of acs) {
-      const spec = {
-        datFile: a.datFile, crew: a.crew, inService: a.inService, maxSpeedKts: a.maxSpeedKts, ceilingFt: a.ceilingFt, cruiseAltFt: a.cruiseAltFt,
-        maxWeightLbs: a.maxWeightLbs, emptyWeightLbs: a.emptyWeightLbs, internalFuelLbs: a.internalFuelLbs, rcs: a.rcs, radar: a.radar, fm: a.fm,
-      };
-      if (/placeholder|^aircraft$/i.test(a.name)) continue;
-      const variant = { spec, gun: a.gun, stations: a.stations.map((s) => ({ n: s.n, label: s.label, list: s.list || null, fixed: !!s.fixed, weapons: s.weapons })) };
-      const vh = hash(variant);
-      if (!aircraft.has(a.key)) aircraft.set(a.key, { key: a.key, name: a.name, family: a.family, role: a.role, pic: a.pic, tacref: a.tacref != null ? tacKeyByNum.get(a.tacref) ?? null : null, variants: new Map() });
-      const ac = aircraft.get(a.key);
-      if (!ac.pic && a.pic) ac.pic = a.pic;
-      if (!ac.variants.has(vh)) ac.variants.set(vh, { ...variant, theaters: [] });
-      ac.variants.get(vh).theaters.push(th.id);
-      for (const s of a.stations) for (const w of s.weapons) weapons.get(w.key)?.carriedBy.add(a.key);
-      if (a.gun) weapons.get(a.gun.weapon)?.carriedBy.add(a.key);
-    }
 
     // --- airports / radio (deduped sets) ---
     const aset = { airports, navaids, places };
@@ -176,7 +108,7 @@ async function main() {
     const wt = wdpTerrain(th);
     theaterIndex.push({
       id: th.id, name: th.name, desc: th.desc, addon: th.addon, sizeFt: ti?.sizeFt ?? 3358700, map: mapFile, mapId: mapFile?.split('/')[1] ?? null,
-      airportSet: ah, radioSet: rh, airfieldSet: fields.length ? fih : null, airportCount: airports.length, aircraftCount: acs.length,
+      airportSet: ah, radioSet: rh, airfieldSet: fields.length ? fih : null, airportCount: airports.length, aircraftCount: aircraftCount.get(th.id) ?? 0,
       primary, mapGroup: ti ? ti.bil : th.id,
       // BMS's own projection for this terrain (NewTerrain/Theater.txt), which is what turns theater feet into lat/lon
       projection: theaterProjection(th.terrainDir),
@@ -184,7 +116,7 @@ async function main() {
       // what Weapon Delivery Planner reads to print lat/lon (the port sets its projection up from these)
       ...(wt ? { wdpTerrain: wt } : {}),
     });
-    console.log(`${th.id}: ${acs.length} aircraft, ${wps.length} weapons, ${airports.length} airports, ${fields.length} ground charts, ${db.tacref.size} tacref (${Date.now() - t0}ms)`);
+    console.log(`${th.id}: ${aircraftCount.get(th.id) ?? 0} aircraft, ${airports.length} airports, ${fields.length} ground charts, ${db.tacref.size} tacref (${Date.now() - t0}ms)`);
   }
 
   // group add-on theaters under their main theater
@@ -215,23 +147,16 @@ async function main() {
     delete t.radioCount;
   }
 
-  // --- finalize aircraft ---
-  const acList = [...aircraft.values()].map((a) => ({ ...a, variants: [...a.variants.values()] }));
-  const byFamily = new Map();
-  for (const a of acList) { const f = a.family || a.name; (byFamily.get(f) || byFamily.set(f, []).get(f)).push(a.name); }
-  for (const a of acList) a.familyTitle = familyTitle(byFamily.get(a.family || a.name));
-  const famPic = new Map();
-  for (const a of acList) if (a.pic && !famPic.has(a.familyTitle)) famPic.set(a.familyTitle, a.pic);
-  for (const a of acList) if (!a.pic) a.pic = famPic.get(a.familyTitle) ?? null;
-  acList.sort((a, b) => a.familyTitle.localeCompare(b.familyTitle) || a.name.localeCompare(b.name, 'en', { numeric: true }));
+  // threat_pictures.json reaches the app as each threat's `tacref` (withThreatPictures), and the photographs from
+  // Wikimedia Commons (photos.mjs) stand in for BMS's pictures and give entries without one theirs (applyPhotos)
+  const threatPictures = JSON.parse(fs.readFileSync(path.join(CURATED, 'threat_pictures.json'), 'utf8'));
+  const threats = {};
+  for (const f of fs.readdirSync(CURATED).filter((f) => /^threats_.*\.json$/.test(f))) {
+    threats[f] = withThreatPictures(f, JSON.parse(fs.readFileSync(path.join(CURATED, f), 'utf8')), threatPictures, encList);
+  }
+  const { replaced: photoReplaced } = applyPhotos({ acList, wpList, encList, threats });
   writeJson(path.join(OUT, 'aircraft.json'), acList);
-
-  const wpList = [...weapons.values()].map((w) => ({ ...w, carriedBy: [...w.carriedBy].sort() }));
-  wpList.sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true }));
   writeJson(path.join(OUT, 'weapons.json'), wpList);
-
-  const encList = [...encyclopedia.values()].map((e) => e.entry);
-  encList.sort((a, b) => a.name.localeCompare(b.name, 'en', { numeric: true }));
   writeJson(path.join(OUT, 'encyclopedia.json'), encList);
 
   fs.mkdirSync(path.join(OUT, 'airports'), { recursive: true });
@@ -257,10 +182,13 @@ ground charts: ${airfieldFiles.size} fields, all agreeing with their airport rec
   const curated = [];
   // carriers.json (ships.mjs) and cfgnotes.json (cfgcatalog.mjs) are this extractor's own inputs: what they say
   // reaches the app inside the ground charts and the config catalogue, so the files themselves are not shipped
-  const EXTRACTOR_ONLY = new Set(['carriers.json', 'cfgnotes.json']);
+  // threat_pictures.json reaches the app as each threat's `tacref`, photos.json as pictures and photo_credits.json as
+  // data/credits/photos.json (photos.mjs); the threats were read above
+  const EXTRACTOR_ONLY = new Set(['carriers.json', 'cfgnotes.json', 'threat_pictures.json', 'photos.json', 'photo_credits.json']);
   for (const f of fs.existsSync(CURATED) ? fs.readdirSync(CURATED) : []) {
     if (!f.endsWith('.json') || EXTRACTOR_ONLY.has(f)) continue;
-    const obj = JSON.parse(fs.readFileSync(path.join(CURATED, f), 'utf8'));
+    let obj = JSON.parse(fs.readFileSync(path.join(CURATED, f), 'utf8'));
+    if (f.startsWith('threats_')) obj = threats[f];
     writeJson(path.join(OUT, 'curated', f), obj);
     curated.push(f);
   }
@@ -281,15 +209,7 @@ ground charts: ${airfieldFiles.size} fields, all agreeing with their airport rec
   // --- images ---
   // theater maps (all styles and tile levels) and their landmark layers: node src/maps.mjs, then node src/geo.mjs
   for (const { file } of maps.values()) if (!fs.existsSync(path.join(ASSETS, file))) console.warn('map missing, run node src/maps.mjs:', file);
-  if (!skipImages) {
-    let n = 0;
-    for (const [pic, src] of imageJobs) {
-      const dst = path.join(IMG, pic + '.webp');
-      if (fs.existsSync(dst)) continue;
-      try { await tgaToWebp(src, dst); n++; } catch (e) { console.warn('img fail', pic, e.message); }
-    }
-    console.log('converted images:', n, 'of', imageJobs.size);
-  }
+  if (!skipImages) await writePictures(imageJobs, IMG, photoReplaced);
   console.log('done', { bmsBuild, aircraft: acList.length, weapons: wpList.length, encyclopedia: encList.length, airportSets: airportSets.size, radioSets: radioSets.size, pptSets: pptSets.size, maps: maps.size });
   const notReady = theaterIndex.filter((t) => !t.planner.ok);
   if (notReady.length) console.log('Planner data missing:', notReady.map((t) => `${t.id} (${t.planner.missing.join(', ')})`).join('; '));

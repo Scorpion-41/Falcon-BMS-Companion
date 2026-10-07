@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -49,8 +52,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -79,7 +86,7 @@ import com.bmscompanion.app.ui.components.ListDetail
 import com.bmscompanion.app.ui.components.ListRow
 import com.bmscompanion.app.ui.components.LoadingBox
 import com.bmscompanion.app.ui.components.Paragraph
-import com.bmscompanion.app.ui.components.SearchField
+import com.bmscompanion.app.ui.components.PinnedSearchField
 import com.bmscompanion.app.ui.components.SectionCard
 import com.bmscompanion.app.ui.components.Stat
 import com.bmscompanion.app.ui.components.StatGrid
@@ -179,10 +186,12 @@ private fun AircraftList(selected: String?, onOpen: (String) -> Unit) {
         }
     }
     val grouped = remember(filtered) { filtered.groupBy { it.familyTitle } }
+    // the search stays at the top however far the list is scrolled; the filters scroll with it
+    Column(Modifier.fillMaxSize()) {
+    PinnedSearchField(q, { q = it }, "Search aircraft (F-16CM-50, MiG-29…)", Modifier.arsenalProbe("search"))
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                SearchField(q, { q = it }, "Search aircraft (F-16CM-50, MiG-29…)")
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     TheaterFilter(theater) { theater = it }
                     Spacer(Modifier.weight(1f))
@@ -209,6 +218,7 @@ private fun AircraftList(selected: String?, onOpen: (String) -> Unit) {
             }
         }
     }
+    }
 }
 
 @Composable
@@ -223,9 +233,10 @@ private fun WeaponList(selected: String?, onOpen: (String) -> Unit) {
         list.filter { (cat == null || it.category == cat) && (nq.isEmpty() || it.name.norm().contains(nq)) }
     }
     val grouped = remember(filtered) { Labels.weaponCategory.keys.mapNotNull { k -> filtered.filter { it.category == k }.takeIf { it.isNotEmpty() }?.let { k to it } } }
+    Column(Modifier.fillMaxSize()) {
+    PinnedSearchField(q, { q = it }, "Search stores (AIM-120, GBU-12, Sniper…)", Modifier.arsenalProbe("search"))
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 24.dp)) {
         item {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) { SearchField(q, { q = it }, "Search stores (AIM-120, GBU-12, Sniper…)") }
             ChipRow(cats, cat, { Labels.weaponCategory[it] ?: it }, { cat = it })
         }
         grouped.forEach { (c, ws) ->
@@ -244,6 +255,7 @@ private fun WeaponList(selected: String?, onOpen: (String) -> Unit) {
                 )
             }
         }
+    }
     }
 }
 
@@ -327,14 +339,35 @@ fun AircraftDetail(nav: NavHostController, key: String, onBack: (() -> Unit)?) {
 
 @Composable
 fun HeroImage(pic: String?) {
-    Box(
-        Modifier.fillMaxWidth().widthIn(max = 720.dp).aspectRatio(320f / 151f).clip(RoundedCornerShape(16.dp)).background(Hud.Surface2),
-        contentAlignment = Alignment.Center,
-    ) {
-        AssetImage(Repo.tacrefImagePath(pic), Modifier.fillMaxSize(), ContentScale.Crop) {
-            Text("No image", color = Hud.TextFaint, modifier = Modifier.align(Alignment.Center))
+    Column(Modifier.fillMaxWidth().widthIn(max = 720.dp)) {
+        Box(
+            Modifier.fillMaxWidth().aspectRatio(320f / 151f).clip(RoundedCornerShape(16.dp)).background(Hud.Surface2),
+            contentAlignment = Alignment.Center,
+        ) {
+            AssetImage(Repo.tacrefImagePath(pic), Modifier.fillMaxSize(), ContentScale.Crop) {
+                Text("No image", color = Hud.TextFaint, modifier = Modifier.align(Alignment.Center))
+            }
         }
+        PhotoCreditLine(pic)
     }
+}
+
+/**
+ * The small line under a photograph that is not BMS's own art (a Wikimedia Commons file, `ph-…`): its author and
+ * licence, as CC BY and CC BY-SA require; a tap opens the file's page. Nothing for BMS's pictures.
+ */
+@Composable
+fun PhotoCreditLine(pic: String?) {
+    if (pic == null || !pic.startsWith("ph-")) return
+    val credit by produceState<com.bmscompanion.app.data.PhotoCredit?>(null, pic) { value = Repo.photoCredits()[pic] }
+    val c = credit ?: return
+    val open = com.bmscompanion.app.data.Platform.openUrl
+    Text(
+        "Photo: ${c.author}, ${c.licence}",
+        Modifier.fillMaxWidth().padding(top = 3.dp, start = 4.dp, end = 4.dp)
+            .let { m -> if (open != null && c.source.isNotBlank()) m.clickable { open(c.source) } else m },
+        fontSize = 10.sp, color = Hud.TextFaint, maxLines = 1, overflow = TextOverflow.Ellipsis,
+    )
 }
 
 @Composable
@@ -345,10 +378,46 @@ private fun VariantPicker(variants: List<AircraftVariant>, idx: Int, names: Map<
             style = MaterialTheme.typography.bodySmall, color = Hud.TextDim,
         )
         Spacer(Modifier.height(8.dp))
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            variants.forEachIndexed { i, v ->
-                val label = v.theaters.take(2).joinToString(", ") { names[it] ?: it } + if (v.theaters.size > 2) " +${v.theaters.size - 2}" else ""
-                com.bmscompanion.app.ui.components.HudChip(label, i == idx) { onPick(i) }
+        // a drop-down rather than a row of chips: the row ran off the card's edge and hid the variants past it
+        var open by remember { mutableStateOf(false) }
+        fun label(v: AircraftVariant) = v.theaters.joinToString(", ") { names[it] ?: it }
+        Box(Modifier.fillMaxWidth().arsenalProbe("variants")) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Hud.Surface2)
+                    .border(1.dp, Hud.Cyan.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                    .clickable { open = true }.padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    label(variants[idx.coerceIn(0, variants.lastIndex)]), Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium, color = Hud.Cyan, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                )
+                Text("${idx + 1} of ${variants.size}", style = LocalExtra.current.monoSmall, color = Hud.TextFaint, modifier = Modifier.padding(horizontal = 6.dp))
+                Icon(Icons.Default.ArrowDropDown, null, tint = Hud.TextDim)
+            }
+            DropdownMenu(open, { open = false }, Modifier.widthIn(min = 260.dp, max = 520.dp).heightIn(max = 420.dp)) {
+                variants.forEachIndexed { i, v ->
+                    val here = i == idx
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(
+                                    label(v), maxLines = 3, overflow = TextOverflow.Ellipsis,
+                                    color = if (here) Hud.Amber else Hud.Text,
+                                    fontWeight = if (here) FontWeight.SemiBold else FontWeight.Normal,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                                Text(
+                                    "${v.theaters.size} theater${if (v.theaters.size == 1) "" else "s"}" +
+                                        (v.spec.datFile?.takeIf { variants.map { x -> x.spec.datFile }.distinct().size > 1 }?.let { " · $it" } ?: ""),
+                                    style = LocalExtra.current.monoSmall, color = Hud.TextFaint,
+                                )
+                            }
+                        },
+                        leadingIcon = { Text(if (here) "●" else "", color = Hud.Amber, modifier = Modifier.width(12.dp)) },
+                        onClick = { onPick(i); open = false },
+                    )
+                }
             }
         }
     }
@@ -401,9 +470,11 @@ private fun LoadoutSection(nav: NavHostController, v: AircraftVariant, wmap: Map
     }
 }
 
+/** The stations as buttons, wrapping onto a second line where the card is narrow (a scrolled row hid the ones past its edge). */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StationStrip(stations: List<Pair<Int, String>>, current: Int, onPick: (Int) -> Unit) {
-    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    FlowRow(Modifier.fillMaxWidth().arsenalProbe("stations"), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         stations.forEach { (n, label) ->
             val sel = n == current
             Column(
@@ -471,13 +542,31 @@ fun WeaponDetail(nav: NavHostController, key: String, onBack: (() -> Unit)?) {
         BmsTopBar(wp?.name ?: "Weapon", wp?.let { Labels.weaponCategory[it.category] }, onBack = onBack, actions = { FavoriteButton("wp:$key") })
         if (wp == null) { LoadingBox(); return@Column }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
+            // the order a pilot reads a store in: the picture, what it is (Tactical reference, General info, both
+            // open), who carries it (folded, as a tree of families), then the sim's figures and the rest of TacRef
+            val general = ency?.sections?.firstOrNull { it.lines.isNotEmpty() && it.title.orEmpty().startsWith("General", ignoreCase = true) }
             AdaptiveSplit(left = {
                 HeroImage(wp.pic)
                 TagFlow {
                     Tag(Labels.weaponCategory[wp.category] ?: wp.category, Hud.Amber, filled = true)
                     wp.guidance.forEach { Tag(it, Hud.Green) }
                 }
-                SectionCard("Data") {
+                ency?.description?.takeIf { it.isNotBlank() }?.let { text ->
+                    Box(Modifier.arsenalProbe("tacref")) {
+                        CollapsibleCard("Tactical reference", initiallyOpen = true, accent = Hud.Green, preview = text, rememberKey = "wp_tacref") { Paragraph(text) }
+                    }
+                }
+                general?.let { s ->
+                    Box(Modifier.arsenalProbe("general")) {
+                        CollapsibleCard(s.title ?: "General info", initiallyOpen = true, accent = Hud.Green, preview = s.lines.take(3).joinToString(" · "), rememberKey = "wp_general") {
+                            EncySectionLines(s.lines)
+                        }
+                    }
+                }
+                val carriers = remember(wp, acs) { wp.carriedBy.mapNotNull { acs?.get(it) } }
+                if (carriers.isNotEmpty()) Box(Modifier.arsenalProbe("carriers")) { CarriedByTree(nav, carriers) }
+            }, right = {
+                SectionCard("Data", Modifier.arsenalProbe("data")) {
                     StatGrid(
                         listOf(
                             Stat("Weight", Fmt.lbs(wp.weightLbs)),
@@ -495,22 +584,97 @@ fun WeaponDetail(nav: NavHostController, key: String, onBack: (() -> Unit)?) {
                         listOf("Air" to h.air, "Low air" to h.lowAir, "Ground" to h.ground, "Naval" to h.naval).forEach { (l, v) -> Bar(l, v) }
                     }
                 }
-            }, right = {
-                val carriers = wp.carriedBy.mapNotNull { acs?.get(it) }
-                if (carriers.isNotEmpty()) {
-                    SectionCard("Carried by ${carriers.size} flyable aircraft", accent = Hud.Cyan) {
-                        TagFlow {
-                            carriers.forEach { a ->
-                                Box(Modifier.clip(RoundedCornerShape(8.dp)).background(Hud.Surface2).clickable { nav.go(Routes.aircraft(a.key)) }.padding(horizontal = 10.dp, vertical = 6.dp)) {
-                                    Text(a.name, fontSize = 13.sp, color = Hud.Text)
-                                }
-                            }
-                        }
-                    }
-                }
-                ency?.let { EncyclopediaCards(it) }
+                ency?.let { EncyclopediaCards(it, withDescription = false, except = general) }
             })
         }
+    }
+}
+
+/**
+ * Who carries a store, as a tree folded in one card (folded to begin with; the fold is kept per device): one row per
+ * aircraft family — the extractor's own family (`Aircraft.family`, BMS's NCTR code, titled `familyTitle`), the same
+ * grouping as the Aircraft list — with its count, opening to its variants; a family of one is that aircraft's own row.
+ * A variant opens that aircraft.
+ */
+@Composable
+private fun CarriedByTree(nav: NavHostController, carriers: List<Aircraft>) {
+    if (carriers.isEmpty()) return
+    val families = remember(carriers) {
+        carriers.groupBy { it.family ?: it.familyTitle.ifBlank { it.name } }.values
+            .map { acs -> (acs.first().familyTitle.ifBlank { acs.first().name }) to acs.sortedWith(compareBy(NumericOrder) { it.name }) }
+            .sortedWith(compareBy(NumericOrder) { it.first })
+    }
+    val open = remember(carriers) { androidx.compose.runtime.mutableStateMapOf<String, Boolean>() }
+    CollapsibleCard(
+        "Carried by ${carriers.size} flyable aircraft",
+        initiallyOpen = false,
+        accent = Hud.Cyan,
+        preview = families.joinToString(" · ") { (title, acs) -> if (acs.size == 1) acs[0].name else "$title (${acs.size})" },
+        rememberKey = "wp_carriers",
+    ) {
+        Column {
+            families.forEachIndexed { i, (title, acs) ->
+                if (i > 0) com.bmscompanion.app.ui.components.Divider()
+                if (acs.size == 1) {
+                    TreeRow(acs[0].name, null, expanded = null, indent = false) { nav.go(Routes.aircraft(acs[0].key)) }
+                } else {
+                    val isOpen = open[title] == true
+                    Box(Modifier.arsenalProbe("family/$title")) {
+                        TreeRow(title, acs.size, expanded = isOpen, indent = false) { open[title] = !isOpen }
+                    }
+                    if (isOpen) acs.forEach { a -> TreeRow(a.name, null, expanded = null, indent = true) { nav.go(Routes.aircraft(a.key)) } }
+                }
+            }
+        }
+    }
+}
+
+/** One row of [CarriedByTree]: a family (with its count and a fold arrow) or an aircraft (indented under its family). */
+@Composable
+private fun TreeRow(text: String, count: Int?, expanded: Boolean?, indent: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).clickable(onClick = onClick)
+            .padding(start = if (indent) 30.dp else 0.dp, top = if (indent) 5.dp else 8.dp, bottom = if (indent) 5.dp else 8.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (expanded != null) {
+            Icon(
+                Icons.Default.ArrowDropDown, null, tint = Hud.Cyan,
+                modifier = Modifier.size(20.dp).rotate(if (expanded) 0f else -90f),
+            )
+            Spacer(Modifier.width(4.dp))
+        } else if (!indent) {
+            Spacer(Modifier.width(24.dp))
+        }
+        Text(
+            text, Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+            fontSize = if (indent) 13.sp else 14.sp,
+            fontWeight = if (expanded != null) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (expanded != null) Hud.Text else if (indent) Hud.TextDim else Hud.Text,
+        )
+        count?.let { Text("$it", style = LocalExtra.current.monoSmall, color = Hud.TextFaint) }
+    }
+}
+
+/** A part's place for the headless check (`--arsenalrender`, ArsenalRender.kt), as `arsenal/<name>`; nothing otherwise. */
+internal fun Modifier.arsenalProbe(name: String): Modifier =
+    if (!com.bmscompanion.app.ui.screens.wdp.WdpProbe.on) this
+    else onGloballyPositioned {
+        com.bmscompanion.app.ui.screens.wdp.WdpProbe.rects["arsenal/$name"] = androidx.compose.ui.geometry.Rect(it.positionInRoot(), it.size.toSize())
+    }
+
+/** Names in the order a pilot expects: "F-16C-30" before "F-16C-252", digits compared as numbers. */
+private object NumericOrder : Comparator<String> {
+    private val parts = Regex("\\d+|\\D+")
+    override fun compare(a: String, b: String): Int {
+        val pa = parts.findAll(a.lowercase(Locale.US)).map { it.value }.toList()
+        val pb = parts.findAll(b.lowercase(Locale.US)).map { it.value }.toList()
+        for (i in 0 until minOf(pa.size, pb.size)) {
+            val x = pa[i]; val y = pb[i]
+            val c = if (x[0].isDigit() && y[0].isDigit()) (x.toLongOrNull() ?: 0L).compareTo(y.toLongOrNull() ?: 0L) else x.compareTo(y)
+            if (c != 0) return c
+        }
+        return pa.size - pb.size
     }
 }
 
@@ -525,21 +689,31 @@ private fun Bar(label: String, value: Int) {
     }
 }
 
+/**
+ * A TacRef entry's cards: its description ("Tactical reference", unless [withDescription] is false because the page
+ * shows it elsewhere), each section folded, and the RWR emitter. [except] is a section the page already shows.
+ */
 @Composable
-fun EncyclopediaCards(e: EncyEntry) {
-    if (e.description.isNotBlank()) {
+fun EncyclopediaCards(e: EncyEntry, withDescription: Boolean = true, except: com.bmscompanion.app.data.EncySection? = null) {
+    if (withDescription && e.description.isNotBlank()) {
         com.bmscompanion.app.ui.components.TextCard("Tactical reference", e.description, Hud.Green)
     }
-    e.sections.filter { it.lines.isNotEmpty() }.forEach { s ->
+    e.sections.filter { it.lines.isNotEmpty() && it !== except }.forEach { s ->
         CollapsibleCard(s.title ?: "Details", initiallyOpen = false, accent = Hud.Green, preview = s.lines.take(3).joinToString(" · ")) {
-            s.lines.forEach { line ->
-                val idx = line.indexOf(':')
-                if (idx in 1..40) KeyValueRow(line.substring(0, idx), line.substring(idx + 1).trim().ifBlank { "—" })
-                else Text(line, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 2.dp))
-            }
+            EncySectionLines(s.lines)
         }
     }
     e.rwr?.let { SectionCard("RWR", accent = Hud.Green) { KeyValueRow("Emitter", it, mono = true, valueColor = Hud.Green) } }
+}
+
+/** A TacRef section's lines: "Label: value" as a key and value, anything else as a line of text. */
+@Composable
+private fun EncySectionLines(lines: List<String>) {
+    lines.forEach { line ->
+        val idx = line.indexOf(':')
+        if (idx in 1..40) KeyValueRow(line.substring(0, idx), line.substring(idx + 1).trim().ifBlank { "—" })
+        else Text(line, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(vertical = 2.dp))
+    }
 }
 
 @Composable

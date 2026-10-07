@@ -256,6 +256,30 @@ data class Weapon(
     val carriedBy: List<String> = emptyList(),
 )
 
+/**
+ * BMS's empty class-table slots ("*free" in the F-16 family, "--Free Slot--" in the Eurofighter's, an empty name,
+ * "none"). The extractor leaves them out (`isPlaceholderName` in `tools/extractor/src/catalog.mjs`); this is the app's
+ * second guard, applied by each `Repo` to the aircraft, the stores (and their `carriedBy` keys), the encyclopedia and
+ * the threats. Whole names only: "F-5A Freedom Fighter" is real.
+ */
+object Placeholders {
+    private val edges = Regex("^[-*_.\\s]+|[-*_.\\s]+$")
+    private val whole = Regex("^(free([\\s-]*slot)?|none|empty|unused|n/?a|aircraft)$", RegexOption.IGNORE_CASE)
+
+    fun isPlaceholder(name: String?): Boolean {
+        val n = (name ?: "").replace(edges, "")
+        return n.isEmpty() || whole.matches(n) || n.contains("placeholder", ignoreCase = true)
+    }
+
+    fun aircraft(list: List<Aircraft>): List<Aircraft> = list.filterNot { isPlaceholder(it.name) }
+
+    fun weapons(list: List<Weapon>): List<Weapon> = list.filterNot { isPlaceholder(it.name) }.map { w ->
+        if (w.carriedBy.none { isPlaceholder(it) }) w else w.copy(carriedBy = w.carriedBy.filterNot { isPlaceholder(it) })
+    }
+
+    fun <T> named(list: List<T>, name: (T) -> String): List<T> = list.filterNot { isPlaceholder(name(it)) }
+}
+
 @Serializable
 data class Hits(val air: Int = 0, val lowAir: Int = 0, val ground: Int = 0, val naval: Int = 0)
 
@@ -417,7 +441,28 @@ data class Threat(
     val notes: String? = null,
     val tactics: String? = null,
     val impossibleToEvade: Boolean = false,
+    /** The name of the TacRef entry that is this threat (its picture and data), reviewed in tools/curated/threat_pictures.json; null when BMS has none. */
+    val tacref: String? = null,
+    /** A photograph of its own (tools/curated/photos.json, "threat:<id>"), for a threat with no TacRef entry; else null. */
+    val pic: String? = null,
 )
+
+/**
+ * A photograph in the Reference section that is not BMS's own art: a Wikimedia Commons file, public domain, CC0, CC BY
+ * or CC BY-SA (`tools/extractor/src/photos.mjs`, `data/credits/photos.json`). [id] is the picture's id (`ph-…`).
+ */
+@Serializable
+data class PhotoCredit(
+    val id: String,
+    val subject: String = "",
+    val author: String = "",
+    val licence: String = "",
+    val licenceUrl: String? = null,
+    val source: String = "",
+)
+
+@Serializable
+data class PhotoCredits(val source: String = "", val photos: List<PhotoCredit> = emptyList())
 
 @Serializable
 data class LabelValue(val label: String = "", val value: String = "")

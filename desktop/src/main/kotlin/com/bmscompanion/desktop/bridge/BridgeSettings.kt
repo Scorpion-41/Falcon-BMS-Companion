@@ -74,6 +74,13 @@ data class BridgeSettings(
     val RadioLogKeep: Int = 5,
     val RadioLogKeepDays: Boolean = false,
     /**
+     * **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (1.3.9, the Planner's Settings window; `GET`/`POST /api/planner/settings`):
+     * when the Planner plans another flight (Open mission… or Pick a flight), every HSD line and PPT goes from the
+     * cartridge and from the campaign mission file BMS's LOAD reads for that flight, whoever made them
+     * ([ModeSwitchReset.cleanOpened]; never in a TE or a training). **On**, and set on once by step 4 of [migrate].
+     */
+    val CleanOpenedMission: Boolean = true,
+    /**
      * How far the stored file has been brought forward. See [migrate].
      *
      * Every setting is written to disk, defaults included, so a default that changes later never reaches anyone who
@@ -86,7 +93,7 @@ data class BridgeSettings(
         private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true; explicitNulls = true }
 
         /** The settings layout this build writes. Bump it when a default changes and add the step to [migrate]. */
-        const val CURRENT = 3
+        const val CURRENT = 4
 
         fun load(): BridgeSettings = runCatching {
             val text = file.readText()
@@ -110,6 +117,8 @@ data class BridgeSettings(
          *    the printed briefing, exactly as it was — whatever the file holds; WDP mode is a choice made on the page.
          * 3: **hostile contacts off** (1.3.8). The live feed's enemy is no longer shown unless the pilot turns
          *    [ShowHostiles] on; set off once whatever the file holds, and a pilot who turns it on afterwards keeps it on.
+         * 4: **start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (1.3.9). [CleanOpenedMission] set on once whatever the file
+         *    holds; a pilot who turns it off afterwards (the Planner's Settings) keeps it off.
          */
         internal fun migrate(s: BridgeSettings): BridgeSettings = migrate(s, save = true)
 
@@ -128,6 +137,10 @@ data class BridgeSettings(
             if (next.SettingsVersion < 3) {
                 next = next.copy(ShowHostiles = false, SettingsVersion = 3)
                 BridgeLog.info("Settings brought forward to 3: hostile contacts from the live feed are off (Setup turns them on)")
+            }
+            if (next.SettingsVersion < 4) {
+                next = next.copy(CleanOpenedMission = true, SettingsVersion = 4)
+                BridgeLog.info("Settings brought forward to 4: each opened mission starts with clean lines, PPTs and Open 1/2 steerpoints (the Planner's Settings turn it off)")
             }
             next = next.copy(SettingsVersion = CURRENT)
             if (save) next.save()

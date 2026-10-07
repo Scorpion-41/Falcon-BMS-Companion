@@ -118,7 +118,9 @@ object PlannerMap {
         for ((n, at) in pic?.stpts.orEmpty()) {
             if (n < 81) continue
             val s = if (n <= 89) m?.open?.get(n - 81) else m?.hpn?.get(n - 90)
-            stpts += Stpt(n, at, notSet(s?.target), true, false, true, s?.action ?: -1, kotlin.math.abs((s?.falconZ ?: 0f).toDouble()), "your DTC")
+            // a target unless its type says otherwise (an alternate the Map page put in as Land, a Nav point)
+            val act = s?.action ?: -1
+            stpts += Stpt(n, at, notSet(s?.target), true, false, act == -1 || act in ATTACK_ACTIONS, act, kotlin.math.abs((s?.falconZ ?: 0f).toDouble()), "your DTC")
         }
         val lines = if (m == null) emptyList() else (1..4).map { k ->
             Line(k, DtcFromMission.linePoints(m, k), DtcFromMission.recognise(m, k, lineOptions)?.label)

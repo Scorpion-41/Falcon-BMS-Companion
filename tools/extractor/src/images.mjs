@@ -47,14 +47,30 @@ export function decodeTga(buf) {
   return { w, h, data: out };
 }
 
+/**
+ * A TacRef picture's file. A theater's art is `<artdir>\Art\TacRData` (Israel's `Add-On Israel\Art\TacRData`, the
+ * Falklands' `Add-On Falklands\Art\TacRData`, LKTO's `Add-On LKTO\Art+\Art`), the base theater's `Data\Art\TacRData`
+ * (its artdir is `Art`), and anything a theater does not ship comes from the base theater's. Up to 1.3.8 only
+ * `<artdir>\TacRData` was looked in, which no add-on has, so 244 pictures of the add-ons' own were never shipped.
+ */
 export function findTacRefImage(th, pic) {
   if (!pic) return null;
-  const dirs = [path.join(th.artDir, 'TacRData'), path.join(DATA, 'Art/TacRData')];
+  const art = findFileCI(th.artDir, 'Art');
+  const dirs = [art && path.join(art, 'TacRData'), path.join(th.artDir, 'TacRData'), path.join(DATA, 'Art/TacRData')].filter(Boolean);
   for (const d of dirs) {
     const f = findFileCI(d, pic + '.tga');
     if (f) return f;
   }
   return null;
+}
+
+/** A picture of one flat colour: a placeholder, not a photo (the Falklands' EF2K.tga is solid red). */
+export function isPlaceholderTga(src) {
+  const { data } = decodeTga(fs.readFileSync(src));
+  for (let i = 4; i < data.length; i += 4) {
+    if (data[i] !== data[0] || data[i + 1] !== data[1] || data[i + 2] !== data[2]) return false;
+  }
+  return true;
 }
 
 export async function tgaToWebp(src, dst, quality = 78) {
