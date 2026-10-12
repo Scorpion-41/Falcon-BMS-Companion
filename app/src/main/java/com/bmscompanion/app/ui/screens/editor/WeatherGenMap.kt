@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,7 +46,9 @@ import androidx.compose.ui.input.pointer.isCtrlPressed
 import androidx.compose.ui.input.pointer.isMetaPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextMeasurer
@@ -175,6 +178,10 @@ internal fun WxGenMap(th: Theater, st: WxGenState, airports: List<Airport>) {
         return best
     }
 
+    // where the controls drawn over the map sit, in this box's coordinates (see the gesture below)
+    val overlays = remember { mutableMapOf<String, androidx.compose.ui.geometry.Rect>() }
+    fun Modifier.overlay(name: String) = onPlaced { overlays[name] = it.boundsInParent() }
+
     Box(
         Modifier.fillMaxSize()
             .then(if (WxProbe.on) Modifier.onGloballyPositioned { holder.origin = it.positionInWindow() } else Modifier)
@@ -209,6 +216,9 @@ internal fun WxGenMap(th: Theater, st: WxGenState, airports: List<Airport>) {
             .pointerInput(st) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    // a press on a control drawn over the map (the banner's Clear/Done, Select several) is
+                    // that control's: taken here in Select several it picked the cell under the button instead
+                    if (overlays.values.any { it.contains(down.position) }) return@awaitEachGesture
                     val mods = currentEvent.keyboardModifiers
                     val additive = st.multi || mods.isShiftPressed || mods.isCtrlPressed || mods.isMetaPressed
                     val pr0 = holder.p ?: return@awaitEachGesture
@@ -351,7 +361,7 @@ internal fun WxGenMap(th: Theater, st: WxGenState, airports: List<Airport>) {
         }
         Legend(Modifier.align(Alignment.TopStart))
         // A touch screen has no Shift key: this is it. On the PC and in a browser Shift- or Ctrl-click does the same.
-        Box(Modifier.align(Alignment.TopEnd).padding(10.dp).wxProbe("select-several")) {
+        Box(Modifier.align(Alignment.TopEnd).overlay("select").padding(10.dp).wxProbe("select-several")) {
             // short on a phone, where the legend takes most of the top edge; the banner below says what it does
             val roomy = com.bmscompanion.app.ui.components.isMedium()
             EditorChip(
@@ -362,8 +372,11 @@ internal fun WxGenMap(th: Theater, st: WxGenState, airports: List<Airport>) {
                 selected = st.multi,
             ) { st.multi = !st.multi }
         }
-        val bottom = Modifier.align(Alignment.BottomCenter)
+        val bottom = Modifier.align(Alignment.BottomCenter).overlay("banner")
         val nRegions = st.regions.size
+        val bannerShown = st.placing || nRegions > 1 || st.editing != null || st.cells.size > 1 || st.multi
+        // a banner gone leaves no dead patch of map behind it
+        SideEffect { if (!bannerShown) overlays.remove("banner") }
         when {
             st.placing -> Banner(bottom, "Tap the map where the region goes", "Cancel") { st.placing = false }
             nRegions > 1 -> Banner(
@@ -561,7 +574,7 @@ private fun overlayText(o: WxOverlay, c: WxCell): String = when (o) {
  * feathers sit on its clockwise side, as a northern-hemisphere station plot draws them — a pennant for 50 kt, a
  * full feather for 10 and a half for 5, rounded to the nearest 5. Under 3 kt it is a ring: calm.
  */
-private fun DrawScope.windBarb(c: Offset, fromDeg: Double, kt: Double, len: Float, ink: Color, halo: Color) {
+internal fun DrawScope.windBarb(c: Offset, fromDeg: Double, kt: Double, len: Float, ink: Color, halo: Color) {
     if (kt < 2.5) {
         drawCircle(halo, len * 0.2f, c, style = Stroke(3.5f))
         drawCircle(ink, len * 0.2f, c, style = Stroke(1.5f))
@@ -612,7 +625,7 @@ private fun DrawScope.windBarb(c: Offset, fromDeg: Double, kt: Double, len: Floa
  * Sky cover as a station plot draws it: an empty ring for clear, a quarter, half, three quarters or all of it filled
  * for FEW, SCT, BKN and OVC, and a small peak over it where cumulus is towering.
  */
-private fun DrawScope.coverGlyph(c: Offset, cover: WxCover, towering: Boolean, r: Float, ink: Color, halo: Color) {
+internal fun DrawScope.coverGlyph(c: Offset, cover: WxCover, towering: Boolean, r: Float, ink: Color, halo: Color) {
     drawCircle(halo, r + 1.5f, c)
     val sweep = when (cover) {
         WxCover.NONE -> 0f
@@ -749,7 +762,7 @@ private fun Banner(modifier: Modifier, text: String, action: String, onAction: (
     ) {
         Text(text, color = Hud.Text, fontSize = 12.sp, modifier = Modifier.weight(1f, fill = false))
         Spacer(Modifier.width(10.dp))
-        EditorChip(action, selected = true, onClick = onAction)
+        Box(Modifier.wxProbe("banner-action")) { EditorChip(action, selected = true, onClick = onAction) }
     }
 }
 

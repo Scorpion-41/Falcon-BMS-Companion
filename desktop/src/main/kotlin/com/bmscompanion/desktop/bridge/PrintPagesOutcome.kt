@@ -29,7 +29,11 @@ import com.bmscompanion.app.data.mission.LinkState
 import com.bmscompanion.app.data.mission.MissionData
 import com.bmscompanion.app.data.mission.MissionLink
 import com.bmscompanion.app.data.mission.MissionRoute
+import com.bmscompanion.app.data.mission.TargetPictureApi
+import com.bmscompanion.app.ui.screens.mission.TargetPics
 import com.bmscompanion.app.ui.screens.wdp.KbPageKind
+import com.bmscompanion.app.ui.screens.wdp.KbTargetChoice
+import com.bmscompanion.app.ui.screens.wdp.KneeboardTargets
 import com.bmscompanion.app.ui.screens.wdp.KneeboardExtraPages
 import com.bmscompanion.app.ui.screens.wdp.KneeboardPageHost
 import com.bmscompanion.app.ui.screens.wdp.KneeboardPages
@@ -72,6 +76,9 @@ import javax.imageio.ImageIO
  * 2. **Each kind printed** through the Print window itself (This PC, the bridge on the copy): nine halves on pages 4-8,
  *    only those five files changed, each half in the file is the half the window drew (decoded, ≥ 30 dB), the owners
  *    read back as BMS Companion with the kind printed, and each half decoded to a picture at the pad's shape.
+ * 3. **Target pictures** (1.4.0, [targetPictures]): two halves of the mission's targets, a choice made in the picker and
+ *    kept across a launch, every picture inked, and a half the PC cannot draw refused. The copy's mission must name
+ *    targets that have models (its `Data\TerrData\Objects\Models`), or only the refusal is checked.
  *
  * Pictures go to `<outDir>/printpages/`. The copy's page files are written (that is the point); nothing else is.
  */
@@ -83,6 +90,8 @@ object PrintPagesOutcome {
     private val ORDER = listOf(
         KbKind.BRIEFING, KbKind.WEATHER, KbKind.TARGETS_LEFT, KbKind.TARGETS_RIGHT, KbKind.ROUTE_MAP,
         KbKind.ATTACK, KbKind.DEPARTURE, KbKind.ARRIVAL, KbKind.ALTERNATE,
+        // 1.4.0
+        KbKind.ROUTE_MAP_DARK, KbKind.SCHEDULE,
     )
 
     fun run(outDir: File, more: List<String>): String {
@@ -92,6 +101,17 @@ object PrintPagesOutcome {
         fun check(ok: Boolean, what: String, detail: String = "") {
             if (!ok) fails++
             line((if (ok) "PASS " else "FAIL ") + what + if (!ok && detail.isNotEmpty()) " — $detail" else if (detail.isNotEmpty()) " ($detail)" else "")
+        }
+        // a table's rows are on the page, not only laid out: the dark ink (text) between the title and the page's foot,
+        // some 80 sampled pixels a row at least (an empty row, the 1.3.9 bug, has its grey band and no ink)
+        fun tableInked(img: BufferedImage, rows: Int) {
+            var dark = 0
+            for (y in (img.height * 8 / 100) until (img.height * 80 / 100) step 2) for (x in 0 until img.width step 2) {
+                val c = img.getRGB(x, y)
+                val r = (c shr 16) and 0xFF; val g = (c shr 8) and 0xFF; val b = c and 0xFF
+                if (maxOf(r, g, b) < 120 || (r > 150 && g < 90 && b < 90)) dark++
+            }
+            check(rows > 0 && dark >= rows * 80, "the table's $rows rows are drawn ($dark dark pixels in the body)", "$dark dark pixels for $rows rows")
         }
         val pics = File(outDir, "printpages").apply { mkdirs() }
         val root = more.getOrNull(0)?.let(::File) ?: Bridge.settings.value.BmsDirOverride?.let(::File)
@@ -172,7 +192,7 @@ object PrintPagesOutcome {
 
             // ---------------------------------------------------------------- 1. each kind drawn
             line("== 1. Each kind drawn at 1024 x 1536 and captured, as the Print window captures a page")
-            check(ORDER.all { k -> KneeboardPages.of(k) != null }, "the Print window offers all nine kinds after the card pages",
+            check(ORDER.all { k -> KneeboardPages.of(k) != null }, "the Print window offers all ${ORDER.size} kinds after the card pages",
                 KneeboardPages.kinds.joinToString { it.id })
             val drawnPng = HashMap<String, ByteArray>()
             val spike = Spike()
@@ -191,7 +211,8 @@ object PrintPagesOutcome {
                     File(pics, "drawn-$kind.png").writeBytes(png)
                     // ink: pixels well off white (a page of text has a few thousand, a map or a chart most of the page)
                     val ink = count(img) { r, g, b -> r + g + b < 600 }
-                    check(ink > 1500 && inked(img) < 99, "$kind: the page has something on it ($ink dark pixels in a quarter sample, ${inked(img)}% off white)", "$ink")
+                    // a dark page is all "off white" by design: only the day pages are held to under 99 %
+                    check(ink > 1500 && (kind == KbKind.ROUTE_MAP_DARK || inked(img) < 99), "$kind: the page has something on it ($ink dark pixels in a quarter sample, ${inked(img)}% off white)", "$ink")
                     when (kind) {
                         KbKind.BRIEFING -> check(num(said, "briefing lines filled") >= 4, "briefing: the Briefing page's boxes are filled", said)
                         KbKind.WEATHER -> check(num(said, "weather lines") >= 3 || data.briefing?.weather == null, "weather: the weather list is on it", said)
@@ -201,8 +222,18 @@ object PrintPagesOutcome {
                             check(Regex("(\\d+) of (\\d+) target points").find(said)?.let { it.groupValues[1] == it.groupValues[2] && it.groupValues[1] != "0" } == true,
                                 "targets-l: every target point is listed", said)
                             check(said.contains("DTC page"), "targets-l: from the cartridge as the DTC page holds it", said)
+                            val rows = KneeboardExtraPages.rows[kind].orEmpty()
+                            val stpts = WdpSession.appliedMission?.slots?.filter { it.point.n in 1..24 && (it.point.x != 0.0 || it.point.y != 0.0) }?.map { it.point.n.toString() }.orEmpty()
+                            check(stpts.isNotEmpty() && stpts.all { n -> rows.any { it.startsWith("$n | ") } }, "targets-l: a row for each placed steerpoint (${rows.size} rows)", rows.take(3).joinToString(" / "))
+                            tableInked(img, rows.size)
                         }
-                        KbKind.TARGETS_RIGHT -> check(said.startsWith("2 of 2 PPTs, 4 of 4 line points, 2 of 2 weapon targets"), "targets-r: the two PPTs, the line's four points and the two weapon targets", said)
+                        KbKind.TARGETS_RIGHT -> {
+                            check(said.startsWith("2 of 2 PPTs, 4 of 4 line points, 2 of 2 weapon targets"), "targets-r: the two PPTs, the line's four points and the two weapon targets", said)
+                            val rows = KneeboardExtraPages.rows[kind].orEmpty()
+                            check(listOf("Bridge", "Depot", "Line 1").all { w -> rows.any { w in it } } && rows.any { it.startsWith("56 | ") } && rows.any { it.startsWith("57 | ") },
+                                "targets-r: the rows name PPT 56 and 57, line 1 and the weapon targets Bridge and Depot", rows.joinToString(" / "))
+                            tableInked(img, rows.size)
+                        }
                         KbKind.ROUTE_MAP -> {
                             val m = Regex("(\\d+) of (\\d+) pictures").find(said)
                             check(m != null && m.groupValues[1] == m.groupValues[2] && m.groupValues[2].toInt() > 1, "routemap: every map picture it needs was there when it was captured", said)
@@ -216,6 +247,23 @@ object PrintPagesOutcome {
                         }
                         KbKind.ATTACK -> {
                             check(said.startsWith("TOSS, TGT STPT 3:") && num(said, "figures") >= 8 && said.endsWith("map drawn"), "attack: the TOSS page's profile, DED data, map and figures", said)
+                        }
+                        KbKind.ROUTE_MAP_DARK -> {
+                            val m = Regex("(\\d+) of (\\d+) pictures").find(said)
+                            check(said.contains("/dark ") && m != null && m.groupValues[1] == m.groupValues[2] && m.groupValues[2].toInt() > 1,
+                                "routemap-dark: on the dark map style, every picture there when captured", said)
+                            val dark = count(img) { r, g, b -> maxOf(r, g, b) < 70 }
+                            val all = (img.width / 2) * (img.height / 2)
+                            check(dark * 100 / all >= 60, "routemap-dark: the page is dark (${dark * 100 / all}% of it under 70)", "${dark * 100 / all}%")
+                            val route = count(img) { r, g, b -> b > 200 && g > 160 && r in 100..180 }
+                            check(route > 400, "routemap-dark: the flight plan is drawn in its light blue ($route px)", "$route px")
+                        }
+                        KbKind.SCHEDULE -> {
+                            val rows = KneeboardExtraPages.rows[kind].orEmpty()
+                            val own = data.briefing?.overview?.flight
+                            check(rows.isNotEmpty() && own != null && rows.any { it.contains(own, ignoreCase = true) },
+                                "schedule: the departures are listed, your own flight among them (${rows.size} rows)", said + " / " + rows.take(3).joinToString(" / "))
+                            tableInked(img, rows.size)
                         }
                         else -> {
                             check(Regex("(\\d+) runways").find(said)?.groupValues?.get(1)?.toInt()?.let { it >= 1 } == true, "$kind: the airfield's chart (runways, spots)", said)
@@ -239,8 +287,8 @@ object PrintPagesOutcome {
             try {
                 val online = stage.until(20_000) { MissionLink.state.value is LinkState.Online && KneeboardPrintSession.state != null && !KneeboardPrintSession.loading }
                 check(online, "the window reads the pages once the link is up", "${MissionLink.state.value}")
-                val pages = (4..8).toList()
-                check(pages.all { KneeboardPrintSession.printable(KneeboardPrintSession.slot(it)) }, "pages 4-8 can be printed into", pages.joinToString { "${it}: ${KneeboardPrintSession.slot(it)?.problem ?: "ok"}" })
+                val pages = (4 until 4 + (ORDER.size + 1) / 2).toList()
+                check(pages.all { KneeboardPrintSession.printable(KneeboardPrintSession.slot(it)) }, "pages ${pages.first()}-${pages.last()} can be printed into", pages.joinToString { n -> KneeboardPrintSession.slot(n).let { s -> "$n: " + (if (s == null) "no slot" else if (s.missing) "missing" else s.problem ?: "ok") } })
                 val plan = ORDER.mapIndexed { i, k -> Triple(pages[i / 2], if (i % 2 == 0) 'L' else 'R', k) }
                 stage.onUi {
                     KneeboardPrintSession.leaveAll()
@@ -261,8 +309,8 @@ object PrintPagesOutcome {
                 res.forEach { line("  ${it.file}: ${it.status}${it.reason?.let { r -> " — $r" } ?: ""}") }
                 line("  took ${System.currentTimeMillis() - t0} ms for ${captures.size} halves")
                 val files = pages.map { KneeboardPrint.pageName(it) }
-                check(res.map { it.file }.sorted() == files.sorted() && res.all { it.status == KbFileResult.WRITTEN }, "five files written: ${files.joinToString()}", res.joinToString { "${it.file} ${it.status}" })
-                check(captures.size == ORDER.size && captures.all { it.first == 1024 && it.second == 1536 }, "nine halves drawn at 1024 x 1536", captures.joinToString { "${it.first}x${it.second}" })
+                check(res.map { it.file }.sorted() == files.sorted() && res.all { it.status == KbFileResult.WRITTEN }, "${files.size} files written: ${files.joinToString()}", res.joinToString { "${it.file} ${it.status}" })
+                check(captures.size == ORDER.size && captures.all { it.first == 1024 && it.second == 1536 }, "${ORDER.size} halves drawn at 1024 x 1536", captures.joinToString { "${it.first}x${it.second}" })
                 val shaAfter = shaTree(root)
                 val changed = (shaBefore.keys + shaAfter.keys).filter { shaBefore[it] != shaAfter[it] }.sorted()
                 check(changed.map { it.substringAfterLast('/') }.sorted() == files.sorted(), "only those files changed in the copy, and nothing new appeared", changed.joinToString())
@@ -306,6 +354,8 @@ object PrintPagesOutcome {
             } finally {
                 stage.close()
             }
+            line("")
+            fails += targetPictures(root, outDir, pics, captures, ::line)
         } catch (e: Throwable) {
             fails++
             line("FAIL: threw ${e::class.java.simpleName}: ${e.message}")
@@ -321,6 +371,138 @@ object PrintPagesOutcome {
         line("")
         line(if (fails == 0) "ALL PASS" else "$fails FAIL")
         return out.toString()
+    }
+
+    /**
+     * 3. **Target pictures** (1.4.0): the mission's targets as the Briefing's card lists them, on two halves of one page
+     * (the first four of the list's default order and the next four), one half's choice changed in the picker and kept
+     * with the plan across a launch, the page printed with every picture drawn (ink, names), the pictures and the picker
+     * at PC and phone size; then a half whose target the PC cannot draw, which is refused and leaves its file as it is.
+     * Runs in the bridge part 2 started (This PC). Answers how many checks failed.
+     */
+    private fun targetPictures(root: File, outDir: File, pics: File, captures: CopyOnWriteArrayList<Triple<Int, Int, ByteArray>>, line: (String) -> Unit): Int {
+        var fails = 0
+        fun check(ok: Boolean, what: String, detail: String = "") {
+            if (!ok) fails++
+            line((if (ok) "PASS " else "FAIL ") + what + if (!ok && detail.isNotEmpty()) " — $detail" else if (detail.isNotEmpty()) " ($detail)" else "")
+        }
+        line("== 3. Target pictures: the mission's targets, two views each, chosen per half")
+        val s = KneeboardPrintSession
+        val t = KneeboardTargets
+        val oldCache = TargetPictures.cacheOverride
+        TargetPictures.cacheOverride = File(outDir, "target-cache")
+        val stage = Stage(SCENE_W, SCENE_H)
+        try {
+            val online = stage.until(20_000) { MissionLink.state.value is LinkState.Online && s.state != null && !s.loading }
+            check(online, "the window is up with the link", "${MissionLink.state.value}")
+            runBlocking { t.load(force = true) }
+            val set = t.set
+            val mission = set?.mission.orEmpty()
+            TargetPics.saveAdded(mission, emptyList()); TargetPics.saveRemoved(mission, emptyList())
+            stage.onUi { t.choices.clear(); s.leaveAll() }
+            val all = t.entries()
+            line("  the mission's list: ${set?.groups?.size ?: 0} groups, ${all.size} entries" + (set?.error?.let { " — $it" } ?: t.error?.let { " — $it" } ?: ""))
+            check(KneeboardPages.of(KbKind.TARGET_PICTURES) != null, "the Print window offers Target pictures")
+            val n = (10..16).firstOrNull { s.printable(s.slot(it)) && s.printable(s.slot(it + 1)) } ?: 10
+            if (all.isEmpty()) {
+                line("  (the copy's mission names no target with a model: only the refusal is checked; use a copy holding the models)")
+            } else {
+                // the picker opened as the half's own menu opens it (the menu's last items lie below an 800-px scene)
+                stage.onUi { s.set(n, 'L', KbKind.TARGET_PICTURES); t.pick(n, 'L') }
+                stage.frames(10, 30)
+                check(t.picking?.n == n && t.picking?.side == 'L', "the picker opens on page $n left", "${t.picking?.n}${t.picking?.side}")
+                stage.onUi { s.set(n, 'R', KbKind.TARGET_PICTURES) }
+                val order = t.defaultOrder(all).map { it.id }
+                val alloc = t.allocation()
+                check(alloc["${n}L"] == order.take(4) && alloc["${n}R"] == order.drop(4).take(4),
+                    "page $n left takes the list's first four, the right half the next ${order.drop(4).take(4).size}",
+                    "${alloc["${n}L"]} / ${alloc["${n}R"]}")
+                line("  default order: " + t.defaultOrder(all).take(8).joinToString(" / ") { it.item.name + (it.item.role?.let { r -> " ($r)" } ?: "") })
+                stage.until(60_000) { t.itemsFor(n, 'L').all { e -> TargetPictureApi.VIEWS.all { (v, _) -> t.images[t.path(set!!.theater, e.item.key, v)] != null } } }
+                stage.shot(File(pics, "targets-picker-pc.png"))
+                // a choice of its own: the list's last entry in place of the half's fourth
+                val chosen = (order.take(3) + order.last()).distinct()
+                stage.onUi { t.picking?.draft?.let { d -> d.clear(); d.addAll(chosen) } }
+                check(stage.click("Print/Tgt/Done") && t.picking == null, "Done closes the picker")
+                check(t.choices["${n}L"]?.ids == chosen && !t.isDefault(n, 'L'), "page $n left keeps its own choice", "${t.choices["${n}L"]?.ids}")
+                // kept with the plan across a launch
+                stage.onUi { s.reloadSaved() }
+                check(s.kind(n, 'L') == KbKind.TARGET_PICTURES && t.choices["${n}L"]?.ids == chosen, "the choice is kept with the plan (kb_print_plan) across a launch")
+                check(t.allocation()["${n}R"]?.none { it in chosen } == true, "the right half takes the next of the list, none of the left's")
+                // a choice made for another mission is dropped: that half follows the list again
+                val kept = t.choices["${n}L"]!!
+                stage.onUi { t.choices["${n}L"] = KbTargetChoice("another-mission", kept.ids) }
+                check(t.isDefault(n, 'L') && t.allocation()["${n}L"] == order.take(4), "a choice made for another mission gives way to the list")
+                stage.onUi { t.choices["${n}L"] = kept }
+                // printed
+                stage.onUi { s.results = emptyList(); s.selN = n; s.selSide = 'L' }
+                val shaBefore = shaTree(root)
+                captures.clear()
+                check(stage.click("Print/Print"), "the Print button is pressed")
+                val done = stage.until(240_000) { !s.busy && s.results.isNotEmpty() && s.progress == null }
+                s.results.forEach { line("  ${it.file}: ${it.status}${it.reason?.let { r -> " — $r" } ?: ""}") }
+                check(done && s.results.size == 1 && s.results[0].status == KbFileResult.WRITTEN, "page $n written with both target halves")
+                for ((i, side) in listOf('L', 'R').withIndex()) {
+                    val want = t.itemsFor(n, side)
+                    val said = t.drawn["$n$side"].orEmpty()
+                    line("    $n$side: $said")
+                    check(want.isNotEmpty() && said.startsWith("${want.size} targets, ${want.size * 2} of ${want.size * 2} pictures: " + want.joinToString(" / ") { it.item.name }),
+                        "page $n ${if (side == 'L') "left" else "right"}: ${want.size} targets × 2 views drawn, names on the page", said)
+                    val cap = captures.getOrNull(i)?.third
+                    val img = cap?.let { ImageIO.read(ByteArrayInputStream(it)) }
+                    if (cap != null) File(pics, "targets-page-$n$side.png").writeBytes(cap)
+                    // the pictures are the targeting pod's: dark ground, light models
+                    val dark = img?.let { count(it) { r, g, b -> maxOf(r, g, b) < 90 } } ?: 0
+                    val light = img?.let { count(it) { r, g, b -> minOf(r, g, b) > 170 && maxOf(r, g, b) < 250 } } ?: 0
+                    check(img != null && img.width == 1024 && dark > want.size * 2 * 8_000 && light > want.size * 2 * 400,
+                        "page $n ${if (side == 'L') "left" else "right"}: the pictures are inked ($dark dark, $light light pixels in a quarter sample)", "$dark / $light")
+                }
+                val changed = shaTree(root).let { after -> (shaBefore.keys + after.keys).filter { shaBefore[it] != after[it] } }
+                check(changed.isNotEmpty() && changed.all { it.substringAfterLast('/') == KneeboardPrint.pageName(n) }, "only page $n's file changed", changed.joinToString())
+                val slot = s.state?.pages?.firstOrNull { it.n == n }
+                check(slot?.leftKind == KbKind.TARGET_PICTURES && slot.rightKind == KbKind.TARGET_PICTURES, "the owners read back: Target pictures on both halves", "${slot?.leftKind}/${slot?.rightKind}")
+                // the phone: the picker as a full-screen sheet with a finger's rows
+                val touch = com.bmscompanion.app.data.Platform.touchFirst
+                com.bmscompanion.app.data.Platform.touchFirst = true
+                val phone = Stage(393, 800, 2f)
+                try {
+                    phone.frames(10, 30)
+                    phone.onUi { t.pick(n, 'R') }
+                    phone.frames(20, 30)
+                    phone.shot(File(pics, "targets-picker-phone.png"))
+                    phone.onUi { t.picking = null }
+                } finally { phone.close(); com.bmscompanion.app.data.Platform.touchFirst = touch }
+            }
+            // a half the PC cannot draw: refused with a sentence, its file left as it is
+            stage.onUi {
+                s.leaveAll()
+                if (set != null) {
+                    TargetPics.saveAdded(mission, listOf(com.bmscompanion.app.data.mission.TargetItem(key = "ct999999", name = "No such model", category = "Test", role = "added")))
+                    s.set(n + 1, 'R', KbKind.TARGET_PICTURES)
+                    t.choices["${n + 1}R"] = KbTargetChoice(mission, listOf("added|No such model#ct999999"))
+                } else s.set(n + 1, 'R', KbKind.TARGET_PICTURES)
+                s.results = emptyList()
+            }
+            val before = shaTree(root)
+            check(stage.click("Print/Print"), "Print pressed for a half the PC cannot draw")
+            val done = stage.until(120_000) { !s.busy && s.results.isNotEmpty() && s.progress == null }
+            s.results.forEach { line("  ${it.file}: ${it.status}${it.reason?.let { r -> " — $r" } ?: ""}") }
+            val r = s.results.firstOrNull()
+            check(done && s.results.size == 1 && r?.status == KbFileResult.REFUSED && r.file.endsWith("right knee") &&
+                (r.reason.orEmpty().contains("could not draw No such model") || set == null || all.isEmpty()),
+                "the half is refused with a sentence", "${r?.status}: ${r?.reason}")
+            check(shaTree(root) == before, "no file changed")
+            TargetPics.saveAdded(mission, emptyList())
+            stage.onUi { t.choices.clear(); s.leaveAll() }
+        } catch (e: Throwable) {
+            fails++
+            line("FAIL: target pictures threw ${e::class.java.simpleName}: ${e.message}")
+            e.stackTrace.take(10).forEach { line("    at $it") }
+        } finally {
+            stage.close()
+            TargetPictures.cacheOverride = oldCache
+        }
+        return fails
     }
 
     /**
@@ -394,7 +576,7 @@ object PrintPagesOutcome {
         root.walkTopDown().filter { it.isFile }.associate { it.relativeTo(root).invariantSeparatorsPath to sha(it.readBytes()) }
 
     /** A scene of its own, whose composition, frames and coroutines all run on one thread, as a window's do. */
-    private open class Scene(val w: Int, val h: Int) : AutoCloseable {
+    private open class Scene(val w: Int, val h: Int, val density: Float = 1f) : AutoCloseable {
         private val exec = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "printpages-ui").apply { isDaemon = true } }
         val ui = exec.asCoroutineDispatcher()
         private var nanos = 0L
@@ -403,7 +585,7 @@ object PrintPagesOutcome {
         fun <T> onUi(block: () -> T): T = exec.submit(Callable { block() }).get()
 
         fun start(content: @Composable () -> Unit) {
-            scene = onUi { ImageComposeScene(w, h, Density(1f), coroutineContext = ui, content = content) }
+            scene = onUi { ImageComposeScene((w * density).toInt(), (h * density).toInt(), Density(density), coroutineContext = ui, content = content) }
         }
 
         fun frame(): org.jetbrains.skia.Image = onUi {
@@ -438,9 +620,10 @@ object PrintPagesOutcome {
     }
 
     /** The Planner's window host over a dark page, the Print window open in it. */
-    private class Stage(w: Int, h: Int) : Scene(w, h) {
+    private class Stage(w: Int, h: Int, density: Float = 1f) : Scene(w, h, density) {
         init {
-            start { Box(Modifier.fillMaxSize().background(Hud.Bg)) { PlannerWindowHost() } }
+            // inside the app's theme, as the Planner is
+            start { com.bmscompanion.app.ui.theme.BmsTheme { Box(Modifier.fillMaxSize().background(Hud.Bg)) { PlannerWindowHost() } } }
         }
 
         fun click(probe: String): Boolean {
@@ -470,8 +653,12 @@ object PrintPagesOutcome {
                 val l = rememberGraphicsLayer()
                 layer = l
                 scope = androidx.compose.runtime.rememberCoroutineScope()
-                Box(Modifier.fillMaxSize().background(Hud.Bg)) {
-                    KneeboardPageHost(kind, 7, 'L', Modifier.size(200.dp, 300.dp), l)
+                // inside the app's theme, as the Print window draws its pages: the theme's text style is what once
+                // emptied the target list's rows (1.4.0), and a page drawn without it hid that
+                com.bmscompanion.app.ui.theme.BmsTheme {
+                    Box(Modifier.fillMaxSize().background(Hud.Bg)) {
+                        KneeboardPageHost(kind, 7, 'L', Modifier.size(200.dp, 300.dp), l)
+                    }
                 }
             }
         }

@@ -182,10 +182,40 @@ class PerformancePlan(
      * follows; the drag is [cftDrag]. Nothing changes for a jet without them.
      */
     fun cftFromFuel(fuel: Int) {
+        if (cft == null) return
+        cftCarried(fuel > baseFuel)
+    }
+
+    /**
+     * The save says whether the aircraft carries its conformal tanks ([on]: its own flag, `CampFlight.cft`, or [cftFromFuel]);
+     * its fuel already holds theirs, so only the empty weight follows (the drag is [cftDrag]).
+     */
+    fun cftCarried(on: Boolean) {
         val c = cft ?: return
-        cftOn = fuel > baseFuel
+        cftOn = on
         intEmpty = baseEmpty + if (cftOn) c.empty else 0
         labels["lblEmpty_Val"] = intEmpty.toString()
+    }
+
+    /** The conformal tanks the jet on the page can carry, or null ([AcData.cft]). */
+    val cftData: Cft? get() = cft
+
+    /** Whether the save's [fuel] for a seat (its `fuel_initial`) says that aircraft carries its conformal tanks; null for a jet without them. */
+    fun cftInFuel(fuel: Int): Boolean? = cft?.let { fuel > baseFuel }
+
+    /**
+     * The conformal tanks fitted or taken off (the Loadout window's CFT switch, 1.4.0): the empty weight, the internal
+     * fuel and the drag ([cftDrag]) follow, so the take-off and block fuel, the gross weight and every figure worked
+     * from them — and the DataCard's T/O and block fuel — count the tanks' 3,060 lb. Nothing for a jet without them.
+     */
+    fun setCft(on: Boolean) {
+        val c = cft ?: return
+        if (on == cftOn) return
+        cftOn = on
+        intEmpty = baseEmpty + if (on) c.empty else 0
+        intIntFuel = (intIntFuel + if (on) c.fuel else -c.fuel).coerceAtLeast(0)
+        labels["lblEmpty_Val"] = intEmpty.toString()
+        setFuel()
     }
 
     // the turn calculator

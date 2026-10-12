@@ -209,6 +209,13 @@ data class PcTwx(
     val types: List<PcTwxType> = emptyList(),
     val windHeld: Boolean = true,
     val clock: Long? = null,
+    /** 1.4.0, version 8: the Probabilistic model's chance of each type, sunny first, 0-1 (empty from an older PC) */
+    val probabilities: List<Float> = emptyList(),
+    /** 1.4.0, version 8: the Deterministic model's schedule of type changes, as the file holds it */
+    val changes: List<PcTwxChange> = emptyList(),
+    /** 1.4.0, version 8: the Probabilistic model's change interval, minutes (min, max); 0 unknown */
+    val intervalMin: Int = 0,
+    val intervalMax: Int = 0,
 )
 
 /**
@@ -224,4 +231,48 @@ data class PcTwxType(
     val cumulusFt: Int = 0,
     val tempC: List<Int> = emptyList(),
     val qnhMb: List<Int> = emptyList(),
+    /** the contrail layer, ft (BMS's printed "Con Layer"); 0 from a PC older than 1.4.0 */
+    val contrailFt: Int = 0,
 )
+
+/**
+ * A file of the BMS PC opened in the Mission section's **Files** tab (`GET /api/files/view?path=`, 1.4.0): read only,
+ * and only the kinds a pilot reads ([TYPES]); never a program or a script. [kind] is "text", "html", "image" or "pdf".
+ * A text or HTML file comes whole in [text] up to [MAX_TEXT] bytes; a longer one is cut ([truncated]): a log shows its
+ * end (the newest lines), anything else its start, and [offset] is the byte the text starts at. A picture is fetched
+ * with `/api/files/picture`, a PDF's pages one at a time with `/api/files/pdfpage?path=&page=&max=` (a [PcPicture]);
+ * [pages] is how many it has. [note] says what the PC left out, in a sentence.
+ */
+@Serializable
+data class PcFileView(
+    val path: String = "",
+    val name: String = "",
+    val size: Long = 0,
+    val modified: Long = 0,
+    val kind: String = "",
+    val text: String? = null,
+    val truncated: Boolean = false,
+    val offset: Long = 0,
+    val pages: Int = 0,
+    val note: String? = null,
+) {
+    companion object {
+        /** The text the PC sends of one file at most, bytes. */
+        const val MAX_TEXT = 2L * 1024 * 1024
+        val TEXT_TYPES = listOf("txt", "log", "ini", "cfg", "md", "csv", "json", "xml", "lst", "tdf", "b")
+        val HTML_TYPES = listOf("html", "htm")
+        val IMAGE_TYPES = PcPicture.TYPES
+        val PDF_TYPES = listOf("pdf")
+        /** Everything the Files tab opens. */
+        val TYPES: List<String> = TEXT_TYPES + HTML_TYPES + IMAGE_TYPES + PDF_TYPES
+
+        /** "text", "html", "image", "pdf", or null for a type the tab does not open. */
+        fun kindOf(name: String): String? = when (name.substringAfterLast('.', "").lowercase()) {
+            in TEXT_TYPES -> "text"
+            in HTML_TYPES -> "html"
+            in IMAGE_TYPES -> "image"
+            in PDF_TYPES -> "pdf"
+            else -> null
+        }
+    }
+}

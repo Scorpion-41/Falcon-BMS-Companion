@@ -131,6 +131,8 @@ internal object WdpTypeTest {
             if (only == null || only.containsMatchIn("fcls")) windows(d, report, results, pngDir, mission, cartridge)
             // every page, every DTC tab
             pages(d, report, results, pngDir)
+            // the Briefing page's prose, which wraps as it is typed (D100)
+            if (wanted("Briefing", "txtBrfNotes")) proseWrap(d, report, results)
         } catch (e: Throwable) {
             report.appendLine("FAIL the check itself threw ${e::class.simpleName}: ${e.message}")
             e.stackTrace.take(12).forEach { report.appendLine("       at $it") }
@@ -674,6 +676,11 @@ internal object WdpTypeTest {
                         if (WdpProbe.rects[key] == null) continue
                         if (!wanted(where, c.name)) continue
                         if (disabled(form, c, v0)) { done += key; results += Result(where, c.name, c.kind, "OFF", "disabled on the page"); continue }
+                        if (form.form == "cntDataCard" && PROSE.matches(c.name)) {
+                            done += key
+                            results += Result(where, c.name, c.kind, "WRAP", "D100: wraps onto the next line as it is typed, not a Windows TextBox; checked on its own (== the Briefing page's prose)")
+                            continue
+                        }
                         done += key
                         results += typeInto(d, where, form.form, c, { w.values(p.hiddenHere()) }, window = false, pngDir = pngDir)
                         edt { WdpDialogs.stack.clear() }
@@ -689,6 +696,160 @@ internal object WdpTypeTest {
             }
         }
         edt { WdpSession.dtc.onValue("tabDTC", "tabMain") }
+    }
+
+    // ------------------------------------------------------------------------------------------------ the Briefing page's prose
+
+    /** The Briefing page's prose boxes (Situation, Intel, Mission Objective, Notes), which wrap as they are typed (D100). */
+    private val PROSE = Regex("txtBrf(Situation|Intel|Objective|Notes)\\d+")
+
+    /**
+     * The Briefing page's Notes typed into key by key as a pilot types a long note (D100): a separate note already on
+     * line 2; after every key the note's lines must be what was typed, nothing lost or doubled, each line fitting its
+     * box, the separate note right under the paragraph, and the keyboard and caret in the box and at the place the
+     * next key goes — on the next line once the line wraps. Then Home and Backspace at the start of a continuation line
+     * (the character before the break goes and the caret stays at the join), and Backspace from the end until the last
+     * line has gone (the caret back up on the line above, the note below moved up again).
+     */
+    private fun proseWrap(d: Driver, report: StringBuilder, results: ArrayList<Result>) {
+        val w = WdpSession.dataCard
+        val names = (1..12).map { "txtBrfNotes$it" }
+        val other = "Second note"
+        edt {
+            WdpSession.page = WdpPage.BRIEFING.name
+            for (n in names) { w.onValue(n, if (n == "txtBrfNotes2") other else ""); w.onValue("$n.leave", "") }
+        }
+        d.settle(8, 30)
+        val lines = ArrayList<String>()
+        var ok = true
+        fun fail(s: String) { if (ok) lines += "FAIL $s"; ok = false }
+        fun values() = edt { w.values(WdpPage.BRIEFING.hiddenHere()) }
+        fun rows(): List<String> { val v = values(); return names.map { v[it].orEmpty() } }
+        var wrapped = 0
+        var moved = false
+        // the paragraph [p] with the caret at [caret] in it, and the separate note right under it
+        fun expect(what: String, p: String, caret: Int, onLine: Int? = null): Boolean {
+            fun check(): String? {
+                val r = rows()
+                val at = r.indexOf(other)
+                if (at < 1) return "the separate note is gone (${r})"
+                val para = r.subList(0, at)
+                if (para.joinToString("") != p) return "the lines join to '${para.joinToString("|")}', typed '$p'"
+                if (r.drop(at + 1).any { it.isNotEmpty() }) return "lines under the note: $r"
+                para.firstOrNull { !com.bmscompanion.app.data.wdp.BriefingLines.fits(it.trimEnd()) }?.let { return "a line wider than its box: '$it'" }
+                // the box with the keyboard: the line holding the caret (the earlier one where it sits on a break)
+                var start = 0
+                var line = para.lastIndex
+                for ((i, l) in para.withIndex()) { if (if (onLine != null) i == onLine else caret <= start + l.length) { line = i; break }; start += l.length }
+                val key = "cntDataCard/${names[line]}"
+                val box = WdpProbe.boxes[key]
+                if (WdpProbe.focused != key) return "the keyboard is in ${WdpProbe.focused}, the caret belongs in ${names[line]}"
+                if (box?.text != para[line]) return "${names[line]} shows '${box?.text}', the page holds '${para[line]}'"
+                if (box.selection.start != caret - start || box.selection.end != caret - start) return "${names[line]}: caret ${box.selection}, wanted ${caret - start}"
+                wrapped = maxOf(wrapped, para.size)
+                if (line > 0) moved = true
+                return null
+            }
+            var why = check()
+            if (why != null) { d.settle(3); why = check() }
+            if (why != null) fail("$what: $why (events: ${WdpProbe.events.takeLast(14)})")
+            return why == null
+        }
+        val start = WdpProbe.rects["cntDataCard/txtBrfNotes1"]
+        if (start == null) {
+            results += Result("Briefing", "Notes (wrap)", "text", "FAIL", "the Notes boxes are not on the page")
+            return
+        }
+        d.click(start.center)
+        val t = "Hold at the IP until the strikers call push, then climb to angels 25 and sweep north of the target area, " +
+            "watching for MiG-29s from the north and the SA-6 east of the river before the egress"
+        var typed = ""
+        for (ch in t) {
+            d.type(ch); typed += ch
+            if (!expect("typed '${typed.takeLast(12)}'", typed, typed.length)) break
+        }
+        lines += "typed ${typed.length} characters key by key: ${if (ok) "the note wraps onto $wrapped lines, the caret going with it" else "stopped"}"
+        if (ok && wrapped < 3) fail("the note should wrap onto 3 lines, it took $wrapped")
+        if (ok && !moved) fail("the caret never went on to the next line")
+        if (ok) {
+            // Home on the last line, then Backspace: the character before the break goes, the caret at the join
+            val r = rows()
+            val para = r.subList(0, r.indexOf(other))
+            val breakAt = para.dropLast(1).sumOf { it.length }
+            d.press(AwtKey.VK_HOME)
+            val p2 = typed.removeRange(breakAt - 1, breakAt)
+            expect("Home", typed, breakAt, onLine = para.lastIndex)
+            d.backspace()
+            if (expect("Backspace at the start of the last line", p2, breakAt - 1)) lines += "Home + Backspace on the last line: '${typed[breakAt - 1]}' before the break went, the caret at the join"
+            typed = p2
+        }
+        if (ok) {
+            // Backspace from the end until the last line has gone: the caret goes back up, the note below moves up
+            val before = rows().indexOf(other)
+            d.end()
+            var steps = 0
+            while (ok && rows().indexOf(other) == before && typed.isNotEmpty() && steps < 120) {
+                d.backspace(); typed = typed.dropLast(1); steps++
+                expect("Backspace from the end", typed, typed.length)
+            }
+            val after = rows().indexOf(other)
+            if (ok && after != before - 1) fail("after $steps Backspaces the note is on line ${after + 1}, wanted ${before}")
+            if (ok) lines += "Backspace from the end, $steps keys: the last line went, the caret back on line $after's end, the note moved up to line ${after + 1}"
+        }
+        // leave the box and the page as they were
+        d.tab()
+        edt { for (n in names) { w.onValue(n, ""); w.onValue("$n.leave", "") } }
+        d.settle(3)
+        // a list (Intel): what carries an item on is indented, and the item's text is what was typed
+        if (ok) {
+            val intel = (1..9).map { "txtBrfIntel$it" }
+            val keep = edt { val v = w.values(WdpPage.BRIEFING.hiddenHere()); intel.map { v[it].orEmpty() } }
+            edt { for ((i, n) in intel.withIndex()) { w.onValue(n, if (i == 0) "Threats:" else ""); w.onValue("$n.leave", "") } }
+            d.settle(3)
+            WdpProbe.rects["cntDataCard/txtBrfIntel1"]?.let { d.click(it.center) }
+            d.end()
+            val more = " SA-6 east of the river, SA-8 by the bridge, ZSU-23-4 along the road north, MiG-29s at Sunchon"
+            for (ch in more) d.type(ch)
+            d.settle(2)
+            val r = edt { val v = w.values(WdpPage.BRIEFING.hiddenHere()); intel.map { v[it].orEmpty() } }
+            val item = r.takeWhile { it.isNotEmpty() }
+            val hang = com.bmscompanion.app.data.wdp.BriefingLines.HANG
+            val joined = item.first() + item.drop(1).joinToString("") { it.removePrefix(hang) }
+            val focusLine = intel.indexOfFirst { WdpProbe.focused == "cntDataCard/$it" }
+            when {
+                item.size < 2 -> fail("Intel: the item did not wrap: $r")
+                item.drop(1).any { !it.startsWith(hang) || it.removePrefix(hang).startsWith(" ") } -> fail("Intel: a continuation line is not indented by the list's indent: $item")
+                joined != "Threats:$more" -> fail("Intel: the item reads '$joined', typed 'Threats:$more' (lines $r; events ${WdpProbe.events.takeLast(40)})")
+                focusLine != item.lastIndex || WdpProbe.boxes["cntDataCard/${intel[focusLine]}"]?.selection?.start != item.last().length ->
+                    fail("Intel: the keyboard is on line ${focusLine + 1} at ${WdpProbe.boxes.entries.firstOrNull { it.key.endsWith(intel.getOrElse(focusLine) { "-" }) }?.value?.selection}, wanted the end of line ${item.size}")
+                else -> lines += "Intel, a list: the item wraps onto ${item.size} lines, each carried on indented, the caret at the end of the last"
+            }
+            d.tab()
+            edt { for ((i, n) in intel.withIndex()) { w.onValue(n, keep[i]) } }
+            d.settle(3)
+        }
+        // a full section: nothing is pushed off its foot; the line typed stays as typed (set smaller to fit)
+        if (ok) {
+            edt { for ((i, n) in names.withIndex()) { w.onValue(n, "Line ${i + 1}"); w.onValue("$n.leave", "") } }
+            d.settle(3)
+            WdpProbe.rects["cntDataCard/txtBrfNotes1"]?.let { d.click(it.center) }
+            d.end()
+            val more = " is a line that goes on well past the right-hand edge of its box, with no room below it"
+            for (ch in more) d.type(ch)
+            d.settle(2)
+            val r = rows()
+            val want = names.indices.map { if (it == 0) "Line 1$more" else "Line ${it + 1}" }
+            if (r != want) fail("a full section: the lines are $r")
+            else if (WdpProbe.focused != "cntDataCard/txtBrfNotes1") fail("a full section: the keyboard went to ${WdpProbe.focused}")
+            else lines += "a full section: the line typed past its box stays as typed, nothing moved or lost"
+            d.tab()
+            edt { for (n in names) { w.onValue(n, ""); w.onValue("$n.leave", "") } }
+            d.settle(3)
+        }
+        report.appendLine("== the Briefing page's Notes, typed as a long note (D100: wraps as it is typed)")
+        lines.forEach { report.appendLine("   $it") }
+        report.appendLine()
+        results += Result("Briefing", "Notes (wrap)", "text", if (ok) "PASS" else "FAIL", lines.joinToString("; "))
     }
 
     private fun disabled(form: WdpForm, c: WdpControl, v: WdpValues): Boolean {

@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.Flight
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Headset
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Lock
@@ -120,6 +121,12 @@ enum class MissionTab(val label: String, val icon: ImageVector) {
      * mode** only: in EZBoards mode its tab is greyed out and shows [PlannerLockedPane] (MissionSource.kt).
      */
     PLANNER("Planner", Icons.Default.Calculate),
+
+    /**
+     * A file of the BMS PC read on this device: a text or log, an HTML page, a picture, a PDF (1.4.0, `MissionFiles.kt`;
+     * read only, through the PC's guarded `/api/files/view`). Shown unless the pilot turns it off ([FilesTabPrefs]).
+     */
+    FILES("Files", Icons.Default.FolderOpen),
 }
 
 /**
@@ -161,7 +168,8 @@ object MissionTabPrefs {
 
 /** The tabs this build actually has. */
 val missionTabs: List<MissionTab> get() = MissionTab.entries.filter {
-    (it != MissionTab.AWACS || MissionTabPrefs.showAwacs) && (it != MissionTab.RADIO || RadioTabPrefs.shown)
+    (it != MissionTab.AWACS || MissionTabPrefs.showAwacs) && (it != MissionTab.RADIO || RadioTabPrefs.shown) &&
+        (it != MissionTab.FILES || FilesTabPrefs.shown)
 }
 
 
@@ -329,6 +337,7 @@ fun MissionTabContent(tab: MissionTab, env: MissionEnv, onTab: (MissionTab) -> U
         MissionTab.BOARDS -> MissionBoardsPane(env, onSetup = { env.nav.go(Routes.SETUP) }, onOpenTab = onTab)
         MissionTab.WEATHER -> com.bmscompanion.app.ui.screens.editor.WeatherEditorPane(env)
         MissionTab.PLANNER -> if (info.wdpMode) com.bmscompanion.app.ui.screens.wdp.WdpPane(env, onOpenTab = onTab) else PlannerLockedPane()
+        MissionTab.FILES -> MissionFilesPane(env)
     }
 }
 
@@ -496,6 +505,23 @@ fun TabsCard() {
             androidx.compose.material3.Switch(
                 checked = MissionTabPrefs.showConfig,
                 onCheckedChange = { MissionTabPrefs.showConfig = it },
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Hud.Outline.copy(alpha = 0.5f)))
+        Spacer(Modifier.height(14.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Show the Files page", color = Hud.Text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text(
+                    "Text files and logs, HTML pages, pictures and PDFs on the BMS PC, read on this device. Read only.",
+                    color = Hud.TextDim, fontSize = 12.sp,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            androidx.compose.material3.Switch(
+                checked = FilesTabPrefs.shown,
+                onCheckedChange = { FilesTabPrefs.shown = it },
             )
         }
     }

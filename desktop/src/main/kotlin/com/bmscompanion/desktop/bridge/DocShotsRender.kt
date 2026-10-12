@@ -92,6 +92,8 @@ internal object DocShotsRender {
                     "                  M34   4",
                     "  M1  43  M3 0554   T 94X",
                 ),
+                // the UHF frequency highlighted, as BMS's Invert lines mark a selected field
+                dedInvert = listOf("       ######"),
             )
         } else null
         val wanted = only.filter { '=' !in it }.toSet()
@@ -107,6 +109,23 @@ internal object DocShotsRender {
         if (want("dash-preflight")) { DashLayouts.choose(3); shot(out, "mission-dash-preflight", PC, "mission", MissionTab.DASH) }
         if (want("dash-flying")) { DashLayouts.choose(2); shot(out, "mission-dash-flying", PC, "mission", MissionTab.DASH, live) }
         if (want("dash-map")) { DashLayouts.choose(0); shot(out, "mission-dash-map", PC, "mission", MissionTab.DASH, live) }
+        // the DED with highlighted cells and a fault list, beside the airbases (APP) and the weather (page 5)
+        if (want("dash-ded") && live != null) {
+            val cards = listOf(
+                DashItem(DashCard.DED, DashWidth.M), DashItem(DashCard.AIRBASES, DashWidth.M), DashItem(DashCard.WEATHER), DashItem(DashCard.COMMS),
+            )
+            DashLayouts.state("wide", 4).value = cards
+            DashLayouts.state("narrow", 4).value = cards
+            DashLayouts.choose(4)
+            val ded = live.copy(
+                ded = listOf(" UHF  BOTH         ", "  *251.00 *     12   ", "  243.000  ", "  DIAL  TOD ", " "),
+                dedInvert = listOf("", "  ########", "", "", ""),
+                pfl = listOf("", " ENG 1 OIL PRESS FAULT", "", "  FLCS BUS FAIL ", ""),
+                pflInvert = listOf("", " ######################"),
+            )
+            shot(out, "mission-dash-ded", PC, "mission", MissionTab.DASH, ded)
+            shot(out, "phone-dash-ded", PHONE, "mission", MissionTab.DASH, ded)
+        }
         if (want("map")) shot(out, "mission-map", PC, "mission", MissionTab.MAP)
         if (want("map-live")) shot(out, "mission-map-live", PC, "mission", MissionTab.MAP, live)
         if (want("briefing")) shot(out, "mission-briefing", PC, "mission", MissionTab.BRIEF)
@@ -123,6 +142,21 @@ internal object DocShotsRender {
         if (want("threats")) shot(out, "reference-threats", PC, "threats")
         if (want("arsenal")) shot(out, "reference-arsenal", PC, "arsenal")
         if (want("setup")) shot(out, "setup", PC, "setup")
+        // the Files tab with a text, a picture, an HTML page and a PDF open (sample files in a folder whose path names no one)
+        if (want("files")) {
+            val dir = File("C:\\Temp\\bmsc-files").takeIf { runCatching { it.mkdirs() || it.isDirectory }.getOrDefault(false) }
+                ?: File(System.getProperty("java.io.tmpdir"), "bmsc-files")
+            val f = FileViewTest.samples(dir)
+            com.bmscompanion.app.ui.screens.mission.OpenFiles.paths.clear()
+            shot(out, "mission-files-start", PC, "mission", MissionTab.FILES)
+            for (k in listOf("txt", "png", "html", "pdf")) {
+                com.bmscompanion.app.ui.screens.mission.OpenFiles.open(f[k]!!.path)
+                shot(out, "mission-files-$k", PC, "mission", MissionTab.FILES)
+            }
+            shot(out, "phone-files-pdf", PHONE, "mission", MissionTab.FILES)
+            com.bmscompanion.app.ui.screens.mission.OpenFiles.open(f["html"]!!.path)
+            shot(out, "phone-files-html", PHONE, "mission", MissionTab.FILES)
+        }
         if (want("phone-briefing")) shot(out, "phone-briefing", PHONE, "mission", MissionTab.BRIEF)
         if (want("phone-map")) shot(out, "phone-map", PHONE, "mission", MissionTab.MAP, live)
         if (want("phone-dash")) { DashLayouts.choose(2); shot(out, "phone-dash-flying", PHONE, "mission", MissionTab.DASH, live) }

@@ -76,7 +76,11 @@ object Bridge {
         val voice = snapshot().live.voice
         val assigned = listOfNotNull(voice?.tanker, voice?.awacs).map { it.trim().lowercase() }.filter { it.isNotEmpty() }
             .ifEmpty { runCatching { MissionGrounds.assigned() }.getOrDefault(emptyList()) }
-        return tracksFrom(routes, own, assigned)
+        // only the flight's own side's tankers and AWACS (1.4.0): the save holds the enemy's too
+        val tracks = tracksFrom(routes, own, assigned)
+        val source = runCatching { PlannedRoutes.sourceFor(install, install.theater) }.getOrNull()
+        val set = install.baseDir?.let { runCatching { Theaters.at(File(it)) }.getOrNull() }
+        return SupportSide.filter(tracks, source?.file, set, source?.theater, own)
     }
 
     /**
@@ -585,10 +589,16 @@ object Bridge {
             // EZBoards mode or WDP mode, and WDP mode's Populate from Planner (MissionSource)
             path == "/api/mission/source" || path == "/api/mission/source/undo" || path == "/api/mission/populate" ||
                 path == "/api/mission/opened" -> return MissionSource.handle(req)
+            // a file of the PC opened in the Files tab, read only (FileViewRoutes)
+            FileViewRoutes.handles(path) -> return FileViewRoutes.handle(req)
             // the PC's own disks, for the Planner's file windows on any device (PcFileRoutes)
             path.startsWith("/api/files/") -> return PcFileRoutes.handle(req)
             // the radio subtitles in BMS's debug log, and deleting its old logs (RadioLog)
             path == "/api/radio" || path.startsWith("/api/radio/") -> return RadioLog.handle(req)
+            // the maps' levels past the bundled ones, drawn from BMS's own terrain (MapTiles; read only)
+            path == "/api/maptile" -> return MapTiles.handle(req)
+            // pictures of the mission's targets drawn from BMS's own 3-D models (TargetPictures; read only)
+            path.startsWith("/api/targets/") -> return TargetPictures.handle(req)
         }
         return when (req.method to path) {
             "GET" to "/api/info" -> encode(BridgeInfo.serializer(), info())
@@ -726,6 +736,8 @@ object Bridge {
                 val bytes = root?.let { kneeboard.page(it, i, max) }
                 if (bytes == null) ApiResponse.notFound() else ApiResponse(200, "image/jpeg", bytes)
             }
+            // ---- the weather the mission flies, for the Weather tab's Mission weather page (MissionWeatherRoute; read only) ----
+            "GET" to "/api/weather/mission", "GET" to "/api/weather/mission/map" -> MissionWeatherRoute.handle(req)
             // ---- Falcon BMS's own weather maps (see WeatherStore) ----
             // "map=1" asks for the painted grid as well, which is a few kilobytes and only the Editor wants it
             "GET" to "/api/weather" -> encode(

@@ -95,9 +95,26 @@ object Twx {
                 cumulusFt = b.getInt(640 + k * 4),
                 tempC = List(3) { b.getInt(696 + k * 4) },
                 qnhMb = List(3) { b.getInt(712 + k * 4) },
+                contrailFt = b.getInt(656 + k * 4),
             )
         }
-        return PcTwx(version, model, condition, mapUpdates, heading, types, windHeld = !(headingModel == 1 && heading == 0), clock = clock)
+        // the four chances, stored as 0.25 or as 25.0 (both occur on a 4.38.1 install): handed on as 0-1
+        val raw = (0 until 4).map { b.getFloat(228 + it * 4) }
+        val probabilities = if (raw.all { it.isFinite() && it >= 0f } && raw.sum() > 0f) {
+            val scale = if (raw.sum() > 1.5f) 100f else 1f
+            raw.map { it / scale }
+        } else emptyList()
+        // the Deterministic schedule: six pairs of (campaign ms, type counted from 0), handed on as 1-4
+        val changes = (0 until 6).mapNotNull { i ->
+            val ms = b.getInt(244 + i * 8).toLong() and 0xFFFFFFFFL
+            val type = b.getInt(248 + i * 8)
+            if (type in 0..3) com.bmscompanion.app.data.mission.PcTwxChange(ms, type + 1) else null
+        }
+        return PcTwx(
+            version, model, condition, mapUpdates, heading, types, windHeld = !(headingModel == 1 && heading == 0), clock = clock,
+            probabilities = probabilities, changes = changes,
+            intervalMin = b.getInt(220).takeIf { it in 1..100_000 } ?: 0, intervalMax = b.getInt(224).takeIf { it in 1..100_000 } ?: 0,
+        )
     }
 
     /** Versions up to 7, as WDP 3.7.24 reads them for BMS 4.35 and later (`fclsMain.ReadWeather`). */
@@ -130,13 +147,13 @@ object Twx {
         val fogEnd = List(4) { float() }
         val stratus = List(4) { int() }
         val cumulus = List(4) { int() }
-        at += 16                                      // contrails
+        val contrail = List(4) { int() }
         if (version >= 7) at += 16                    // fog layer
         at += 8                                       // cumulus density and size
         if (size < at + 96) return null
         val temps = (0 until 4).map { listOf(int(), int(), int()) }
         val qnh = (0 until 4).map { listOf(int(), int(), int()) }
-        val types = (0 until 4).map { k -> PcTwxType(wind[k], fogEnd[k], stratus[k], cumulus[k], temps[k], qnh[k]) }
+        val types = (0 until 4).map { k -> PcTwxType(wind[k], fogEnd[k], stratus[k], cumulus[k], temps[k], qnh[k], contrailFt = contrail[k]) }
         return PcTwx(version, model, condition, mapUpdates, heading, types, clock = clock)
     }
 }

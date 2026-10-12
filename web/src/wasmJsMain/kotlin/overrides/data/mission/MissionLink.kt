@@ -561,6 +561,22 @@ object MissionLink {
     suspend fun filesPicture(path: String, max: Int = PcPicture.MAX): PcAnswer<PcPicture> =
         answer("GET", "/api/files/picture?path=" + enc(path) + "&max=$max", PcPicture.serializer(), timeoutMs = 60_000)
 
+    /** A file of the PC opened in the Files tab ([PcFileView]): its kind, and a text's or HTML page's text. */
+    suspend fun filesView(path: String): PcAnswer<PcFileView> =
+        answer("GET", "/api/files/view?path=" + enc(path), PcFileView.serializer(), timeoutMs = 60_000)
+
+    /** The weather the mission flies (the Weather tab's Mission weather page, [MissionWeather]; 1.4.0). */
+    suspend fun missionWeather(): PcAnswer<MissionWeather> =
+        answer("GET", "/api/weather/mission", MissionWeather.serializer(), timeoutMs = 30_000)
+
+    /** One of [MissionWeather.frames]' maps, cell by cell ([MissionWxMap]). */
+    suspend fun missionWeatherMap(frame: String): PcAnswer<MissionWxMap> =
+        answer("GET", "/api/weather/mission/map?frame=" + enc(frame), MissionWxMap.serializer(), timeoutMs = 30_000)
+
+    /** Page [page] (0 = the first) of a PDF on the PC, drawn at most [max] px a side. */
+    suspend fun filesPdfPage(path: String, page: Int, max: Int = 1600): PcAnswer<PcPicture> =
+        answer("GET", "/api/files/pdfpage?path=" + enc(path) + "&page=$page&max=$max", PcPicture.serializer(), timeoutMs = 60_000)
+
     /**
      * The Planner's own folders on the PC ([PcPlannerFolders]): its folder in the BMS install
      * (`User\BMS Companion Planner`, where the DTC's backups, the saved maps and the DataCards go) and the DataCards

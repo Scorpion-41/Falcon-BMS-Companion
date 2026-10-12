@@ -509,6 +509,17 @@ private fun ZoomButtons(modifier: Modifier, inks: ChartInks, state: com.bmscompa
     // whatever the page shows. Remembered on the device (TaxiPrefs.turn); the north arrow says where north went.
     val turnButtons = @Composable {
         val fit = TaxiPrefs.turn == TaxiPrefs.TURN_FIT
+        // North up at once, as the map draws the field (a two-finger turn undone too); lit while the chart is so
+        val north = TaxiPrefs.turn == 0 && state.twist == 0f
+        buttonFace(inks, north, "North up, as on the map", {
+            TaxiPrefs.turn = 0
+            state.reset()
+        }) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("▲", color = if (north) inks.ground else inks.ink, fontSize = 7.sp, lineHeight = 7.sp)
+                Text("N", color = if (north) inks.ground else inks.ink, fontSize = 12.sp, lineHeight = 12.sp, fontWeight = FontWeight.Bold)
+            }
+        }
         buttonFace(inks, fit, if (fit) "North up" else "Turn the field to fill the chart", {
             TaxiPrefs.turn = if (fit) 0 else TaxiPrefs.TURN_FIT
             state.reset()

@@ -19,6 +19,9 @@ import java.io.File
  * - `--cfgtest <a copy of the BMS folder> out.txt`: the Config page's backup, profiles and edits, checked on disk.
  * - `--api <path>[,<path>…] out.txt`: API responses (e.g. /api/info,/api/mission) from Falcon BMS on this PC, one per line.
  * - `--maprender <theater> <folder> [xFt,yFt]`: map styles and landmarks rendered to PNGs (see MapRender).
+ * - `--satalign out.txt <BMS folder> [pictures]`: the airfield diagrams against the satellite's photoreal layers (SatAlign).
+ * - `--satcheck out.txt <BMS folder>`: every terrain's satellite tiles drawn in this process's heap, timed (SatCheck).
+ * - `--elevframe out.txt <BMS folder> [recording] [theater]`: the PC's ground at a point against the map tiles and BMS's ground units (ElevFrame).
  * - `--wdprender <folder> [briefing.txt] [cartridge.ini]`: every Planner page drawn to a PNG, designer and with the
  *   mission loaded, plus a report of what each wiring filled (see WdpRender).
  * - `--wdptypetest <folder> [briefing.txt] [cartridge.ini]`: every box of the Planner typed into key by key in a
@@ -62,6 +65,7 @@ object SelfTest {
         "--contracttest" to "--contracttest out.txt <fixture copy>",
         "--camtest" to "--camtest out.txt <fixture root>",
         "--camdump" to "--camdump <file> out.txt",
+        "--supportsidetest" to "--supportsidetest out.txt <a BMS folder>",
         "--atotargettest" to "--atotargettest <a copy of a BMS folder> out.txt [save] [theater]",
         "--camsource" to "--camsource out.txt <fixture root>",
         "--plantest" to "--plantest <parse|route|store> <fixture copy> [<scratch APPDATA>] out.txt",
@@ -78,6 +82,11 @@ object SelfTest {
         "--attackmaptest" to "--attackmaptest <a copy of the BMS folder> out.txt",
         "--radiotest" to "--radiotest out.txt <a copy of the BMS folder>",
         "--hostiletest" to "--hostiletest out.txt",
+        "--wxbrieftest" to "--wxbrieftest out.txt",
+        "--targetrender" to "--targetrender <a copy of the BMS folder> <out folder>",
+        "--targetcards" to "--targetcards <out folder>",
+        "--targetsidetest" to "--targetsidetest out.txt <a BMS folder>",
+        "--wxviewrender" to "--wxviewrender <a copy of the BMS folder> <out folder>",
     )
 
     /** Writes a check's report, and marks the run failed when a line of it starts with FAIL. */
@@ -111,6 +120,14 @@ object SelfTest {
                     appendLine(json.encodeToString(Briefing.serializer(), BriefingParser.parse(sample)))
                     SharedMemoryReader.parseNavPoint("NP:56,PT,2910660.5,258538.0,0.0,52.1;PT:\"SA-5\",364567.0,0;")?.let { appendLine(json.encodeToString(NavPoint.serializer(), it)) }
                     appendLine(json.encodeToString(Voice.serializer(), SharedMemoryReader.parseVoice("Ouranos5|PAXX,None,Dragnet5,Larissa,Larissa,Nea Anchialos")))
+                    // the DED's Invert[5][26]: BMS writes 2 under a highlighted cell, spaces or 0 elsewhere
+                    val inv = java.nio.ByteBuffer.allocate(5 * 26)
+                    for (k in 0 until 25) inv.put(k, 32)
+                    for (k in 7..12) inv.put(k, 2)
+                    for (k in 2 * 26 + 20..2 * 26 + 24) inv.put(k, 2)
+                    val lines = SharedMemoryReader.invertLines(inv, 0)
+                    appendLine("ded invert: " + lines.joinToString("|") + if (lines.size == 5 && lines[0] == "       ######" && lines[1].isEmpty() && lines[2] == " ".repeat(20) + "#####") "  ok" else "  FAIL")
+                    appendLine("ded invert (none): " + SharedMemoryReader.invertLines(java.nio.ByteBuffer.allocate(5 * 26), 0).let { if (it.isEmpty()) "empty  ok" else "$it  FAIL" })
                     System.getenv("BMSC_TEST_BOARD_HTML")?.let(::File)?.takeIf { it.isFile }?.let { appendLine(json.encodeToString(Board.serializer(), EzBoardsRunner.parseHtml(it.readText()))) }
                 })
             }
@@ -543,8 +560,19 @@ object SelfTest {
                 }
                 File(args[1]).writeText(out.toString())
             }
+            // --maprender <theater> <folder> [xFt,yFt] [--bms=<a BMS folder, read only>]: with a BMS folder also the PC's deep levels
             args.size >= 3 && args[0] == "--maprender" -> MapRender.run(args[1], File(args[2]),
-                args.getOrNull(3)?.split(',')?.let { it[0].toDouble() to it[1].toDouble() })
+                args.drop(3).firstOrNull { !it.startsWith("--") }?.split(',')?.let { it[0].toDouble() to it[1].toDouble() },
+                args.firstOrNull { it.startsWith("--bms=") }?.removePrefix("--bms=")?.let(::File))
+            // --satalign out.txt <a BMS folder, read only> [picture folder]: the airfield diagrams on each photoreal layer (SatAlign)
+            args.size in 3..4 && args[0] == "--satalign" -> report(File(args[1]), SatAlign.run(File(args[2]), args.getOrNull(3)?.let(::File)))
+            // --satcheck out.txt <a BMS folder, read only>: every terrain's satellite tiles drawn in this heap (SatCheck)
+            args.size == 3 && args[0] == "--satcheck" -> report(File(args[1]), SatCheck.run(File(args[2])))
+            // --mapsearchtest <out folder>: the Reference map's search picked by a click and by Enter (MapSearchTest)
+            args.size == 2 && args[0] == "--mapsearchtest" -> File(args[1]).let { d -> d.mkdirs(); report(File(d, "mapsearch.txt"), MapSearchTest.run(d)) }
+            // --maptiles <a BMS folder, read only> <assets folder> [ids] [styles] [maxZ]: the bundled topographic levels (MapTiles.bundle)
+            args.size >= 3 && args[0] == "--maptiles" -> println(MapTiles.bundle(File(args[1]), File(args[2]),
+                args.getOrNull(3)?.split(',') ?: MapTiles.SOURCES.keys.toList(), args.getOrNull(4)?.split(',') ?: listOf("topo"), args.getOrNull(5)?.toIntOrNull() ?: 3))
             // --wdptypetest <folder> [briefing.txt] [cartridge.ini] : typing into every box, key by key (WdpTypeTest.kt)
             args.size >= 2 && args[0] == "--wdptypetest" -> WdpTypeTest.run(File(args[1]), args.getOrNull(2)?.let(::File), args.getOrNull(3)?.let(::File))
             // --wdpclicktest <out.txt> [briefing.txt] [cartridge.ini] [page] : every control pressed (WdpClickTest.kt)
@@ -561,6 +589,9 @@ object SelfTest {
             // --hostiletest out.txt : hostile contacts off by default and kept back at the source; the setting, its route and
             // its migration (HostileTest.kt; run it with a scratch APPDATA, whose settings it changes and puts back)
             args.size == 2 && args[0] == "--hostiletest" -> report(File(args[1]), HostileTest.run())
+            // --airfieldcardrender <out folder> : the Mission map's airfield card at phone, tablet and PC sizes — a tap on the
+            // symbol and on the diagram, a tap elsewhere closing it (AirfieldCardRender.kt; read only, the settings' BMS copy)
+            args.size == 2 && args[0] == "--airfieldcardrender" -> report(File(args[1], "airfieldcard.txt"), AirfieldCardRender.run(File(args[1])))
             // --mappicturerender <a copy of the BMS folder> <out folder> : the Mission map and the Planner's Map page of the
             // same flight, side by side (MissionPictureRender.kt)
             args.size == 3 && args[0] == "--mappicturerender" -> report(File(args[2], "mappicture.txt"), MissionPictureRender.run(File(args[1]), File(args[2])))
@@ -625,11 +656,18 @@ object SelfTest {
             // --divertcheck out.txt <a BMS folder> [airports.csv] : the divert block for every theater and field — coordinates,
             // radios, the ship rule, BMS's AIPs read from the folder's Docs (read only), OurAirports as a sanity check (DivertCheck.kt)
             args.size in 3..4 && args[0] == "--divertcheck" -> report(File(args[1]), DivertCheck.run(File(args[2]), args.getOrNull(3)?.let { File(it) }))
+            // --tldcheck out.txt <a BMS folder> : BMS's terrain levelling (TLD_<CampId>.TPB) against every field's elevation, the
+            // ATC figure and the PC's ground at a point (read only; TldCheck.kt)
+            args.size == 3 && args[0] == "--tldcheck" -> report(File(args[1]), TldCheck.run(File(args[2])))
+            // --elevframe out.txt <a BMS folder> [recording] [theater name] : the PC's ground at a point in BMS's terrain
+            // frame against the map tiles and a recording's ground units (read only; ElevFrame.kt)
+            args.size in 3..5 && args[0] == "--elevframe" -> report(File(args[1]), ElevFrame.run(File(args[2]), args.getOrNull(3)?.let(::File), args.getOrNull(4)))
             // ---- round 3: the Planner's integration (see the list above; these lines are fixed) ----
             args.size >= 3 && args[0] == "--theatertest" -> report(File(args[1]), TheaterTest.run(File(args[2]), args.drop(3)))
             args.size >= 3 && args[0] == "--contracttest" -> report(File(args[1]), ContractTest.run(File(args[2]), args.drop(3)))
             args.size >= 3 && args[0] == "--camtest" -> report(File(args[1]), CampTest.run(File(args[2]), args.drop(3)))
             args.size >= 3 && args[0] == "--camdump" -> report(File(args[2]), CampTest.dump(File(args[1]), args.drop(3)))
+            args.size == 3 && args[0] == "--supportsidetest" -> report(File(args[1]), SupportSideTest.run(File(args[2])))
             // --atotargettest <a copy of a BMS folder> out.txt [save] [theater] : the ATO Target List from a save (AtoTargetsTest.kt)
             args.size >= 3 && args[0] == "--atotargettest" -> report(File(args[2]), AtoTargetsTest.run(File(args[1]), args.drop(3)))
             args.size >= 3 && args[0] == "--camsource" -> report(File(args[1]), CamSourceTest.run(File(args[2]), args.drop(3)))
@@ -647,6 +685,8 @@ object SelfTest {
             }
             // the Planner's file windows: /api/files, PcFiles, Windows' dialog built unshown, the remote window drawn
             args.size >= 3 && args[0] == "--filestest" -> report(File(args[1]), PcFilesTest.run(File(args[2]), args.getOrNull(3)?.let(::File)))
+            // --wxbrieftest out.txt : the Mission section's weather, printed and from each theater's saves (WxBriefTest.kt; read only)
+            args.size == 2 && args[0] == "--wxbrieftest" -> report(File(args[1]), WxBriefTest.run())
             // --wdpfilestest out.txt <scratch folder> : the Planner's file buttons as WDP's, in WDP's formats (WdpFilesTest.kt)
             args.size >= 3 && args[0] == "--wdpfilestest" -> report(File(args[1]), WdpFilesTest.run(File(args[2])))
             // --mapinteltest out.txt <a copy of a BMS folder> [--theater=<name>] [<save> [<flight>]] : the Map page's
@@ -655,6 +695,25 @@ object SelfTest {
             // --radiotest out.txt <a copy of the BMS folder> : BMS's debug log read for the radio, the taxi automation's
             // decisions, and deleting old logs on a scratch folder of the copy (RadioTest.kt)
             args.size == 3 && args[0] == "--radiotest" -> report(File(args[1]), RadioTest.run(File(args[2])))
+            // --targetrender <a copy of the BMS folder> <out folder> : the target pictures drawn from BMS's own models —
+            // coverage, known systems, a mission's set with its timing, the cache (TargetRenderTest.kt; read only)
+            args.size == 3 && args[0] == "--targetrender" -> File(args[2]).let { d ->
+                d.mkdirs(); report(File(d, "targetrender.txt"), TargetRenderTest.run(File(args[1]), d))
+            }
+            // --targetsidetest out.txt <a BMS folder> : the flight's targets of every save before and after the Target
+            // pictures card's side rule (TargetSideTest.kt; read only)
+            args.size == 3 && args[0] == "--targetsidetest" -> report(File(args[1]), TargetSideTest.run(File(args[2])))
+            // --targetcards <out folder> : the Briefing's Target pictures card and a Threats page drawn headless, the
+            // settings' BMS copy read through the built-in bridge (TargetCardRender.kt; run with a scratch APPDATA)
+            args.size == 2 && args[0] == "--targetcards" -> File(args[1]).let { d ->
+                d.mkdirs(); report(File(d, "targetcards.txt"), TargetCardRender.run(d))
+            }
+            // --wxviewrender <a copy of the BMS folder> <out folder> : the Weather tab's Mission weather page drawn headless
+            // for a Map Model save (an update series synthesised in the copy when it has none) and a Deterministic one
+            // (MissionWeatherRender.kt; run with a scratch APPDATA whose BMS folder is the same copy)
+            args.size == 3 && args[0] == "--wxviewrender" -> File(args[2]).let { d ->
+                d.mkdirs(); report(File(d, "wxviewrender.txt"), MissionWeatherRender.run(File(args[1]), d))
+            }
             // a round-3 check with too few arguments: say how to call it, rather than falling through to the app window
             args[0] in ROUND3 -> {
                 System.err.println("usage: \"BMS Companion.exe\" ${ROUND3[args[0]]}")

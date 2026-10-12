@@ -4,6 +4,8 @@ A companion for **Falcon BMS 4.38** on **Windows PCs, Android phones and tablets
 
 Everything it shows about the game — airfields, charts, aircraft, weapons, threats — is **generated from the Falcon BMS install's own files**. The install is read only, except where a feature writes on request; see [What it writes to the BMS folder](#what-it-writes-to-the-bms-folder).
 
+**New in 1.4.0:** a **Mission weather** page showing the weather the mission flies; **target pictures** drawn from BMS's own 3-D models on the Briefing, the Threats pages and the kneeboard; maps that zoom down to half a metre a pixel from BMS's own terrain and imagery, a **Topographic** style and airfield diagrams; an **airfield card** on the Mission map; a **Files** tab; DED highlighting; and in the Planner conformal tanks, tankers on the DataCard, bingo and joker, and Briefing text that wraps as you type. Airfield elevations now follow BMS's terrain levelling, thanks to **oakdesign**. Full list: [CHANGELOG.md](CHANGELOG.md).
+
 **New in 1.3.9:** lines, PPTs and Open 1/2 steerpoints that survive BMS's DTC LOAD and SAVE, with a clean start for each opened mission; **Add to Open bank…** on the Planner's Map page; control towers, arresting cables and free rotation on the ground charts; checked photographs in the Reference section. Full list: [CHANGELOG.md](CHANGELOG.md).
 
 **New in 1.3.8:** **WDP for Falcon BMS 4.38.1**, a port of Falcas's Weapon Delivery Planner on every device, and a choice of source for the Mission section: BMS's printed briefing (**EZBoards mode**) or the planned flight (**WDP mode**). Also live **MFDs**, **Dashboard pages**, a **weather generator**, carrier decks drawn from BMS's models, a **Radio** page with automatic taxi, and a **Reference** section with coordinates and radios for every airfield. Full list: [CHANGELOG.md](CHANGELOG.md).
@@ -136,11 +138,12 @@ The live section: what the PC reads from Falcon BMS, on every device. The **EZBo
 | **Dashboard** | Cards on five pages, switched with the numbered buttons: live map, ownship, RWR, DED, **MFDs**, picture, fuel (endurance, time to bingo), time and TOT, bullseye, threats, steerpoints, mission, airbases, comm ladder, **weather**, radio presets, tankers and support, kneeboards. Defaults: **1** map and picture, **2** MFDs, **3** flight data, **4** and **5** free. **Customize Dashboard** adds, moves, resizes and removes cards per page, or applies a preset. |
 | **Map** | The mission picture: route and steerpoints (before 3D too), tanker and AWACS tracks, PPTs, the mission's threats ringed in red, the flight's airfields, bullseye, DTC lines and, in 3D, the jet and live traffic. See [Maps](#maps). |
 | **Taxi** | The ground chart of the field the jet is on, with the taxi clearance. See [Taxi](#taxi). |
-| **Briefing** | Mission, package and TOT; departure, recovery and alternate with TACAN, tower, ILS and runways; flight plan with TOS and bullseye; DTC targets; package and roster (the player's flight marked YOU, the lead PRIMARY); loadout per jet; threats linked to the Threat Guide; support; weather; ROE; emergency procedures; and the pages UOAF's HTML Briefing tool exported. |
+| **Briefing** | **Target pictures** of the flight's enemy targets and the briefed threat systems, drawn from BMS's 3-D models; mission, package and TOT; departure, recovery and alternate with TACAN, tower, ILS and runways; flight plan with TOS and bullseye; DTC targets; package and roster (the player's flight marked YOU, the lead PRIMARY); loadout per jet; threats linked to the Threat Guide; support; weather; ROE; emergency procedures; and the pages UOAF's HTML Briefing tool exported. |
 | **Comms** | The comm ladder, grouped, with the tuned UHF highlighted; tankers and support with TACAN and channels; DTC UHF/VHF presets, IFF and Link 16. |
 | **Radio** | Every radio call of the session from BMS's debug log. See [Radio](#radio-and-automatic-taxi). |
 | **Kneeboards** | Generates BMS's cockpit kneeboards with EZBoards from any device, sets up the VR boards, and shows the HTML Briefing pages. In WDP mode EZBoards and Run HTML Briefing are paused, with the reason. |
-| **Weather** | The [weather generator](#weather-generator). |
+| **Weather** | **Mission weather**: the weather the mission flies over the theater, with the route and fields (the save's map and, with Maps Auto Update, the maps through the flight on a time line; or the weather type BMS applies to the whole theater). Then the [weather generator](#weather-generator), **Make weather**. |
+| **Files** | Text files and logs, HTML pages, pictures and PDFs on the BMS PC, opened on any device, read only. Hidden under **Setup → Mission pages**. |
 | **Planner** | [WDP for Falcon BMS 4.38.1](#planner-wdp-for-falcon-bms-4381). Available in WDP mode. |
 | **AWACS** *(optional)* | A GCI console for a human controller in multiplayer: picture calls, BRAA and bullseye per contact, flight control, measure tool and alerts. Turned on in **Setup → Mission pages**; hostile contacts follow the **Show hostile contacts (live)** setting. |
 
@@ -241,16 +244,23 @@ The Mission map, the VR map board and the Planner's Map page draw the same missi
 - **The flight's own airfields** (departure, arrival, alternate); **All airfields** shows the rest. Bullseye, DTC lines, and the attack (VRP or VIP, pull-up point, offset aimpoints).
 - **Live traffic** in 3D from BMS's Tacview stream: your own side by default. **Hostile contacts are off by default** and appear only with **Setup → Show hostile contacts (live)**; **Friendlies** and **Hostiles** are independent map switches.
 
-Tap anything for BRAA, bullseye and aspect, or to open an airfield. Every map also has **+ / −** buttons besides pinch, double-tap and a smooth mouse-wheel zoom, and a **Map** menu:
+Tap anything for BRAA, bullseye and aspect. A tap on an airfield opens its **airfield card**: runways, the flight's steerpoints there, coordinates, elevation and every frequency, with **Airfield page ›** for the rest.
 
-- **Four styles** — **Relief** (shaded terrain from the BMS heightmap), **Satellite** (the sim's own ground texture), **Dark** (muted, for a busy picture) and **Chart** (light, paper-like). All four line up exactly: switching never moves anything.
-- **Zoom levels** — an overview, then sharper tiles as you go in, up to 8192 px across a theater (~125 m per pixel on the 1024 km theaters). All of it ships in the apps.
+![Airfield card on the Mission map](docs/screenshots/140-airfield-card.jpg)
+
+The map zooms with **+ / −** buttons besides pinch, double-tap and a smooth mouse-wheel zoom, and has a **Map** menu:
+
+- **Five styles** — **Relief** (shaded terrain from the BMS heightmap), **Satellite** (the sim's own photoreal textures), **Dark** (muted, for a busy picture), **Chart** (light, paper-like) and **Topographic** (contours labelled in feet, their interval following the zoom). All five line up exactly: switching never moves anything.
+- **Zoom levels** — the first levels are in the app, down to about 125 m a pixel. Deeper, to about half a metre a pixel, the PC program draws the map on demand from Falcon BMS's own files (the height map, and for Satellite BMS's photoreal textures down to its airbase imagery) and streams it to phones, tablets and browsers as you zoom and pan; nothing is downloaded from the internet or stored on the device. Without the PC the built-in levels are used, enlarged.
+- **Airfield diagrams** — zoomed in, each airfield is drawn as its ground chart (asphalt, runways, taxiways with their letters, buildings), lined up with the imagery.
 - **Landmarks** — country borders with names, provinces as faint dashed lines, and towns as dashed circles (cities, then towns, then villages as you zoom; labels never overlap).
 - **Towns → Mission** (the default) — only the towns that matter: those the briefing names, the nearest town to each steerpoint, target, threat and airbase, and the larger towns on your route. The **target town** gets a solid amber ring and a bold name.
 
 Borders and names come from Natural Earth, projected with each theater's own projection out of `NewTerrain/Theater.txt` and checked against real airport positions (median error under 0.4 nm).
 
-**Setting it up:** nothing — the maps are in the app.
+![Satellite at deep zoom: BMS's own imagery](docs/screenshots/140-satellite-zoom.jpg)
+
+**Setting it up:** nothing. The built-in levels are in the app; the deeper ones need the BMS PC running BMS Companion.
 
 ## Which kneeboard is which
 
@@ -406,11 +416,11 @@ The screenshots you take in Falcon BMS (`User\Pictures`, or `g_sPicturesDirector
 
 ![Airfield page: Info box](docs/screenshots/reference-airfield.jpg)
 
-Works with no PC and no connection; it is all in the app. One section with four pages, **Airfields | Map | Threats | Arsenal**, and the theater picker beside them.
+Works with no PC and no connection; it is all in the app, except the in-game pictures and the deepest map levels, which the BMS PC draws. One section with four pages, **Airfields | Map | Threats | Arsenal**, and the theater picker beside them.
 
 - **Airfields** — every field of every theater: the ground chart with the **Info** box under it (latitude and longitude as BMS shows them, elevation, and the field's frequencies in divert order; tap a value to copy it), then runways, ILS, ATC patterns, nearest diverts, navaids, and the instrument charts of the theaters that ship them (244 charts, 988 pages).
 - **Map** — the theater map with its airfields.
-- **Threats** — SAMs, AAA, radars, MANPADS, aircraft, AAMs and ships, with RWR symbols, HARM/ALIC codes and engagement envelopes, plus **HARM & RWR**, **Encyclopedia** and **Range chart**.
+- **Threats** — SAMs, AAA, radars, MANPADS, aircraft, AAMs and ships, with RWR symbols, in-game pictures of each air-defence system's battalion and of ships drawn from BMS's 3-D models (by the BMS PC), HARM/ALIC codes and engagement envelopes, plus **HARM & RWR**, **Encyclopedia** and **Range chart**.
 - **Arsenal** — 323 flyable aircraft types (KTO and every add-on), per-theater variants, specs, station-by-station loadouts with rack capacity, and 518 stores.
 
 | Threats | Arsenal | HARM & RWR |
@@ -521,6 +531,9 @@ The Android app, the PC program and the browser version are built from the same 
 | The cockpit kneeboard pages (Upd Kneeboard) | the F-16's `7982.dds`-`7997.dds` in `KoreaObj` of the theater's 3D data folder; BMS's shipped copies in its `Docs` folder for **Put BMS's page back** |
 | Ground charts: runways, taxiways, ramp spots, buildings | each field's own authored data, `ObjectiveRelatedData/OCD_nnnnn/` |
 | Ground charts: the asphalt | the field's own 3D model, decoded from the game |
+| Airfield elevations and the ground under a point | BMS's terrain levelling at airbases (`TerrainRelatedData/TLD_*.TPB`) over the height map |
+| Map levels past the built-in ones | the theater's `HeightMap.raw` and photoreal textures (`GlobalColorMap`, `4K`, `16K`, `Hires`), drawn by the PC on demand |
+| Target and threat pictures | each unit's or building's 3-D model (`Models/<n>/Model_0.bml`), drawn by the PC |
 | Kneeboard tables | EZBoards `bin\xbrief.exe` (read-only, output to memory) |
 | Screenshots | `User\Pictures` (or `g_sPicturesDirectory`); thumbnails made on the PC |
 | The Config list | the stock `User\Config\Falcon BMS.cfg` your version ships with |

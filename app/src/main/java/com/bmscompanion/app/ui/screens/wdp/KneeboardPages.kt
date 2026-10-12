@@ -23,6 +23,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
@@ -65,7 +66,8 @@ import kotlin.math.roundToInt
  *
  * The kinds offered here are Leave as is, Picture (a file on the BMS PC, [KneeboardPictures]), Blank, Test page, DataCard
  * left/right and Coordination Card left/right; the
- * others (briefing, weather, target list, route map, attack profile, ground charts) come from [KneeboardExtraPages].
+ * others (briefing, weather, target list, route map, attack profile, ground charts) come from [KneeboardExtraPages],
+ * and the mission's target pictures from [KneeboardTargets].
  */
 object KneeboardPages {
     /** The page as drawn and sent: 1024 x 1536 pixels, 2:3. The PC holds the stretch into the 1:2 half (PAGE_ASPECT). */
@@ -97,7 +99,7 @@ object KneeboardPages {
     )
 
     /** Every kind the window offers, in its order: this file's, then [KneeboardExtraPages]'s. */
-    val kinds: List<KbPageKind> get() = BASE + KneeboardExtraPages.kinds.filter { k -> BASE.none { it.id == k.id } }
+    val kinds: List<KbPageKind> get() = BASE + KneeboardExtraPages.kinds.filter { k -> BASE.none { it.id == k.id } } + KneeboardTargets.kind
 
     fun of(id: String?): KbPageKind? = kinds.firstOrNull { it.id == id }
 
@@ -119,11 +121,28 @@ object KneeboardPages {
         if (kind in KneeboardExtraPages.ids) { KneeboardExtraPages.preload(kind); return }
         if (kind !in CARD_KINDS) return
         Repo.wdpForm(CARD_FORM)
-        val panel = if (kind == KbKind.DATACARD_LEFT || kind == KbKind.DATACARD_RIGHT) "pnlPage_1" else "pnlPage_2"
-        listOf("png", "jpg", "bmp", "gif").firstNotNullOfOrNull { ext -> Repo.bitmap("data/wdp/img/$CARD_FORM.$panel.BackgroundImage.$ext") }
+        cardBackground(if (kind == KbKind.DATACARD_LEFT || kind == KbKind.DATACARD_RIGHT) "pnlPage_1" else "pnlPage_2")
     }
 
     private val CARD_KINDS = setOf(KbKind.DATACARD_LEFT, KbKind.DATACARD_RIGHT, KbKind.COORDINATION_LEFT, KbKind.COORDINATION_RIGHT)
+
+    /** The card panel's printed form (its BackgroundImage), as the form's own picture loader finds it. */
+    internal suspend fun cardBackground(panel: String): android.graphics.Bitmap? =
+        listOf("png", "jpg", "bmp", "gif").firstNotNullOfOrNull { ext -> Repo.bitmap("data/wdp/img/$CARD_FORM.$panel.BackgroundImage.$ext") }
+
+    /**
+     * Pages still loading what they draw ([PageLoading]); [awaitDrawn] waits for none. The card's printed form, which
+     * the panel's own picture loader brings a frame or more after the panel, came after the capture on a busy first
+     * print, so the Coordination Card's left half went out without it and the next print of the same plan wrote the
+     * file again.
+     */
+    private var loading = 0
+
+    /** Holds [awaitDrawn] while it is in the composition: a page draws it in place of itself until its data is in. */
+    @Composable
+    internal fun PageLoading() {
+        androidx.compose.runtime.DisposableEffect(Unit) { loading++; onDispose { loading-- } }
+    }
 
     /**
      * Waits until a page just put in [KneeboardPageHost] has been drawn with everything it loads: a few frames, a pause
@@ -146,12 +165,13 @@ object KneeboardPages {
      * Waits (a few seconds at most) until the page host has composed page [n] [side] of [kind]: a heavy page can take
      * longer than [settle] to be composed, and a capture before that took the page drawn before it (seen once: the
      * route map sent as the departure chart; the left half of a card sent as its right half too). Then three more
-     * frames, which draw it. False when it never came: the caller sends nothing rather than the wrong page.
+     * frames, which draw it. False when it never came: the caller sends nothing rather than the wrong page. A page
+     * still loading what it draws ([PageLoading]) has not come yet.
      */
     suspend fun awaitDrawn(layer: GraphicsLayer, kind: String, n: Int, side: Char): Boolean {
         val key = drawnKey(kind, n, side)
         repeat(160) {
-            if (drawn[layer] == key) { repeat(3) { withFrameNanos { } }; return true }
+            if (drawn[layer] == key && loading == 0) { repeat(3) { withFrameNanos { } }; return true }
             // the page to print was set from this coroutine: make sure the composition hears of it
             androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications()
             withFrameNanos { }
@@ -324,16 +344,31 @@ private fun TestPage(scope: KbPageScope) {
  */
 @Composable
 private fun CardHalf(panel: String, page: WdpPage, left: Boolean) {
-    val form by produceState<WdpForm?>(null) { value = Repo.wdpForm(KneeboardPages.CARD_FORM) }
-    val f = form ?: return
+    // the form and its printed card, both in hand before the half is drawn: the panel's own picture loader shows the
+    // card a frame or more after the panel (longer when it must be decoded again), and a capture in between took the
+    // half without it ([KneeboardPages.PageLoading])
+    val loaded by produceState<Pair<WdpForm?, android.graphics.Bitmap?>?>(null, panel) {
+        value = Repo.wdpForm(KneeboardPages.CARD_FORM) to KneeboardPages.cardBackground(panel)
+    }
+    val got = loaded
+    if (got == null) { KneeboardPages.PageLoading(); return }
+    val (f, background) = got
+    if (f == null) return
     val card = WdpSession.dataCard
     val values = card.values(page.hiddenHere())
+    // the printed card drawn from the start, where the panel draws its own picture (which, when it comes, is the same
+    // picture in the same place)
+    val printed: @Composable () -> Unit = {
+        if (background != null) androidx.compose.foundation.Image(
+            background.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = androidx.compose.ui.layout.ContentScale.FillBounds,
+        )
+    }
     WdpPanelView(
         f, panel, values, Modifier.fillMaxSize(),
         crop = intArrayOf(if (left) 0 else 450, 0, 450, 675),
         // "Click picture to load new" speaks to the pilot at the screen, not on the knee
         hide = setOf("lblClickPic1"),
-        content = card.controlContent(),
+        content = card.controlContent() + (panel to printed),
     )
 }
 

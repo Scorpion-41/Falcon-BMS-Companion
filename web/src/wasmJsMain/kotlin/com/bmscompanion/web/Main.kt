@@ -115,7 +115,7 @@ fun main() {
         com.bmscompanion.app.ui.Kneeboard.setTitle = { t -> setDocumentTitle(t) }
         com.bmscompanion.app.ui.Kneeboard.lastError = { okbLastError() }
         com.bmscompanion.app.ui.Kneeboard.roundCorners = { px -> setBoardCorner(px) }
-    }
+    } else setDocumentTitle("BMS Companion ${AppVersion.NAME}") // a board's tab is named by the server instead
     ComposeViewport(document.body!!) {
         // The browser has no system fonts to fall back on: the one font Compose for Web draws with lacks the arrows,
         // triangles, squares and ticks the app writes (◀ ▶ ◂ ▸ ▾ ■ ▲ ▼ ✓ ✕ ☰ ⋮ …), which came out as empty boxes.

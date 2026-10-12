@@ -1,5 +1,113 @@
 # Changelog
 
+## 1.4.0 (BMS 4.38) — October 2026
+
+**Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install**; existing settings are kept.
+
+This release adds a Mission weather page, target pictures drawn from Falcon BMS's own 3-D models and a Files tab;
+the maps zoom much further, gain a topographic style and draw each airfield's diagram; the Planner's DataCard handles
+tankers, conformal tanks, bingo and joker.
+
+### Mission
+
+- **Mission weather.** The Weather tab opens on a new **Mission weather** page, on every device: the weather of the
+  save BMS flies, drawn over the theater with the route and airfields. Under Map Model it shows the save's map and,
+  with Maps Auto Update, the update maps through the flight on a time line marking take-off, target and landing.
+  Layers: clouds, precipitation, visibility, temperature, wind at any of BMS's ten levels, and isobars; a tap gives a
+  cell's full column. Probabilistic and Deterministic weather is shown as the type BMS applies to the whole theater,
+  with the four types' tables. The Weather card's **MAP** button opens the page; the generator is the tab's second
+  page, **Make weather**.
+- **Target pictures.** A **Target pictures** card on the Briefing shows the flight's enemy targets, each threat system of
+  the briefing with its radars and the other vehicles of its battalion, and spotted enemy ships, drawn by the PC from
+  Falcon BMS's own 3-D models in two views (front right and rear left, from above, as a targeting pod sees them). Only
+  what an enemy team holds is listed: never the take-off, landing or alternate field, nor anything of the flight's own
+  or an allied side. The pictures are in black and white, like a targeting pod image. **Add** picks any vehicle, ship
+  or building from a list by category; the red ✕ on each entry removes it, and **Reload** restores the mission's own
+  list. Additions and removals are kept per mission on each device. Pictures are drawn on demand and kept in a 50 MB
+  cache on the PC. Works in both mission modes.
+- **Files tab.** Opens text files and logs, HTML pages, pictures and PDFs on the BMS PC from any device, read only,
+  several at once as tabs. Programs and scripts are never served. It can be hidden under Setup → Mission pages.
+- **Airfield card on the map.** A tap on an airfield on the Mission map — its symbol, its name, or anywhere on its
+  diagram when zoomed in — opens a compact card at once: ICAO, runways with their lengths, bearing and range from the
+  jet and the bullseye, the flight's steerpoints on the field, coordinates and elevation, and every frequency in divert
+  order (tap to copy), with a small chart of the field (runways and pavement only) on a tablet or PC and **Airfield
+  page ›** for the rest. It floats over the map on a tablet or PC and is a sheet on a phone; a tap elsewhere or ✕
+  closes it.
+- **DED highlighting.** The Dashboard's DED card draws highlighted fields in inverse video, as the cockpit does, and
+  shows the Pilot Fault List below the DED while it lists a fault.
+- **Approach frequency.** The Airbases card (Dashboard and Briefing) and the map's airfield card list the approach
+  frequency with tower and ground.
+- **Version number** in the PC window's title, on the server page, on the Setup page and in the browser tab.
+
+### Planner
+
+- **Conformal fuel tanks.** The Loadout window has a **CFT** switch for jets that can carry them: the tanks' 3,060 lb
+  of fuel, their weight and drag count in the Performance page and in the DataCard's take-off and block fuel. A save's
+  aircraft start with or without them as BMS loaded them, seat by seat.
+- **Tankers on the DataCard.** The Tanker 1/Tanker 2 lists offer every tanker of your side, those on station during
+  the flight first; a row's notes give each tanker's time on station. The Map page's tanker, AWACS and JSTARS cards
+  have **Put on DataCard as Tanker 1 / Tanker 2 / AWACS / JSTARS**.
+- **Bingo and Joker.** JOKER is worked out as BINGO + 500 lb, as the BMS User Manual defines it, unless typed. The
+  route's bingo (the DataCard's Min Fuel at the turn for home) is shown in the BINGO box's tip; emptying the box uses
+  it.
+- **Upd Kneeboard pages.** Two new kinds: **Airport Schedule** (the DataCard's departures from your field) and **Route
+  map, dark** (light inks on a dark map, for sun glare).
+- **Target pictures on the kneeboard.** An Upd Kneeboard page kind with up to four of the mission's targets on a half
+  page, two views each, as on the Briefing's Target pictures card; the targets are ticked per half (by default the
+  next four of the card's list) and kept with the plan.
+- **Briefing page text.** Situation, Intel, Mission Objective and Notes are all set at one size: a long line wraps onto
+  the next lines instead of being shrunk, on screen and on the kneeboard page. Typing wraps as in a word processor:
+  the word that no longer fits moves to the next line and the caret follows, deleting pulls text back up, and
+  Backspace at the start of a line joins it to the line above.
+
+### Maps
+
+- **Deeper zoom.** Every theater map zooms down to about half a metre a pixel, enough to see the terrain round a
+  runway. The first levels are built into the app; the deeper ones are drawn by the PC program from Falcon BMS's own
+  files: the height map for Relief, Dark, Chart and Topographic, and BMS's photoreal textures, down to its
+  high-resolution airbase imagery, for Satellite, laid where the sim lays its terrain, so an airfield's runways sit on
+  the runways in the imagery (where BMS's imagery has them: Mount Pleasant's are painted out of the Falklands'
+  textures).
+  - **On demand, on every device.** On a phone, tablet or browser the PC program streams these levels to the device
+    as the map is zoomed and panned, only for the part on screen, and the map sharpens as they arrive; nothing has to
+    be downloaded or set up first, and nothing comes from the internet or is stored on the device.
+  - **Without the PC.** With the PC off or out of reach, the map works as before on the levels built into the app
+    (down to about 125 m a pixel; 250 m in the Falklands, twice the size), enlarged past them.
+- **Topographic style.** A fifth map style: contour lines whose interval follows the zoom (labelled in feet),
+  hillshade and water, from BMS's height map. Its first levels are in the app (about 13 MB for the five terrains).
+- **Airfield diagrams.** Zoomed in, each airfield is drawn as its ground chart (asphalt, runways with their numbers,
+  taxiways with their letters, shelters and buildings) in place of its symbol, on the Reference map, the Mission map
+  and the Planner's Map page.
+
+### Reference and Threats
+
+- **Threat pictures.** Each air-defence and ship page under Reference → Threats shows the system and the vehicles of
+  its battalion drawn from BMS's 3-D models, with the same views and targeting-pod look as the Briefing's card, in a
+  card folded until opened.
+- **North up on ground charts.** The Taxi page and an airfield's chart have an **N** button, lit while the chart is
+  north up, that puts north at the top as on the map and undoes a two-finger turn.
+- **Reference map.** The Topographic style, the deeper zoom and the airfield diagrams above; a place found by the
+  search is centred and marked.
+
+### Fixed
+
+- Upd Kneeboard's **Target list** pages printed empty rows instead of the list.
+- Upd Kneeboard could print the Coordination Card's left half without the card's printed form (title, headings and
+  grid) when the form's picture had not finished loading; a page is now captured only once all of it has drawn.
+- The DataCard's Tanker 1/Tanker 2 lists offered only "No tanker" for a flight later in the day than the save's
+  planned tanker tracks.
+- Tanker and AWACS tracks of the other side were drawn on the Mission map and the Planner's Map page and offered to
+  the DataCard; only those of your side and its allies (the campaign's team table) are shown now.
+- Weather read from a save (WDP mode's weather block, the DataCard's ATIS and weather list) gave a sunny day a
+  5,000 ft cloud base; it is now the high layer BMS prints, and WDP mode's block has the contrail layer row.
+- A suggestion in the Reference map's search could not be picked with the mouse. Suggestions can now be clicked or
+  tapped, ↓/↑ move through them and Enter picks the highlighted one.
+- Airfield elevations and the ground under a point (the attack pages' ELEV, the Map page's readout, the PC's map
+  tiles) now include BMS's terrain levelling at airbases (`TerrainRelatedData/TLD_*.TPB`); Hellas fields such as
+  Graf Ignatievo were up to 490 ft too low. Credit to **oakdesign**, who found the cause and documented BMS's
+  terrain-levelling files in a GitHub issue; this fix is built on that work. Ground heights are now also read at the
+  true position on BMS's terrain, which up to 1.3.9 was up to 880 ft away in a theater's north-east.
+
 ## 1.3.9 (BMS 4.38) — October 2026
 
 **Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install**; existing settings are kept.

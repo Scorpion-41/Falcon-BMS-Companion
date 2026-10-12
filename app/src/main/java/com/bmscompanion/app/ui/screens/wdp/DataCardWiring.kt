@@ -31,6 +31,7 @@ import com.bmscompanion.app.data.mission.MissionLink
 import com.bmscompanion.app.data.mission.PackageFlight
 import com.bmscompanion.app.data.mission.SupportEntry
 import com.bmscompanion.app.data.mission.SupportTrack
+import com.bmscompanion.app.data.wdp.BriefingLines
 import com.bmscompanion.app.data.wdp.DataCardNet
 import com.bmscompanion.app.data.wdp.DataCardPlan
 import com.bmscompanion.app.data.wdp.DtcModel
@@ -292,6 +293,7 @@ class DataCardWiring : WdpWiring, WdpControlContent {
         val m = LinkedHashMap<String, String>()
         for (h in hidden) m[h] = "hidden"
         m.putAll(p.labels)
+        fuelTips(m)
         // the radio buttons and check boxes: their state, and whether WDP has them enabled
         for (k in 1..5) {
             m["rbnCallsign$k"] = if (p.rbnCallsign[k]) "checked" else "unchecked"
@@ -379,6 +381,10 @@ class DataCardWiring : WdpWiring, WdpControlContent {
         for ((box, t) in supportRows()) if (!windowed(t)) m[box + "_Notes"] = t?.name?.let { supportPhrases[it] } ?: ""
         // what the pilot typed is theirs, whatever the app knows
         for (n in typed) m[n] = p.text(n)
+        // a Briefing section longer than its lines: the whole text under the mouse on the last one
+        for ((n, t) in briefCut) if (n !in typed) m["$n.tip"] = t
+        // the Briefing page's prose wraps as it is typed (D100)
+        for ((prefix, count) in PROSE) for (i in 1..count) m["$prefix$i.wrap"] = "true"
         return WdpValues(m)
     }
 
@@ -471,6 +477,8 @@ class DataCardWiring : WdpWiring, WdpControlContent {
             saveWx = null; saveWxName = null; saveWxWhy = null
             // and the departure runway is the wind's again
             depRwyPick = null
+            // and the Briefing page's lines are the new card's
+            proseMarks.clear(); proseCaret = null
         }
         lastMission = mission
         this.mission = cardMission(mission)
@@ -673,6 +681,9 @@ class DataCardWiring : WdpWiring, WdpControlContent {
         bullseyeBox()
         routeSpinner = 0; taxiSpinner = 0; profileButtons = false; tankerList = 0
         modeVisible.fill(false)
+        // the flight plan's Min Fuel is in: the route's bingo, and the joker
+        autoJoker = null
+        fuelStates()
     }
 
     /**
@@ -963,6 +974,8 @@ class DataCardWiring : WdpWiring, WdpControlContent {
         p.type("txtALOW", DataCardNet.str(m.icp.alowAgl))
         p.type("txtMSL", m.icp.alowMsl.toString())
         p.type("txtBingo", DataCardNet.str(m.icp.bingoFuel))
+        // the cartridge's bingo is in: the route's beside it, and the joker from it
+        fuelStates()
     }
 
     /**
@@ -1399,9 +1412,128 @@ class DataCardWiring : WdpWiring, WdpControlContent {
         val p = plan
         supportTables(b, route)
         p.firstTanker = -1; p.secondTanker = -1
-        if (p.tankerNR != 0) p.fillTanker()
+        if (p.tankerNR != 0) { p.fillTanker(); offerEveryTanker() }
         if (p.awacsNR != 0) p.fillAwacs()
         if (p.jstarNR != 0) p.fillJSTAR()
+    }
+
+    /** The Joker the card last worked out ([fuelStates]): a figure the pilot typed or loaded differs, and is kept. */
+    private var autoJoker: String? = null
+    /** The route's bingo the card last worked out: its turn-for-home steerpoint and fuel ([DataCardPlan.routeBingo]). */
+    private var routeBingo: Pair<Int, Int>? = null
+
+    /**
+     * **BINGO and JOKER** (1.4.0, D96). Falcon BMS's manuals define one relation and no calculation: "Joker is Bingo
+     * plus 500 pounds" (BMS User Manual 4.38.1, 10.3.4, the AI's "Set Bingo"); bingo is "a threshold fuel value that
+     * the pilot enters in MMC memory" (BMS Training Manual and TO 1F-16CMAM-34-1-1, the abbreviations), set on the
+     * DED's BINGO page (34-1-1 2.2.1.3.1; the Training Manual's ramp start sets "a Joker level of 3000 lbs" there), and
+     * "Lotto" is in none of them. So:
+     *
+     * - **JOKER** is the card's BINGO + 500 lb whenever the box is empty or still holds the figure worked out last;
+     *   one the pilot typed (or a DataCard file loaded) is kept. It is the card's only (WDP: the cartridge has no joker).
+     * - **BINGO** is the cartridge's, as WDP has it, and the card works out the **route's bingo** beside it — the
+     *   card's Min Fuel at the turn-for-home steerpoint ([DataCardPlan.routeBingo]: the fuel to fly the rest of the plan
+     *   and divert to the alternate with 1,000 lb), named in the box's tip. The box is never changed by itself (a
+     *   mission opened has no edits to save); **emptied by the pilot it takes the route's bingo** (where WDP's leave
+     *   puts 1,500), and Save to DTC writes it as the DED's BINGO.
+     */
+    private fun fuelStates() {
+        val p = plan
+        routeBingo = runCatching { p.routeBingo() }.getOrNull()
+        val joker = p.text("txtJoker").trim()
+        if (joker.isEmpty() || joker == autoJoker) {
+            val b = p.text("txtBingo").trim().toDoubleOrNull()?.roundToInt()
+            val j = b?.let { (it + JOKER_ABOVE_BINGO).toString() } ?: ""
+            p.type("txtJoker", j)
+            autoJoker = j
+        }
+    }
+
+    /** The tips of the two boxes, with the figures [fuelStates] worked out. */
+    private fun fuelTips(m: MutableMap<String, String>) {
+        val r = routeBingo
+        val route = r?.let { (n, f) -> "The route's bingo is $f lb: the card's Min Fuel at STPT $n, your turn for home (the fuel to fly the rest of the plan and divert to the alternate with 1,000 lb)." }
+            ?: "The route's bingo needs a flight plan with a turn for home."
+        m["txtBingo.tip"] = "Bingo fuel (lb), the DED's BINGO: the fuel at which you head home. From your cartridge. $route Empty the box to take the route's; Save DTC or Save to DTC writes what the box holds."
+        m["txtJoker.tip"] = "Joker fuel (lb): bingo + 500, as BMS's manual defines it (User Manual 10.3.4). Type your own to keep it; empty the box for bingo + 500 again. The card's only: the cartridge has no joker."
+    }
+
+    /**
+     * **Fixed (D95):** WDP's `FillTanker` lists only the tankers on station while the flight is up, so where the save
+     * holds none for that window — BMS plans tankers a few hours ahead, and a flight later in the day finds the
+     * morning's tracks only — the two lists offered "No Tanker" alone. Every tanker of the side is listed now, those on
+     * station first (WDP's own list, in its order), then the others in the save's order; a row's Notes say its window.
+     */
+    private fun offerEveryTanker() {
+        val p = plan
+        val tt = p.tblTankerTrack ?: return
+        if (p.cboTanker1.isEmpty()) return
+        for (i in 0 until p.tankerNR) {
+            val n = tt.getOrNull(i)?.name?.takeIf { it.isNotEmpty() } ?: continue
+            if (n !in p.cboTanker1) p.cboTanker1.add(n)
+            if (n !in p.cboTanker2) p.cboTanker2.add(n)
+        }
+    }
+
+    /**
+     * The Map page's **Put on DataCard** (1.4.0): the support flight [callsign] into the card's row [row] — `"Tanker1"`,
+     * `"Tanker2"`, `"AWACS"` or `"JSTAR"` — as the row's own list and Select would put it (callsign - type, TACAN, UHF,
+     * LOC, the window in Notes). A flight the card's tables do not have (a track only the briefing or BMS's planned
+     * routes give) joins the tanker table from [fallback] first. The sentence says what was done.
+     */
+    fun putSupport(callsign: String, row: String, fallback: DataCardPlan.Track? = null): String {
+        val p = plan
+        if (p.flightTable.isNullOrEmpty()) return "The DataCard has no flight yet: open the DataCard page once, then try again."
+        fun key(s: String?) = s?.replace(" ", "")?.lowercase().orEmpty()
+        return try {
+            when (row) {
+                "Tanker1", "Tanker2" -> {
+                    val k = row.last() - '0'
+                    var i = (0 until p.tankerNR).firstOrNull { key(p.tblTankerTrack?.getOrNull(it)?.name) == key(callsign) } ?: -1
+                    if (i < 0) {
+                        val t = fallback ?: return "$callsign is not one of the tankers the DataCard knows."
+                        p.tblTankerTrack = p.tblTankerTrack.orEmpty() + t
+                        p.tankerNR = p.tblTankerTrack!!.size
+                        i = p.tankerNR - 1
+                    }
+                    val name = p.tblTankerTrack!![i].name ?: callsign
+                    for (list in listOf(p.cboTanker1, p.cboTanker2)) {
+                        if (list.isEmpty()) list.add("No Tanker")
+                        if (name !in list) list.add(name)
+                    }
+                    p.pickTanker(k, name)
+                    tankerList = 0
+                    version++
+                    "$callsign is the DataCard's Tanker $k."
+                }
+                "AWACS", "JSTAR" -> {
+                    val table = if (row == "AWACS") p.tblAwacsTrack else p.tblJSTARTrack
+                    val t = table?.firstOrNull { key(it.name) == key(callsign) } ?: fallback
+                        ?: return "$callsign is not one of the ${if (row == "AWACS") "AWACS" else "JSTARS"} the DataCard knows."
+                    p.type("txt$row", (t.name ?: callsign) + " - " + (t.vehType ?: ""))
+                    p.type("txt${row}_Loc", t.loc ?: "")
+                    if (t.time1 > 0 || t.time2 < ALWAYS) p.type("txt${row}_Notes", hhmm(t.time1) + " - " + hhmm(t.time2))
+                    p.getFltComm(t.name).takeIf { it >= 0 }?.let { c ->
+                        p.type("txt${row}_UHF", DataCardNet.fmt(DataCardNet.toDouble(p.fltRadio!![c].uhf) / 1000.0, "#.000"))
+                    }
+                    version++
+                    "$callsign is the DataCard's ${if (row == "AWACS") "AWACS" else "JSTARS"}."
+                }
+                else -> "No such row on the DataCard: $row."
+            }
+        } catch (e: Exception) {
+            "That did not reach the DataCard: " + (e.message ?: e::class.simpleName)
+        }
+    }
+
+    /** The Map page's own facts for a support flight, as the card's tables hold one: LOC from the card's bullseye. */
+    fun supportTrack(callsign: String, aircraft: String?, tacanFinal: String?, at: Pair<Double, Double>?, from: Long?, to: Long?): DataCardPlan.Track {
+        val bull = bullseye(MissionLink.live.value, MissionLink.contacts.value?.contacts) ?: saveBullseye()
+        val loc = if (bull != null && at != null) locOf(bull, at) else ""
+        val t1 = from?.takeIf { it > 0 }?.let { it.mod(DAY) + DAY } ?: 0L
+        var t2 = to?.takeIf { it > 0 }?.let { it.mod(DAY) + DAY } ?: ALWAYS
+        if (t2 < t1) t2 += DAY
+        return DataCardPlan.Track(callsign, aircraft, tacanFinal ?: "", loc, t1, t2, tcnFinal = true)
     }
 
     /**
@@ -1467,7 +1599,21 @@ class DataCardWiring : WdpWiring, WdpControlContent {
             val type = a.aircraft?.replace(Regex("^\\d+\\s+"), "")?.takeIf { it.isNotBlank() } ?: a.role.takeIf { it.isNotBlank() }
             return DataCardPlan.Track(a.callsign, type, tcn, loc, t1, t2, tcnFinal = true)
         }
-        val tankers = supportFlights.filter { it.role == "Tanker" }.map(::track)
+        // the briefing's tankers, then (D95) the other tankers of the side BMS planned round the flight's time (its
+        // planned tracks, which the PC keeps to the flight's side), so the lists offer more than "No Tanker"
+        fun bare(s: String?) = s?.replace(" ", "")?.lowercase().orEmpty()
+        val planned = tracks.filter { t -> t.role == "Tanker" && !t.callsign.isNullOrBlank() && supportFlights.none { bare(it.callsign) == bare(t.callsign) } }
+            .distinctBy { bare(it.callsign) }
+            .map { t ->
+                val on = t.points.filter { it.station }.ifEmpty { t.points }
+                val at = on.takeIf { it.isNotEmpty() }?.let { s -> s.sumOf { it.x } / s.size to s.sumOf { it.y } / s.size }
+                val t1 = on.minOfOrNull { it.arriveMs }?.takeIf { it > 0 }?.let { it.mod(DAY) + DAY } ?: 0L
+                var t2 = on.maxOfOrNull { it.departMs }?.takeIf { it > 0 }?.let { it.mod(DAY) + DAY } ?: ALWAYS
+                if (t2 < t1) t2 += DAY
+                if (t1 == 0L) t2 = ALWAYS
+                DataCardPlan.Track(t.callsign, "Tanker", "", if (bull != null && at != null) bra(bull.first, bull.second, at.first, at.second) else "", t1, t2, tcnFinal = true)
+            }
+        val tankers = supportFlights.filter { it.role == "Tanker" }.map(::track) + planned
         val awacs = supportFlights.filter { it.role == "AWACS" }.map(::track)
         val jstar = supportFlights.filter { it.role == "JSTARS" }.map(::track)
         p.tblTankerTrack = tankers; p.tankerNR = tankers.size
@@ -2033,6 +2179,7 @@ class DataCardWiring : WdpWiring, WdpControlContent {
      * own box, rather than left blank (R3-PLAN A9) — and never for a TE, whose printed briefing has no situation.
      */
     private fun briefingPage(b: Briefing?, aircraft: String, route: List<DataCardPlan.Waypoint>) {
+        briefCut.clear()
         if (b == null) return
         val saveOnly = b.origin == "save" && !joined
         // WDP's intelligence from the save (GndThreads, AirThreads …), for a flight no printed briefing speaks for
@@ -2052,6 +2199,11 @@ class DataCardWiring : WdpWiring, WdpControlContent {
         val role = own?.role?.takeIf { it.isNotBlank() } ?: b.overview.mission ?: ""
         val (ground, noGround) = block("Surface")
         val (air, noAir) = block("Air-to-Air")
+        // WDP cuts its team motto, one paragraph, into five lines of 80: the briefing's situation has paragraph
+        // breaks, and a line cut across one showed only what came before the break ("…take target." and then the
+        // next paragraph's second half), so the text is one paragraph here too
+        val motto = b.situation?.replace(Regex("\\s+"), " ")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: if (saveOnly && !tactical()) PRINT_SITUATION else ""
         plan.fillMissionBriefing(
             airbase = plan.tblApt[0].name ?: "",
             aircraft = aircraft,
@@ -2065,18 +2217,15 @@ class DataCardWiring : WdpWiring, WdpControlContent {
             tot = (b.overview.tot ?: overviewRow(b, "Time on Station") ?: own?.target)?.trim()?.removeSuffix("z") ?: "",
             // (a save's flight: its target by name; the briefing's Target Area is where it is, "4 nm south of Tirana")
             yourDescription = mission.flight?.row?.target?.takeIf { it.isNotBlank() } ?: b.overview.targetArea?.takeIf { it.isNotBlank() } ?: role,
-            // WDP cuts its team motto, one paragraph, into five lines of 80: the briefing's situation has paragraph
-            // breaks, and a line cut across one showed only what came before the break ("…take target." and then the
-            // next paragraph's second half), so the text is one paragraph here too
-            motto = b.situation?.replace(Regex("\\s+"), " ")?.trim()?.takeIf { it.isNotEmpty() }
-                ?: if (saveOnly && !tactical()) PRINT_SITUATION else "",
+            motto = motto,
             gndThreats = if (intel != null) names(intel.ground) else ground.ifEmpty { if (noGround) "none known along your flight path" else "" },
             airThreats = if (intel != null) names(intel.fighters) else air.ifEmpty { if (noAir) "none expected" else "" },
             fighterBomber = names(intel?.fighterBombers), bombers = names(intel?.bombers), support = names(intel?.support), helo = names(intel?.helos),
         )
-        situationLines(b)
+        situationLines(motto)
         // a save's flight from a PC that sends no intelligence: its threats are in the briefing BMS prints
         if (saveOnly && b.threats.isEmpty() && intel == null) plan.type("txtBrfIntel1", PRINT_INTEL)
+        intelLines()
         objectives(b, own, role)
     }
 
@@ -2084,37 +2233,100 @@ class DataCardWiring : WdpWiring, WdpControlContent {
     private fun tactical(): Boolean = mission.flight?.kind.let { it == CampKind.TE || it == CampKind.TRAINING }
 
     /**
-     * The Situation box where WDP's layout would lose text. WDP cuts its team motto (at most 200 characters) into five
-     * lines of 80; BMS's printed situation runs to 400 and more, and the fifth line then ended mid-sentence ("…during
-     * its"). So: a list heading BMS leaves with nothing after it ("Potential targets in the area include:") is dropped,
-     * and a text that does not fit five lines of 80 is laid out over the box's real width (446 px holds 84 characters
-     * of its Arial 8.25), the last line marked "…" only if even that is not enough. Text that fits WDP's lines is left
-     * exactly as WDP lays it out.
+     * The Situation box on its five lines ([BriefingLines], 1.4.0). WDP cuts its team motto (at most 200 characters)
+     * into lines of 80 characters, which in Arial can be wider than the box (and were then set smaller); BMS's printed
+     * situation runs to 400 and more. So a list heading BMS leaves with nothing after it ("Potential targets in the
+     * area include:") is dropped and the text is word-wrapped to the box's width at the page's text size, the last line
+     * ending in "…" (and the whole text in its tip) only where five lines are not enough.
      */
-    private fun situationLines(b: Briefing) {
-        val text = (b.situation ?: return).replace(Regex("\\s+"), " ").trim()
+    private fun situationLines(motto: String) {
+        val text = motto.replace(Regex("\\s+"), " ").trim()
             .replace(Regex("\\s*[^.:!?]*\\binclude:\\s*$", RegexOption.IGNORE_CASE), "").trim()
-        fun wrap(width: Int): List<String> {
-            val out = ArrayList<String>()
-            var rest = text
-            while (rest.isNotEmpty()) {
-                if (rest.length <= width) { out += rest; break }
-                val cut = rest.substring(0, width).lastIndexOf(' ').let { if (it <= 0) width else it }
-                out += rest.substring(0, cut).trim()
-                rest = rest.substring(cut).trim()
-            }
-            return out
+        putLines("txtBrfSituation", BriefingLines.flow(listOf(text), 5))
+    }
+
+    /**
+     * The Intel box on its nine lines ([BriefingLines], 1.4.0). WDP puts each list on one line ("Ground threats: …"; a
+     * long air-threat list over two, both headed "Air threats:"), and a list wider than its box was set in tiny type.
+     * Here each list is one paragraph wrapped onto the lines after it, its continuation indented: a list WDP split in
+     * two is joined again and the trailing comma WDP leaves is dropped. What does not fit ends in "…", the whole text in
+     * the last line's tip.
+     */
+    private fun intelLines() {
+        val paras = ArrayList<String>()
+        for (i in 1..9) {
+            val t = plan.text("txtBrfIntel$i").trim().removeSuffix(",").trimEnd()
+            if (t.isEmpty()) continue
+            val head = t.substringBefore(": ", "")
+            val last = paras.lastOrNull()
+            if (head.isNotEmpty() && last != null && last.startsWith("$head: ")) paras[paras.lastIndex] = last + ", " + t.removePrefix("$head: ")
+            else paras += t
         }
-        if (wrap(80).size <= 5) {
-            // WDP's own lines, unless dropping the empty heading is all that changed them
-            if (text != (b.situation ?: "").replace(Regex("\\s+"), " ").trim()) wrap(80).let { l -> for (i in 1..5) plan.type("txtBrfSituation$i", l.getOrElse(i - 1) { "" }) }
-            return
+        putLines("txtBrfIntel", BriefingLines.flow(paras, 9, BriefingLines.HANG))
+    }
+
+    /**
+     * A section of the Briefing page's prose ([PROSE]) set line by line from [flow], leaving the boxes in [skip] (typed
+     * by the pilot) alone; the last line of a section that did not fit carries the whole text as its tip ([briefCut]).
+     */
+    private fun putLines(prefix: String, flow: BriefingLines.Flow, skip: Set<String> = emptySet()) {
+        for ((i, l) in flow.lines.withIndex()) "$prefix${i + 1}".let { n ->
+            if (n !in skip) { plan.type(n, l); proseMarks[n] = flow.marks.getOrElse(i) { BriefingLines.NEW } }
         }
-        val lines = wrap(SITUATION_WIDTH)
-        for (i in 1..5) {
-            val l = lines.getOrElse(i - 1) { "" }
-            plan.type("txtBrfSituation$i", if (i == 5 && lines.size > 5) l.take(SITUATION_WIDTH - 1) + "…" else l)
+        val last = "$prefix${flow.lines.size}"
+        if (flow.cut != null) briefCut[last] = flow.cut else briefCut.remove(last)
+    }
+
+    /** The Briefing page's sections that did not fit their lines: the last line's box → the whole text, for its tip. */
+    private val briefCut = HashMap<String, String>()
+
+    // ------------------------------------------------------------- the Briefing page's prose, typed as a word processor
+
+    /**
+     * Which lines of the Briefing page's prose carry on the line above ([BriefingLines.reflow]'s marks), by box: set
+     * where the card places a section ([putLines]) and wherever a section is laid out again as it is typed.
+     */
+    private val proseMarks = HashMap<String, Int>()
+    /** the caret the box being typed in reported with its last change (`"<box>.caret"`), for the change that follows */
+    private var proseCaret: Pair<String, Int>? = null
+
+    private fun proseOf(box: String): String? =
+        PROSE.keys.firstOrNull { box.startsWith(it) && box.removePrefix(it).toIntOrNull()?.let { k -> k in 1..PROSE.getValue(it) } == true }
+
+    /**
+     * The Briefing page's prose (1.4.0, D100): a line typed wider than its box carries on onto the next line of its
+     * section, as a word processor wraps — the word being typed goes down and the caret with it, the lines below
+     * moving down while the section has empty lines at its foot (with none, the line stays as typed, set smaller as
+     * any box is, and nothing is pushed off the end); deleting pulls the words below back up; Backspace at the start
+     * of a line that carries on the one above, or Delete at the end of one carried on, joins the two ([join]: -1, +1).
+     * [caret] is where the caret is in [box] (null when the box is left or committed from a finger's editor bar:
+     * then the paragraph is laid out again and no keyboard moves). Lines the layout changes count as typed. The box
+     * typed in takes the layout before its key handler returns ([WdpRelayout]), so the next key goes where the caret is.
+     */
+    private fun reflowProse(box: String, caret: Int?, join: Int = 0) {
+        val prefix = proseOf(box) ?: return
+        val count = PROSE.getValue(prefix)
+        val k = box.removePrefix(prefix).toInt() - 1
+        val names = (1..count).map { "$prefix$it" }
+        val rows = names.map { plan.text(it) }
+        val marks = IntArray(count) { proseMarks[names[it]] ?: BriefingLines.NEW }
+        val indent = if (prefix in PROSE_LISTS) BriefingLines.HANG else ""
+        val r = BriefingLines.reflow(rows, marks, k, caret, indent, join = join) ?: return
+        // a box left as the layout has it (the card's own lines, broken where their spaces went): nothing to do, and
+        // nothing marked typed for a box merely visited
+        if (caret == null && join == 0 && (0 until count).all { rows[it].trimEnd() == r.lines[it].trimEnd() }) return
+        for (i in 0 until count) {
+            val n = names[i]
+            proseMarks[n] = r.marks[i]
+            if (rows[i] != r.lines[i]) { plan.type(n, r.lines[i]); typed += n }
         }
+        if (caret == null && join == 0) return
+        // the keyboard: to the line the caret is now on, at its place, unless the box with it already shows that
+        val target = r.caretLine.takeIf { it >= 0 } ?: return
+        if (target == k && r.lines[k] == rows[k] && join == 0) return
+        val texts = HashMap<String, String>()
+        for (i in 0 until count) if (rows[i] != r.lines[i] || i == target || i == k) texts[names[i]] = r.lines[i]
+        WdpRelayout.post(WdpRelayout.Move(texts, names[target], r.caretCol))
     }
 
     /** [text] word-wrapped into lines of at most [width] characters. */
@@ -2178,11 +2390,9 @@ class DataCardWiring : WdpWiring, WdpControlContent {
                 lines += parts.joinToString("  ") + if (f.callsign.replace(" ", "").equals(cs?.replace(" ", ""), true)) "  (you)" else ""
             }
         }
-        for (i in 1..10) {
-            val n = "txtBrfObjective$i"
-            if (n in typed) continue
-            plan.type(n, lines.getOrNull(i - 1)?.take(OBJECTIVE_WIDTH) ?: "")
-        }
+        // each line wrapped onto the next at the page's text size, its continuation indented ([BriefingLines]); a line
+        // was once cut at 84 characters and set smaller still where those were wider than the box
+        putLines("txtBrfObjective", BriefingLines.flow(lines, 10, BriefingLines.HANG), skip = typed)
     }
 
     /**
@@ -2292,7 +2502,38 @@ class DataCardWiring : WdpWiring, WdpControlContent {
 
     private fun handleValue(name: String, value: String) {
         val p = plan
-        if (name.endsWith(".leave")) { p.leave(name.removeSuffix(".leave")); return }
+        if (name.endsWith(".leave")) {
+            // D96: a BINGO box left empty takes the route's bingo (WDP's leave would put 1500 there)
+            if (name == "txtBingo.leave" && p.text("txtBingo").isBlank()) routeBingo?.let { p.type("txtBingo", it.second.toString()) }
+            p.leave(name.removeSuffix(".leave"))
+            // a line of the Briefing page's prose: its paragraph laid out again (a finger's editor bar commits a
+            // whole line, typed wider than its box, only here)
+            val left = name.removeSuffix(".leave")
+            if (proseCaret?.first == left) proseCaret = null
+            reflowProse(left, null)
+            // a bingo typed: the joker follows it (where it is still the card's own)
+            if (name == "txtBingo.leave") fuelStates()
+            return
+        }
+        // the Briefing page's prose typed in a box with the keyboard (D100): the caret comes before each change, a
+        // Backspace at the start or a Delete at the end as a join
+        if (name.endsWith(".caret") || name.endsWith(".join")) {
+            val box = name.substringBeforeLast('.')
+            if (proseOf(box) == null) return
+            if (name.endsWith(".caret")) proseCaret = value.trim().toIntOrNull()?.let { box to it }
+            else { typed += box; reflowProse(box, 0, join = if (value == "fwd") 1 else -1) }
+            return
+        }
+        // a line set whole (a finger's editor bar, a DataCard loaded, typed boxes put back) starts a paragraph of its own
+        if (proseOf(name) != null && proseCaret?.first != name) proseMarks[name] = BriefingLines.NEW
+        if (proseOf(name) != null && proseCaret?.first == name) {
+            val caret = proseCaret!!.second
+            proseCaret = null
+            typed += name
+            p.type(name, value)
+            reflowProse(name, caret)
+            return
+        }
         // a box the pilot has typed into shows what was typed from now on, whatever the app knows of it
         if (name.startsWith("txt")) typed += name
         when {
@@ -3181,6 +3422,8 @@ class DataCardWiring : WdpWiring, WdpControlContent {
 
     companion object {
         private const val DAY = 86_400_000L
+        /** BMS User Manual 4.38.1, 10.3.4: "Joker is Bingo plus 500 pounds" */
+        private const val JOKER_ABOVE_BINGO = 500
         /** half the width of WDP's tanker box on the map (`Tankers`: 30,000 ft either side of the station leg) */
         private const val TRACK_HALF_FT = 30_000.0
         /** WDP's `P.NM_TO_FT` */
@@ -3215,10 +3458,10 @@ class DataCardWiring : WdpWiring, WdpControlContent {
             "(.twx) from. The weather comes with the briefing BMS\n" +
             "prints: press PRINT on its briefing screen with this flight\n" +
             "selected, or pick a weather file with Reload WX."
-        /** how many characters a line of the Mission Objective box holds (446 px of Arial 8.25) */
-        private const val OBJECTIVE_WIDTH = 84
-        /** how many characters a line of the Situation box holds where WDP's 80 would lose text (446 px of Arial 8.25) */
-        private const val SITUATION_WIDTH = 84
+        /** The Briefing page's prose, a box a line ([BriefingLines]): each section's box name and how many lines it has. */
+        private val PROSE = mapOf("txtBrfSituation" to 5, "txtBrfIntel" to 9, "txtBrfObjective" to 10, "txtBrfNotes" to 12)
+        /** the sections that are lists, whose lines carrying on an item are indented ([BriefingLines.HANG]) */
+        private val PROSE_LISTS = setOf("txtBrfIntel", "txtBrfObjective")
         /** BMS's compass words as a card writes them */
         private val COMPASS = mapOf(
             "north" to "N", "northeast" to "NE", "east" to "E", "southeast" to "SE", "south" to "S", "southwest" to "SW", "west" to "W", "northwest" to "NW",

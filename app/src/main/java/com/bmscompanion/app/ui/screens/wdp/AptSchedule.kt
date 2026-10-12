@@ -288,6 +288,9 @@ internal object BriefedSave {
         return f
     }
 
+    /** The flight [flight] found for [key] already, without asking the PC. */
+    fun cachedFlight(key: String): CampFlight? = flights[key]
+
     /** That save's flight — the printed briefing's — as `/api/campaign/flight` gives it, or null. */
     suspend fun flight(key: String): CampFlight? {
         flights[key]?.let { return it }

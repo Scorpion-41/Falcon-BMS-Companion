@@ -108,8 +108,25 @@ internal class PerfLoadoutWindow(
     private val f16: Boolean,
     /** another aircraft's picture in the app's aircraft reference (`img/tacref`), drawn where WDP's window shows its F-16 */
     private val aircraftPic: String? = null,
-    private val onOk: (Int) -> Unit,
+    /** the conformal tanks the jet can carry (null for none): the window's CFT switch fits or takes them off */
+    private val cft: com.bmscompanion.app.data.wdp.PerformancePlan.Cft? = null,
+    /** whether [empty] and [intFuel] count the tanks as the window opens */
+    cftStart: Boolean = false,
+    /** what the save says of a seat's tanks (its starting fuel holds theirs), null where it does not say */
+    private val seatCft: (Int) -> Boolean? = { null },
+    /** OK: the seat shown, and whether the tanks are fitted */
+    private val onOk: (Int, Boolean) -> Unit,
 ) : WdpWiring, WdpControlContent {
+    /** the conformal tanks fitted (the CFT switch), with their fuel, weight and drag in the totals */
+    var cftOn by mutableStateOf(cft != null && cftStart)
+        private set
+    /** the jet's empty weight and internal fuel without the tanks */
+    private val bareEmpty = empty - if (cft != null && cftStart) cft.empty else 0
+    private val bareFuel = intFuel - if (cft != null && cftStart) cft.fuel else 0
+    private val startDrag = l.airframeDrag
+    /** the empty weight and internal fuel shown: the jet's, and the tanks' while they are fitted */
+    private val emptyNow: Int get() = bareEmpty + if (cftOn) cft?.empty ?: 0 else 0
+    private val fuelNow: Int get() = bareFuel + if (cftOn) cft?.fuel ?: 0 else 0
     /** bumped on every change: the window and its cards read it, so a change draws them again */
     private var rev by mutableIntStateOf(0)
     private val v = LinkedHashMap<String, String>()
@@ -179,7 +196,7 @@ internal class PerfLoadoutWindow(
     init { fill() }
 
     fun open() {
-        val d = WdpDialog("fclsLoadout", "Loadout — $type", this, hidden = REMOVED, onDismiss = { l.restore(before) })
+        val d = WdpDialog("fclsLoadout", "Loadout — $type", this, hidden = REMOVED, onDismiss = { l.restore(before); l.airframeDrag = startDrag })
         dialog = d
         WdpDialogs.show(d)
     }
@@ -215,8 +232,8 @@ internal class PerfLoadoutWindow(
     override fun onClick(name: String) = guard {
         when {
             // the picker over the window goes first, so WDP's question is asked over the window itself
-            name == "btnOK" -> { closePicker(); if (missionLoaded) askMission() else { close(); onOk(seat) } }
-            name == "btnCancel" -> { l.restore(before); close() }
+            name == "btnOK" -> { closePicker(); if (missionLoaded) askMission() else { close(); onOk(seat, cftOn) } }
+            name == "btnCancel" -> { l.restore(before); l.airframeDrag = startDrag; close() }
             name == "btnClear" -> {
                 l.clear()
                 say(if (l.aircraftCount > 1) "Every aircraft of the flight is empty now." else "The jet is empty now.", DONE)
@@ -225,6 +242,8 @@ internal class PerfLoadoutWindow(
                 val i = SEATS.indexOf(name)
                 if (i < l.aircraftCount && i != seat) {
                     seat = i
+                    // the seat's own tanks where the save says (a flight may mix jets with and without them)
+                    if (cft != null) seatCft(i)?.let { fitCft(it) }
                     say("${SEAT_NAMES[i]}'s stores. What you change here is for this aircraft only; \"Copy to flight\" gives them to all.", HINT)
                 }
             }
@@ -241,7 +260,7 @@ internal class PerfLoadoutWindow(
      */
     private fun askMission() {
         WdpDialogs.message("Question", MISSION_QUESTION, listOf("Yes", "No", "Cancel")) { answer ->
-            if (answer == "Yes") { close(); onOk(seat) }
+            if (answer == "Yes") { close(); onOk(seat, cftOn) }
         }
     }
 
@@ -261,11 +280,12 @@ internal class PerfLoadoutWindow(
         v["dgvLoadOut.columns"] = ""
         // the weights, WDP's FillLabels
         val tot = l.totals(seat)
-        val fuel = intFuel + tot.extFuel
-        val gross = empty + tot.loadWeight + fuel
-        v["lblEmptyW"] = empty.toString()
+        val fuel = fuelNow + tot.extFuel
+        val gross = emptyNow + tot.loadWeight + fuel
+        v["lblEmptyW"] = emptyNow.toString()
         v["lblMaxW"] = maxWeight.toString()
-        v["lblFuelIntW"] = intFuel.toString()
+        v["lblFuelIntW"] = fuelNow.toString()
+        v["cft"] = if (cft == null) "" else cftOn.toString()
         v["lblFuelExtW"] = tot.extFuel.toString()
         v["lblFuelW"] = fuel.toString()
         v["lblLoadW"] = tot.loadWeight.toString()
@@ -421,6 +441,26 @@ internal class PerfLoadoutWindow(
 
     fun pickFilter(f: Filter) = guard { filter = f }
 
+    /** The tanks fitted or not: their drag on the jet, their weight and fuel in the totals. */
+    private fun fitCft(on: Boolean) {
+        val c = cft ?: return
+        cftOn = on
+        l.airframeDrag = startDrag - (if (cftStartFitted) c.drag else 0) + if (on) c.drag else 0
+    }
+
+    private val cftStartFitted = cft != null && cftStart
+
+    /** The CFT switch: the conformal tanks fitted or taken off (1.4.0). */
+    fun toggleCft() = guard {
+        val c = cft ?: return@guard
+        fitCft(!cftOn)
+        say(
+            if (cftOn) "Conformal tanks fitted: ${num(c.fuel)} lb more fuel, ${num(c.empty)} lb more weight, drag +${c.drag}."
+            else "Conformal tanks off: no fuel, weight or drag of theirs.",
+            DONE,
+        )
+    }
+
     fun toggleBoth() = guard {
         both = !both
         say(if (both) "Mirror: what you hang or take off goes on the hardpoint across the jet too." else "Mirror off: each station on its own.", HINT)
@@ -545,9 +585,12 @@ internal class PerfLoadoutWindow(
             Box(Modifier.wrapContentSize(Alignment.TopStart, unbounded = true)) {
                 Column(Modifier.requiredSize(u.dp(228f), u.dp(108f)), verticalArrangement = Arrangement.spacedBy(u.dp(2f))) {
                     for ((label, cats) in kinds) {
-                        val text = t.values.groupBy { it.key }.mapNotNull { (key, loads) ->
+                        val stores = t.values.groupBy { it.key }.mapNotNull { (key, loads) ->
                             l.weapons[key]?.takeIf { PerformanceLoadout.category(it) in cats }?.let { "${loads.sumOf { it.count }} ${it.name}" }
-                        }.joinToString(", ").ifEmpty { "—" }
+                        }
+                        // the conformal tanks, fitted, are fuel the jet carries too
+                        val text = (stores + listOfNotNull(cft?.takeIf { label == "Fuel" && cftOn }?.let { "conformal tanks (${num(it.fuel)} lb)" }))
+                            .joinToString(", ").ifEmpty { "—" }
                         Row(Modifier.fillMaxWidth().height(u.dp(20f)), verticalAlignment = Alignment.CenterVertically) {
                             Box(
                                 Modifier.width(u.dp(34f)).height(u.dp(15f)).clip(RoundedCornerShape(u.dp(2f))).background(kindColor(cats[0])),
@@ -645,6 +688,11 @@ internal class PerfLoadoutWindow(
             @Composable
             fun toggles() {
                 Chip((if (both) "✓ " else "") + "Mirror", both, u, d, "Loadout/Both") { toggleBoth() }
+                // the conformal tanks, on a jet that can carry them
+                if (cft != null) {
+                    Spacer(Modifier.width(u.dp(4f)))
+                    Chip((if (cftOn) "✓ " else "") + "CFT", cftOn, u, d, "Loadout/Cft") { toggleCft() }
+                }
                 if (l.aircraftCount > 1) {
                     Spacer(Modifier.width(u.dp(4f)))
                     Chip("Copy to flight", false, u, d, "Loadout/Copy") { copyToFlight() }
@@ -755,8 +803,8 @@ internal class PerfLoadoutWindow(
     private fun Totals(u: Units, d: Dims, buttons: Boolean, modifier: Modifier, big: Boolean = false) {
         @Suppress("UNUSED_VARIABLE") val rv = rev   // drawn again on every change: what it shows is not state itself
         val tot = l.totals(seat)
-        val fuel = intFuel + tot.extFuel
-        val gross = empty + tot.loadWeight + fuel
+        val fuel = fuelNow + tot.extFuel
+        val gross = emptyNow + tot.loadWeight + fuel
         val font = if (big) 18f else d.font
         Row(
             modifier.clip(RoundedCornerShape(u.dp(4f))).background(FACTS_BG).padding(horizontal = u.dp(6f)),

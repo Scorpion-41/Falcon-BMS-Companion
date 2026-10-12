@@ -158,4 +158,13 @@ object KbKind {
      * sent as [KbHalf.picture] and drawn by the PC from the file
      */
     const val PICTURE = "picture"
+    /** the DataCard's Airport Schedule (`fclsAptSchedule`): the departures from the flight's field (1.4.0) */
+    const val SCHEDULE = "schedule"
+    /** the route map in dark inks over the dark map style, for a kneeboard in the sun's glare (1.4.0) */
+    const val ROUTE_MAP_DARK = "routemap-dark"
+    /**
+     * the mission's target pictures (the Briefing's Target pictures card): up to four targets, each in its two views,
+     * chosen per half in the Print window (1.4.0)
+     */
+    const val TARGET_PICTURES = "targetpics"
 }

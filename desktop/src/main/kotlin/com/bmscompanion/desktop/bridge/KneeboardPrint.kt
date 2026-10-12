@@ -392,6 +392,8 @@ object KneeboardPrint {
         KbKind.LEAVE, KbKind.BLANK, KbKind.TEST, KbKind.DATACARD_LEFT, KbKind.DATACARD_RIGHT, KbKind.COORDINATION_LEFT,
         KbKind.COORDINATION_RIGHT, KbKind.BRIEFING, KbKind.WEATHER, KbKind.TARGETS_LEFT, KbKind.TARGETS_RIGHT,
         KbKind.ROUTE_MAP, KbKind.ATTACK, KbKind.DEPARTURE, KbKind.ARRIVAL, KbKind.ALTERNATE, KbKind.PICTURE,
+        // 1.4.0
+        KbKind.SCHEDULE, KbKind.ROUTE_MAP_DARK, KbKind.TARGET_PICTURES,
     )
 
     private val TAG_RE = Regex("""^$TAG(\S*)(?: L([a-z])([0-9a-z-]))?(?: R([a-z])([0-9a-z-]))?""")

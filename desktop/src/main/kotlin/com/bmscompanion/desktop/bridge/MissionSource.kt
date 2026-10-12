@@ -499,7 +499,9 @@ object MissionSource {
             val theaterDir = set.campaignDir(t)?.parentFile ?: saveFile.absoluteFile.parentFile?.parentFile ?: saveFile
             PlannedRoutes.read(PlannedRoutes.Source(saveFile, theaterDir, t), install)
         }
-        val read = if (own.isEmpty() || routes.isEmpty()) emptyList() else safe(emptyList()) { Bridge.tracksFrom(routes, own, assigned) }
+        val all = if (own.isEmpty() || routes.isEmpty()) emptyList() else safe(emptyList()) { Bridge.tracksFrom(routes, own, assigned) }
+        // only the flight's own side's tankers and AWACS (1.4.0)
+        val read = safe(all) { SupportSide.filter(all, saveFile, set, t, own, flight.row.callsign) }
         if (read.isNotEmpty()) return read
         return flight.support.filter { (it.role == "Tanker" || it.role == "AWACS") && it.track.isNotEmpty() }.map { s ->
             SupportTrack(role = s.role, callsign = s.callsign.takeIf { it.isNotBlank() }, yours = true, points = s.track)

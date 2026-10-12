@@ -136,6 +136,8 @@ object KneeboardPrintSession {
         val madeIn: String? = null,
         /** the Mission set's layout ([LAYOUT]) an untouched set was laid in; absent (0) from a build before 1.3.9 */
         val layout: Int = 0,
+        /** the Target pictures halves' own choices ([KneeboardTargets.choices], 1.4.0); absent from an earlier build */
+        val targets: Map<String, KbTargetChoice> = emptyMap(),
     )
 
     /** The plan as the device kept it; nothing (a fresh start) when there is none or it cannot be read. */
@@ -148,6 +150,7 @@ object KneeboardPrintSession {
         laidFor = s.laidFor
         madeIn = s.madeIn
         layout = s.layout
+        KneeboardTargets.choices.clear(); KneeboardTargets.choices.putAll(s.targets.filter { (k, v) -> halfKey(k) && v.ids.isNotEmpty() })
     }
 
     private fun halfKey(k: String) = k.length in 2..3 && k.last() in "LR" && k.dropLast(1).toIntOrNull() in 1..16
@@ -155,7 +158,7 @@ object KneeboardPrintSession {
     /** Keeps the plan on the device, for the next launch. Never throws. */
     private fun save() {
         runCatching {
-            Repo.putString(SAVED_KEY, Repo.json.encodeToString(Saved.serializer(), Saved(plan.toMap(), pictures.toMap(), planned, laidFor, madeIn, layout)))
+            Repo.putString(SAVED_KEY, Repo.json.encodeToString(Saved.serializer(), Saved(plan.toMap(), pictures.toMap(), planned, laidFor, madeIn, layout, KneeboardTargets.choices.toMap())))
         }
     }
 
@@ -163,12 +166,14 @@ object KneeboardPrintSession {
     fun forget() {
         plan.clear(); pictures.clear()
         planned = false; laidFor = null; madeIn = null; relaid = null; browse = null; layout = 0
+        KneeboardTargets.choices.clear(); KneeboardTargets.picking = null
         runCatching { Repo.putString(SAVED_KEY, null) }
     }
 
     /** The plan as the device kept it, read again (what a launch finds): for the checks. */
     fun reloadSaved() {
         plan.clear(); pictures.clear(); planned = false; laidFor = null; madeIn = null; relaid = null; layout = 0
+        KneeboardTargets.choices.clear()
         restore()
     }
 
@@ -226,6 +231,9 @@ object KneeboardPrintSession {
         if (kind == KbKind.LEAVE) plan.remove("$n$side") else plan["$n$side"] = kind
         touched()
     }
+
+    /** A Target pictures half's choice was changed by hand ([KneeboardTargets.choose]): kept like any change of the plan. */
+    internal fun keep() = touched()
 
     /** The plan was changed by hand: it is no longer a Mission set to lay again for another mode. */
     private fun touched() {
@@ -426,6 +434,18 @@ object KneeboardPrintSession {
                         sent[i] = KbHalf(kind, "Picture: ${KneeboardPictures.nameOf(path)}", picture = path)
                         continue
                     }
+                    if (kind == KbKind.TARGET_PICTURES) {
+                        // every picture of the half drawn by the PC before the page is captured: a half whose list or
+                        // pictures cannot be had is left as it is, never printed with blanks
+                        progress = "Drawing the target pictures for page $n, ${KneeboardPages.knee(side)} ($done of $halves)…"
+                        val why = KneeboardTargets.prepare(n, side)
+                        if (why != null) {
+                            out += KbFileResult("$file, ${KneeboardPages.knee(side)}", KbFileResult.REFUSED, why)
+                            results = out.toList()
+                            skipped++
+                            continue
+                        }
+                    }
                     progress = "Drawing page $n, ${KneeboardPages.knee(side)} ($done of $halves)…"
                     KneeboardPages.preload(kind)
                     printing = n to side
@@ -437,6 +457,18 @@ object KneeboardPrintSession {
                     if (!KneeboardPages.awaitDrawn(layer, kind, n, side)) {
                         failed = "This device did not draw page $n (${KneeboardPages.knee(side)}) in time, so nothing was sent for it: press Print again."
                         break
+                    }
+                    // a Target pictures half drew every picture it was given ([KneeboardTargets.prepare] fetched them)
+                    if (kind == KbKind.TARGET_PICTURES) {
+                        val want = KneeboardTargets.itemsFor(n, side).size * 2
+                        val said = KneeboardTargets.drawn["$n$side"].orEmpty()
+                        if (want == 0 || !said.contains(" $want of $want pictures")) {
+                            out += KbFileResult("$file, ${KneeboardPages.knee(side)}", KbFileResult.REFUSED,
+                                "Page $n, ${KneeboardPages.knee(side)}, was left as it is: its target pictures were not all on the page when it was drawn.")
+                            results = out.toList()
+                            skipped++
+                            continue
+                        }
                     }
                     val png = KneeboardPages.capturePng(layer)
                     if (png == null) { failed = "This device could not draw page $n (${KneeboardPages.knee(side)}): ${KneeboardPages.lastError ?: "no picture"}."; break }
@@ -538,6 +570,13 @@ fun ColumnScope.KneeboardPrintWindow(onClose: () -> Unit) {
         PictureChooser(b, Modifier.weight(1f).fillMaxWidth(), scope)
         return
     }
+    KneeboardTargets.picking?.let { p ->
+        TargetPicker(p, Modifier.weight(1f).fillMaxWidth())
+        return
+    }
+    // the mission's target list, read once a Target pictures half is planned (the cells name what goes on each)
+    val wantsTargets = s.plan.values.any { it == KbKind.TARGET_PICTURES }
+    LaunchedEffect(wantsTargets, modeNow, info?.mission?.populated?.at, s.stamp) { if (wantsTargets) KneeboardTargets.load(force = true) }
     // a half's Picture… runs in the window's scope: the table (and its cells' scopes) leave as the chooser opens
     val browse: (Int, Char) -> Unit = { n, side -> scope.launch { s.pictureFor(n, side) } }
     BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
@@ -736,6 +775,7 @@ private fun HalfCell(slot: KbSlot, side: Char, modifier: Modifier, browse: (Int,
                 Column(Modifier.weight(1f)) {
                     Text(
                         if (kind == KbKind.PICTURE) KneeboardPictures.nameOf(s.picture(slot.n, side)).ifEmpty { "Picture" }
+                        else if (kind == KbKind.TARGET_PICTURES) targetsCell(slot.n, side)
                         else KneeboardPages.of(kind)?.short ?: kind,
                         color = if (leave) Hud.TextDim else Hud.Amber, fontSize = fingerSp(11.5f), lineHeight = 14.sp,
                         fontWeight = if (leave) FontWeight.Normal else FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -754,8 +794,11 @@ private fun HalfCell(slot: KbSlot, side: Char, modifier: Modifier, browse: (Int,
                             text = { Text(k.label, fontSize = 13.sp, color = if (k.id == kind) Hud.Amber else Hud.Text) },
                             onClick = {
                                 open = false
-                                // Picture opens Browse picture… for this half: the picture goes on it with Insert
-                                if (k.id == KbKind.PICTURE) browse(slot.n, side) else s.set(slot.n, side, k.id)
+                                // Picture opens Browse picture… for this half: the picture goes on it with Insert;
+                                // Target pictures puts the mission's next targets on it and opens the picker
+                                if (k.id == KbKind.PICTURE) browse(slot.n, side)
+                                else if (k.id == KbKind.TARGET_PICTURES) { s.set(slot.n, side, k.id); KneeboardTargets.pick(slot.n, side) }
+                                else s.set(slot.n, side, k.id)
                             },
                             modifier = Modifier.plannerProbe("Print/Kind/${k.id}"),
                         )
@@ -1020,6 +1063,13 @@ private fun PictureChooser(b: KneeboardPrintSession.PictureBrowse, modifier: Mod
     }
 }
 
+/** A Target pictures half in a cell: "Targets: T-72, SA-5 (S-200) +2". */
+private fun targetsCell(n: Int, side: Char): String {
+    val items = KneeboardTargets.itemsFor(n, side)
+    if (items.isEmpty()) return "Target pics"
+    return "Targets: " + items.take(2).joinToString(", ") { it.item.name } + if (items.size > 2) " +${items.size - 2}" else ""
+}
+
 /** What the plan puts on page [n]'s [side] half, in a few words ("DataCard L", "as it is", "photo.jpg"). */
 private fun planned(n: Int, side: Char): String {
     val s = KneeboardPrintSession
@@ -1032,7 +1082,7 @@ private fun planned(n: Int, side: Char): String {
 }
 
 @Composable
-private fun Btn(text: String, enabled: Boolean = true, primary: Boolean = false, probe: String, onClick: () -> Unit) {
+internal fun Btn(text: String, enabled: Boolean = true, primary: Boolean = false, probe: String, onClick: () -> Unit) {
     Box(
         Modifier.heightIn(min = toolHeight).clip(RoundedCornerShape(6.dp))
             .background(if (primary && enabled) Hud.Amber else Hud.Surface3)

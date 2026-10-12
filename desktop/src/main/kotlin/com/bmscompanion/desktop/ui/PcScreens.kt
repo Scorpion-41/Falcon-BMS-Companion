@@ -65,7 +65,7 @@ fun ServerScreen(onOpenApp: () -> Unit, onOpenAbout: () -> Unit, onUseAsClient: 
                     Image(rememberVectorPainter(AppIcon), null, Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)))
                     Spacer(Modifier.width(12.dp))
                     Column {
-                        Text("BMS COMPANION · SERVER MODE", style = LocalExtra.current.overline, color = Hud.Amber)
+                        Text("BMS COMPANION ${com.bmscompanion.app.AppVersion.NAME} · SERVER MODE", style = LocalExtra.current.overline, color = Hud.Amber)
                         Text("Serving your devices", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Hud.Text)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(Modifier.size(8.dp).clip(CircleShape).background(if (running) Hud.Green else Hud.Amber))

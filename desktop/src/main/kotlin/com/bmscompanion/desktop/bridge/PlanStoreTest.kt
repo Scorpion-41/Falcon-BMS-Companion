@@ -388,9 +388,15 @@ internal object PlanStoreTest {
         val oa = AttackGeometry.lay(s4p.x, s4p.y, 37.3, 34161.0)
         val cues = w?.attack?.cues.orEmpty()
         fun at(label: String, p: Pair<Double, Double>) = cues.any { it.label == label && hypot(it.north - p.first, it.east - p.second) < 0.01 }
-        ok(w?.attack?.page == "NAV OFFSETS" && at("VIP", s3.x to s3.y) && at("TGT", tgt) && at("OA1", oa) && cues.any { it.label == "PUP" } && w.notInJet.isEmpty(),
-            "WDP's [NAV OFFSETS] laid out from BMS's route: " + cues.joinToString { "${it.label} %.0f,%.0f".format(it.north, it.east) } + "; not in jet ${w?.notInJet}")
-        ok(w?.dtc?.lines?.count { it.line == 1 } == 3 && attack()?.cues.isNullOrEmpty(), "the line came along; the VR boards' map draws no sent plan's attack (1.3.8)")
+        // since 1.3.8 the one attack drawing labels the VIP with its steerpoint and draws only the OA pair of the mode's
+        // steerpoint (AttackDrawing.fromCartridge), so the OA1 on STPT 4 is not drawn
+        ok(w?.attack?.page == "NAV OFFSETS" && at("VIP ${s3.n}", s3.x to s3.y) && at("TGT", tgt) && !at("OA1", oa) && cues.any { it.label == "PUP" } && w.notInJet.isEmpty(),
+            "WDP's [NAV OFFSETS] laid out from BMS's route (no OA of another steerpoint): " + cues.joinToString { "${it.label} %.0f,%.0f".format(it.north, it.east) } + "; not in jet ${w?.notInJet}")
+        val lineCount = w?.dtc?.lines?.count { it.line == 1 }
+        // the VR boards' map draws the cartridge's own attack in EZBoards mode (Bridge.boardAttack), never a sent plan's
+        val boardCues = attack()?.cues.orEmpty()
+        ok(lineCount == 3 && boardCues.map { it.label }.sorted() == cues.map { it.label }.sorted(),
+            "the line came along ($lineCount points of line 1); the VR boards' map draws the cartridge's attack: ${boardCues.joinToString { it.label }}")
         writeFile(x.cart, x.cartBytes)
         x.cart.setLastModified(x.cartTime)
 

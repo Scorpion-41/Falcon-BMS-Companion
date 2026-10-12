@@ -52,6 +52,21 @@ that fit.) A Mission set you have not changed is laid again when the mode change
 in its older two-page layout, and the window says so; a plan you changed by hand is kept. **The plan is kept on the device between launches**, as WDP keeps its kneeboard choices: a picture page
 you set once is still planned the next evening.
 
+**The other pages a half can be** (each half's own menu): the Briefing page and its Weather list, the Target list
+(left: the steerpoints and target points; right: the threats, lines and weapon target points), the **Route map** and
+the **Route map, dark** (the same map on the dark map style, light inks on a dark page, for a kneeboard in the sun's
+glare), the Attack profile, the **Airport Schedule** (the DataCard's Apt Schedule: the flights leaving your field,
+earliest first, your own in bold; a save's whole schedule, or with only a printed briefing the save that holds its
+flight once found, else the briefing's own package), the departure, arrival and alternate ground charts, and
+**Target pictures**: up to four of the mission's targets on a half page, each with its name, its part and how many,
+in the two views the Briefing's Target pictures card shows (drawn by the PC from BMS's 3-D models, in the targeting
+pod's look). The targets are the card's list, what was removed there left out and what was added there included.
+Choosing the kind opens a list of the targets' vehicles, radars and buildings to tick, up to four; a half you have not
+chosen for takes the next four in the list's order (the flight's targets, then each threat's launcher and main
+radar), so a second Target pictures half carries on where the first stops, and follows the next mission's list. Your
+choice is kept with the plan for the mission it was made for. A half is printed only when the PC has drawn every one
+of its pictures; otherwise it is left as it is and the window says why.
+
 **Pictures of your own** (WDP's Browse Picture): **Browse picture…** opens the Open picture window on the BMS PC
 (Windows' own on the PC, the PC's folders in a window on a phone or in a browser), then shows the picture as it will
 fill a half page, with a page number, **← Insert left**, **Insert right →** and Cancel. A half's own menu has

@@ -323,6 +323,15 @@ data class Live(
     val uhfPreset: Int = 0,
     val uhfFreq: Int = 0,
     val ded: List<String> = emptyList(),
+    /**
+     * Which DED cells BMS draws highlighted (inverse video: the selected radio, IFF fields, the scratchpad): five
+     * strings over the same cells as [ded], `#` for a highlighted cell, a space for a plain one. Empty when nothing is
+     * highlighted, and from a PC older than 1.4.0.
+     */
+    val dedInvert: List<String> = emptyList(),
+    /** The Pilot Fault List's five lines (empty when it shows nothing), and its highlighted cells as [dedInvert]. */
+    val pfl: List<String> = emptyList(),
+    val pflInvert: List<String> = emptyList(),
     val rwr: List<RwrContact> = emptyList(),
     /** The left MFD's 20 button legends, OSB 1 first (see [MfdKey]). Empty when BMS is not publishing them. */
     val mfdLeft: List<MfdKey> = emptyList(),

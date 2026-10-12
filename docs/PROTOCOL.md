@@ -133,6 +133,11 @@ as EZBoards mode with nothing suspended. See *Mission source*.
 `tacan` ("27X", "12Y A/A": the A/A or Y-band source when set, otherwise UFC), `tacanUfc` / `tacanAux` (the UFC/DED and AUX COMM panel channels), `beaconBrg`, `beaconNm`, `desiredCourse`, `navMode`, `ilsFreq`, `uhfPreset`, `uhfFreq` (kHz),
 `ded` (5 strings), `rwr[]`, `mfdLeft[]` / `mfdRight[]`, `navPoints[]`, `voice`, `pilots[]`.
 
+- `dedInvert[]` (1.4.0, additive): the DED's highlighted cells from FlightData's `Invert[5][26]` — five strings over
+  the same cells as `ded`, `#` where BMS draws the cell in inverse video (an invert byte neither 0 nor a space), a
+  space elsewhere, trailing spaces dropped; empty when nothing is highlighted. `pfl[]` / `pflInvert[]` the same for the
+  Pilot Fault List (`PFLLines`, `PFLInvert`); `pfl` is empty while the list shows nothing.
+
 - `mfdLeft[]` / `mfdRight[]`: 20 entries each, `{a, b, inverted}` — the two lines of one MFD option-select button
   legend and whether BMS has boxed it, OSB 1 first and running clockwise from the top left, five to a side. Empty
   when BMS is not publishing them (not in 3D, or an older BMS).
@@ -295,11 +300,28 @@ Added in 1.3.8, all additive:
   copy of the file as it is now; the earlier copy moves first to `BMS Companion Backup/Older copies/<date time>/`, so
   nothing in the backup is lost. A map this program wrote is left alone (`restore` is the answer), and so is one that
   matches its copy; named with `model`, it says so in `error`.
-- **What the app itself calls, from 1.3.8.** The Weather page is the generator only, so it calls `GET /api/weather`
+- **What the app itself calls, from 1.3.8.** The Weather tab's generator (its Make weather page from 1.4.0) calls `GET /api/weather`
   without `map=1`, `backup`, `generate`, `series`, `remove`, `restoreseries` and `params`; `restore` with each `model`
   that reports `edited`, to undo what the page's first version wrote; and `refreshbackup` (no `model`) while a model
   `differs` without being `edited`. `set`, `setmap` and `map=1` are no longer called by the app; they stay, unchanged,
   for any other client.
+- **The weather the mission flies** (1.4.0, read only; the Weather tab's Mission weather page,
+  `desktop/.../bridge/MissionWeatherRoute.kt`). `GET /api/weather/mission` → `MissionWeather`
+  `{ok, why?, mode, theater, appTheater?, save, flight?, twxFile?, twxModified, model, condition, clock?, mapUpdates,
+  twx?, frames[], start, places[], notes[]}`: the save BMS flies (EZBoards mode the newest save of the theater, the
+  printed flight in it when it holds it; WDP mode the populated save and flight), its `.twx` read as
+  `/api/files/weather?save=&clock=` reads it (`twx` is `PcTwx`, which adds in 1.4.0 `probabilities` (0-1, sunny first),
+  `changes[]` `{ms, type}` (the Deterministic schedule, types 1-4), `intervalMin`, `intervalMax`). `model` 1
+  Probabilistic, 2 Deterministic (no frames: one type over the whole theater), 3 Map Model: `frames[]` `{id, file,
+  minute?, kind}` — the save's own `<save>.fmap` (`kind` "save"), or with MAPS AUTO UPDATE the update map in force at the
+  save's clock and every later one up to six hours past the landing, at most 36 (`kind` "update", `minute` from the
+  `DHHMM` name). `places[]` `{label, name?, x, y, ms}`: the flight's Take Off, Target Area and Landing (theater feet, x
+  north; campaign ms). `ok` false: `why` says why in a sentence (no save, no `.twx`, another save's `.twx`).
+  `GET /api/weather/mission/map?frame=<id>` → `MissionWxMap` `{id, file, version, cols, rows, moveHeading, moveKt,
+  stratusFt[], contrailFt[], type[], pressureMb[], tempC[], cloudBaseFt[], cover[], towering[], shower[], visKm[],
+  windKt[], windDeg[]}`: one value per cell row-major from the north-west, the wind ten levels per cell
+  (`cell * 10 + level`, knots and degrees from; levels 0, 3,000 … 50,000 ft), `cover` BMS's code, `shower` only from a
+  version 8 map; a frame that is not one of the last answer's is 404.
 
 - `rwr[]`: `{sym, brg (true°), lethality (0..1), launch, lock, selected, new}`. `sym` is the BMS `RWRsymbol` id (see `Tools/RwrEmulator/Source/ScopeRenderer.cs`). The scope radius follows `clamp(lethality, 0.25, 0.8)`, like the BMS RWR emulator.
 - `navPoints[]`: `{i, type, x, y, altFt, name?, rangeNm?}`, where `type` ∈ `WP GM PO MK DL CB L1-L4 PT` (StringData `NavPoint`). PPTs (`PT`) carry `name` and `rangeNm`. From 1.3.8 (additive) the line points (`L1`-`L4`) and the bullseye (`CB`) are sent rather than dropped, and a steerpoint with offset aimpoints carries them as `oa1Brg`, `oa1RngFt`, `oa1ElevFt`, `oa2Brg`, `oa2RngFt`, `oa2ElevFt` (true degrees, feet; absent when it has none).
@@ -320,7 +342,9 @@ Added in 1.3.8, all additive:
 - `board`: `{time, format, tables[{title, header[], rows[{kind, cells[]}]}]}` parsed from EZBoards' `xbrief.exe --format pcstw` HTML. `kind` is the xbrief row class (`ownflight`, `ownroster`, `odd`, `even`).
 - `tracks`: `SupportTrack[]`, what the campaign planned for the tankers and the AWACS. `yours`: the tanker or AWACS the
   sim names for your flight in 3D; before 3D (1.3.8) the package's own, from the save that provably holds the printed
-  flight (the one `ground` is read from), as WDP mode's snapshot has them.
+  flight (the one `ground` is read from), as WDP mode's snapshot has them. Since 1.4.0 only those of the flight's own
+  side: its team, or one the team controlling it is allied or friendly toward in the save's team table (the enemy's
+  tankers and AWACS are left out; `SupportSide`).
 
 Added in 1.3.8, all additive (an older client ignores them; an older PC's answer decodes with them absent):
 - `route`: `MissionRoute`, Falcon BMS's own mission file beside the save being flown — only when it is provably the
@@ -513,8 +537,9 @@ The PC builds the snapshot from:
   home field, the waypoint BMS marks as the target — at its target's position — else the first strike steerpoint, and
   the landing field), rows `Situation` ("Fair"), `Wind` ("80deg@ 15kts.", or "VRB@ 15kts." when BMS picks the
   direction itself and the file holds none), `Visibility` ("115km"), `Temp` ("23deg C."), `Cloud Base` ("5,000 ft MSL
-  base", "None" for a map cell without cloud) and `QNH` ("1013 hPa · 29.91 inHg", which BMS's printed briefing never
-  has); no contrail row. `WeatherTable.source` (additive, null on a printed briefing) says where it is from:
+  base", "None" for a map cell without cloud; for a Sunny type the type's high stratus, "35,000 ft MSL base", as BMS
+  prints it — corrected in 1.4.0, which printed the unused cumulus entry), `Con Layer` ("34,000 ft MSL base", the
+  type's contrail layer; added in 1.4.0) and `QNH` ("1013 hPa · 29.91 inHg", which BMS's printed briefing never has). `WeatherTable.source` (additive, null on a printed briefing) says where it is from:
   "From Auto Save.twx, as saved at D1 01:02. … BMS may change the weather before take-off." The same table is the
   plan's `flight.briefing.weather` (`PlanMerge` takes that briefing first). A file that is missing, another save's or
   unreadable brings no weather and a `note` beginning "No weather came with it: " with the reason; the Dashboard's
@@ -605,7 +630,7 @@ the add-on theaters have their own. These routes list and read those files and n
   save's start file, as the Weapon Delivery Planner's Target Selection window lists them for the DataCard's DMPI boxes
   (`fclsTargetSelection`). `types` are the objective types present, in BMS's order (Strings.txt 501-531); each
   objective has its `id` ("num/creator", what `/features` takes), `campId`, `name`, `type`, position (`x` north, `y`
-  east), `elevFt` (BMS's height map at the cell WDP's `ReadNewTerrainElvLoc` reads; absent without one) and `control`
+  east), `elevFt` (the ground there as `/api/campaign/ground` answers it, since 1.4.0; absent without one) and `control`
   (the team holding it in the start file, "PRC(5)").
 - `GET /api/campaign/features?theater=<name>&file=<name>&objective=<num/creator>` → `CampFeatures` (added in 1.3.8):
   one objective's buildings (`ObjectiveRelatedData/OCD_nnnnn/FED_nnnnn.XML`), each with `n` (its index, the waypoint's
@@ -613,9 +638,14 @@ the add-on theaters have their own. These routes list and read those files and n
   north and `OffsetX` east, as WDP's `FillPriTarget` places it — `elevFt` and `value` (BMS's worth; WDP lists only those
   above 0 unless Show all is ticked). 400 when the start file has no such objective.
 - `GET /api/campaign/ground?theater=<name>&at=<north>,<east>;<north>,<east>…` → `CampGround` (added in 1.3.8): the
-  ground under 1 to 200 points (theater feet, north first) from BMS's own height map, the cell WDP's
-  `ReadNewTerrainElvLoc` reads — what the attack pages stand their ELEVs on. `heights` is feet above sea level, one per
-  point in order, `null` where the map says nothing; `error` a sentence when there is no height map. `theater` may be
+  ground under 1 to 200 points (theater feet, north first) from BMS's own height map — what the attack pages stand
+  their ELEVs on — read where BMS lays it (1.4.0: metres of 3.28084 ft, sample k's centre k samples from the grid's
+  south-west corner, bilinear between the four samples round the point; up to 1.3.9 the cell WDP's
+  `ReadNewTerrainElvLoc` reads, which takes the map for the grid's square), with BMS's terrain levelling under the
+  airbases applied (1.4.0: `TerrainRelatedData/TLD_*.TPB`, the level inside a levelled polygon, a mix in the rings
+  round it; a definition without `newterraindir` reads its terrain folder's `NewTerrain`). `heights` is feet above
+  sea level, one per point in order, `null` where the map says nothing; `error` a sentence when there is no height
+  map (a point on a levelled airbase still answers its level). `theater` may be
   left out for the theater BMS is set to, and the app's theater id works as well as the definition's name. Read only,
   two bytes a point; 400 for a malformed point or an unknown theater.
 
@@ -942,7 +972,7 @@ its own disk. Models: `PcFileModels.kt`.
   `@campaign:<the save's theater>\<save>.twx`). An `.fmap` (version 5 or 8) comes back as its cells, row-major from the
   theater's north-west corner, the surface wind in knots (the file keeps km/h), `cover` as BMS's code (0/1/5/9/13). A
   `.twx` comes back as `twx {version, model, condition, mapUpdates, windDeg, types[4] {windKt[3], fogEndFt, stratusFt,
-  cumulusFt, tempC[3], qnhMb[3]}, windHeld, clock?}` (night, dawn/dusk, day; BMS 4.38's version 8 has one figure for
+  cumulusFt, tempC[3], qnhMb[3], contrailFt}, windHeld, clock?}` (`contrailFt`, the contrail layer, added in 1.4.0) (night, dawn/dusk, day; BMS 4.38's version 8 has one figure for
   all three; `clock` is the campaign time of BMS's last weather check in it, a campaign's up to a few minutes before the save's
   clock), and — when its
   model is a map (3) — with the cells of the map BMS flies with it: the newest `WeatherMapsUpdates\dhhmm.fmap` at or
@@ -993,6 +1023,18 @@ bdc pth lns tgt opn hpn plf ews mfd rad sts wpn hrm txt jpg jpeg png`. Read only
 BMS's weather, config and data files, which the Weather and Config pages write under their own rules. Anything else —
 a program, a script — is refused with 400, the sentence listing the types.
 
+**The Files tab** (1.4.0, `FileViewRoutes.kt`, read only): a file of the PC opened on a device to be read. Same path
+guards as above; only `txt log ini cfg md csv json xml lst tdf b` (text), `html htm`, `jpg jpeg png bmp dds` and `pdf`
+— never a program or a script, also where a link leads (400 otherwise).
+- `GET /api/files/view?path=` → `PcFileView {path, name, size, modified, kind, text?, truncated, offset, pages, note?}`.
+  `kind` is `text`, `html`, `image` or `pdf`. A text or HTML page comes in `text`, decoded as UTF-8 when valid (a byte
+  order mark honoured), else Windows-1252, up to 2 MB: a longer file is `truncated` — a log (`.log`, BMS's `_xlog`)
+  gives its last 2 MB from a whole line (`offset` the byte it starts at), anything else its first — and `note` says
+  so. A PDF gives its page count in `pages` (files up to 96 MB). A picture's bytes come from `/api/files/picture`.
+- `GET /api/files/pdfpage?path=&page=&max=` → `PcPicture`: page `page` (0 = the first) drawn by PDFBox as a PNG whose
+  longer side is about `max` px (256-3000, 1600 when not given); a page the file does not have is 400.
+
+
 ## Other routes
 
 | Method | Path | Body |
@@ -1006,6 +1048,7 @@ a program, a script — is refused with 400, the sentence listing the types.
 | POST | `/api/kneeboard/open` | opens the HTML Briefing tool's own window on the BMS PC → `{message}`. **In WDP mode** (1.3.8) nothing is started: HTTP 409 `{error, message}`, both the sentence `MissionMode.HTML_BRIEF_SUSPENDED` (its export writes cockpit pages 1-3 over the Planner's Upd Kneeboard pages); `/api/kneeboard/page` still serves what it exported. `BridgeInfo.kneeboard.runSuspended` says which it is |
 | GET | `/api/mfd/keys` | what each of the forty OSBs is bound to in the pilot's key file → `{inFront, blocked, fromKeyFile, keys[{side, n, key}], rockers[{side, which, up, callback, key}]}`; `blocked` (1.3.8, additive): why no press can reach BMS (BMS elevated, the PC program not), else ""; `rockers` (1.3.8, additive): the sixteen rocker halves (`which` gain/sym/con/brt), `callback` the BMS callback (`SimCBEOSB_BRTDOWN_L`, `SimRadarGainUp`; empty for SYM/CON, which BMS has none for), `key` empty when it is not bound (`MfdRockerKey`) |
 | POST | `/api/acmi/clear` | moves the ACMI recordings (never `.vhs`) to the BMS PC's Recycle Bin → `{deleted, bytes}` |
+| GET | `/api/maptile?map=<id>&style=<style>&z=<0-12>&r=<row>&c=<col>` | one 512 px map tile (1.4.0) as `image/jpeg`, for the levels past the ones the apps bundle (z5 and deeper; topographic z4 and deeper): `map` a map id (`korea`, `balkans`, `hellas`, `israel`, `falklands`), `style` `relief`/`satellite`/`dark`/`chart`/`topo`, tile `r`,`c` of the 2^z × 2^z grid counted from the north-west. Drawn on the PC from Falcon BMS's own terrain (`MapTiles.kt`: the height map for every style but satellite, BMS's photoreal textures — `GlobalColorMap`, `4K`, `16K`, `Hires/Day` — for satellite), read only; kept in the PC's memory (64 MB, least recently used dropped) and sent with `Cache-Control: max-age=86400` (the only API answer a browser may cache). 404 `{error}` with the reason when the theater's terrain is not on this PC or a file cannot be read; the map then shows the deepest bundled level enlarged |
 | GET | `/api/radio?since=<seq>` | the radio calls from BMS's debug log after `since` (0 = all kept) → `RadioLog` (see *The radio*) |
 | POST | `/api/radio/cleanup?on=1\|0&keep=<n>&days=1\|0` | the old-debug-log clean-up's settings (`bridge-settings.json` `RadioLogCleanup`, `RadioLogKeep`, `RadioLogKeepDays`; nothing is deleted) → `RadioLogStatus` |
 | POST | `/api/radio/cleanup/now` | moves BMS's old debug logs to the Recycle Bin now (the same rule as the automatic run) → `RadioLogStatus`, its `cleanup.error` the reason when it could not; 409 in a developer run unless the logs folder is a copy |
@@ -1059,6 +1102,22 @@ picture's groups), keeps this session's last 2,000 calls in memory and files eac
   sessions (or older than `keep` days), to the Recycle Bin, at program start and when a new log starts, and on
   `/api/radio/cleanup/now`. Never the newest session's, never the log being read, never a file written in the last two
   minutes, never anything else (crash dumps, screenshots).
+
+### Target pictures (1.4.0)
+
+Pictures of the mission's targets drawn on the PC from Falcon BMS's own 3-D models (`TargetPictures.kt`, read only).
+Nothing is shipped: a picture is drawn the first time it is asked for and kept in the PC's memory (12 MB) and in
+`%LOCALAPPDATA%\BMS Companion\Target pictures` (50 MB at most, the least recently used deleted first). A key is a
+class-table number of the theater's `Falcon4_CT.xml` (`ct16` = the SA-6 launcher in Korea); `theater` is a theater's
+name as BMS names it (absent or empty: the mission's — WDP mode's populated one, else the one BMS's mission file is in,
+else BMS's current one).
+
+| Method | Path | Answer |
+|---|---|---|
+| GET | `/api/targets/mission` | `TargetSet {theater, mission, groups[{title, kind, note?, items[{key, name, role?, count?, category?}]}], error?}`: the flight's own targets (`kind` "target": each waypoint's target and each seat's designated one in the save that holds the flight — a unit's vehicles, an objective's buildings, the one building a waypoint names — **only those an enemy team holds** (hostile or at war in the stances of the flight's team or of the team controlling it; an objective's owner from the save's `.obd`), never a take-off or landing waypoint's; `TargetPictures.flightTargetsOf`), then the mission's threats (`MissionData.ground`'s air defences and the printed Threat Analysis rows, each system once as its battalion from `Falcon4_UCD.xml`: launcher, fire-control radar, other radars, other air defences, support, trucks last; `note` the briefing's place words), then the spotted ships ("ship"). `mission` is the mission it is of (`MissionData.missionKey`). Asking starts drawing the front-right and rear-left plain pictures in the background |
+| GET | `/api/targets/system?name=<names>` | `TargetGroup`: one system's battalion; `name` may hold several names separated by `\|` (the threat guide's TacRef name, its name, its aliases), tried in order: the exact vehicle name, then its system ("SA-6"), then any other telling word of it ("MIM-104 Patriot" → "Patriot"). `items` empty and `note` the reason when none is found |
+| GET | `/api/targets/catalog[?theater=]` | `TargetCatalog {theater, categories[{name, items[]}], error?}`: every land and sea vehicle and every building of the theater with a model, each name once, by category (SAM launchers, Radars, Air-defence support, Anti-aircraft guns, Tanks, APCs and IFVs, Artillery and rockets, Surface-to-surface missiles, Trucks, Infantry, Other vehicles, Ships, Buildings and structures) |
+| GET | `/api/targets/picture?key=ct<n>&view=fr\|rl&look=plain\|intel&w=<px>[&theater=]` | `image/jpeg`, `w` × `w·5/8` (`w` 160-1600, default 640): the model from the front right or the rear left, 30° from above, orthographic; `plain` a grey model on a sand ground with its shadow and a scale bar, `intel` a black-and-white targeting-pod picture (contrast, blur, noise, reticle, the name). 400 for a key that is not `ct<n>`, 404 for a class with no model in this install, 422 when the model cannot be read, 503 when Falcon BMS's folder is unknown — each with `{error}` |
 
 ## Browser version (same port)
 

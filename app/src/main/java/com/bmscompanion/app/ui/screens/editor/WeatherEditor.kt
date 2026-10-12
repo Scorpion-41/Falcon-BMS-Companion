@@ -71,6 +71,26 @@ import java.util.Locale
  */
 @Composable
 fun WeatherEditorPane(env: MissionEnv) {
+    // two pages: the weather the mission flies (first, MissionWeatherView.kt) and the generator ("Make weather")
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().background(Hud.Surface.copy(alpha = 0.7f)).padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            EditorChip("Mission weather", selected = WeatherTabPage.mission) { WeatherTabPage.show(true) }
+            EditorChip("Make weather", selected = !WeatherTabPage.mission) { WeatherTabPage.show(false) }
+        }
+        Rule(0.6f)
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            if (WeatherTabPage.mission) MissionWeatherPane(env) else WeatherMakePane(env)
+        }
+    }
+}
+
+/** The generator page ("Make weather"): the theater selector, the undo line and WeatherGen's generator. */
+@Composable
+private fun WeatherMakePane(env: MissionEnv) {
     val link by MissionLink.state.collectAsState()
     val online = link is LinkState.Online
 

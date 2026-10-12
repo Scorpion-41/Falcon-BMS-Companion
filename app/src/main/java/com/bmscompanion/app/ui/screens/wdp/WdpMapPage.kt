@@ -752,6 +752,9 @@ private class PageUi : MapUi()
 /** A button of a selection card: [run] answers what was done (null: a question is on screen, its answer comes later). */
 internal class MapAction(val label: String, val primary: Boolean = false, val run: () -> String?)
 
+/** The words in front of a support flight's card buttons that fill a DataCard row ("Put on DataCard as Tanker 1"). */
+internal const val DATACARD_LABEL = "Put on DataCard as "
+
 /** What a selection card says: a title, which of the two kinds it is, lines of facts, and the actions. */
 internal data class MapCard(val title: String, val inDtc: Boolean?, val tag: String, val lines: List<String>, val actions: List<MapAction>, val accent: Color)
 
@@ -1134,6 +1137,27 @@ internal class MapActions(
 
     // ---------------------------------------------------------------- support
 
+    /**
+     * **Put on DataCard** (1.4.0): a tanker into the card's Tanker 1 or Tanker 2 row, an AWACS or a JSTARS into its
+     * row, as the card's own list and Select fill one (callsign - type, TACAN, UHF, LOC, the window in Notes) —
+     * [DataCardWiring.putSupport]. [tacan] is the support flight's own channel ("123Y"), turned into the one the
+     * receiver dials as the card turns it; [at] its station.
+     */
+    private fun cardActions(callsign: String, role: String, aircraft: String?, tacan: String?, at: Pt?, from: Long? = null, to: Long? = null): List<MapAction> {
+        val card = WdpSession.dataCard
+        val tie = tacan?.let { t -> Regex("^(\\d+)([XY])").find(t.trim())?.let { m -> "${DtcFromMission.tieOn(m.groupValues[1].toInt())}${m.groupValues[2]}" } }
+        fun fallback() = card.supportTrack(callsign, aircraft ?: role, tie, at?.let { it.north to it.east }, from, to)
+        fun put(row: String) = MapAction(DATACARD_LABEL + row.replace("Tanker", "Tanker ").replace("JSTAR", "JSTARS")) {
+            card.putSupport(callsign, row, fallback())
+        }
+        return when (role) {
+            "Tanker" -> listOf(put("Tanker1"), put("Tanker2"))
+            "AWACS" -> listOf(put("AWACS"))
+            "JSTARS" -> listOf(put("JSTAR"))
+            else -> emptyList()
+        }
+    }
+
     private fun trackCard(callsign: String): MapCard? {
         val t = d.known.tracks.firstOrNull { it.support.callsign == callsign } ?: return null
         val s = t.support
@@ -1154,6 +1178,11 @@ internal class MapActions(
             if (st.inPpt == null) st.option?.let { o -> addPpt(o)?.let { a -> acts += MapAction("Station as " + a.label.removePrefix("Add as "), run = a.run) } }
         }
         tacanFor(callsign)?.let { c -> if (d.loaded) acts += MapAction("TACAN ${c.short.substringAfter(' ')}") { dtc.setTacan(c) } }
+        val side = x.stations.firstOrNull { it.support.callsign == callsign }
+        acts += cardActions(
+            callsign, s.role, side?.support?.aircraft, s.tacan ?: side?.support?.tacan,
+            d.known.stations.firstOrNull { it.support.callsign == callsign }?.at ?: side?.mid ?: t.legs.firstOrNull(), side?.from, side?.to,
+        )
         return MapCard("${s.callsign} track", t.inLine != null, if (t.inLine != null) "In your DTC as line ${t.inLine}" else "Not in your DTC", lines, acts, supportInk(s.role))
     }
 
@@ -1176,6 +1205,8 @@ internal class MapActions(
         addOpen(Place("${s.callsign} (${s.role}) station", st.at, null, DtcMissionFacts.STATIONS), OpenBankChooser.NAV)?.let { acts += it }
         tacanFor(callsign)?.let { c -> if (d.loaded) acts += MapAction("TACAN ${c.short.substringAfter(' ')}") { dtc.setTacan(c) } }
         acts += orbitActions(x.stations.firstOrNull { it.support.callsign == callsign })
+        val side = x.stations.firstOrNull { it.support.callsign == callsign }
+        acts += cardActions(callsign, s.role, side?.support?.aircraft, s.tacan ?: side?.support?.tacan, st.at, side?.from, side?.to)
         return MapCard("${s.callsign} station", st.inPpt != null, if (st.inPpt != null) "In your DTC as PPT ${st.inPpt}" else "Not in your DTC", lines, acts, supportInk(s.role))
     }
 
@@ -1198,6 +1229,7 @@ internal class MapActions(
         }
         addStpt(Place("${s.callsign} (${s.role}) station", st.mid, null, DtcMissionFacts.STATIONS))?.let { acts += it }
         addOpen(Place("${s.callsign} (${s.role}) station", st.mid, null, DtcMissionFacts.STATIONS), OpenBankChooser.NAV)?.let { acts += it }
+        acts += cardActions(callsign, s.role, s.aircraft, s.tacan, st.mid, st.from, st.to)
         return MapCard("${s.callsign} · ${s.role}", false, "Not in your DTC", lines, acts, supportInk(s.role))
     }
 
@@ -1753,7 +1785,7 @@ private fun MapArea(image: String?, sizeFt: Double, d: WdpMapData, actions: MapA
             ) { pr ->
                 MapCursor.proj = pr
                 if (!MapCursor.ready) MapCursor.ready = true
-                inMapInks(style == "chart") { drawPlanner(pr, d, MapLayersNow.now(d.x.theaterKey), WdpMapView.sel, tm, hsd = false) }
+                inMapInks(MapLook.isLight(style)) { drawPlanner(pr, d, MapLayersNow.now(d.x.theaterKey), WdpMapView.sel, tm, hsd = false) }
             }
         }
         Column(

@@ -46,7 +46,11 @@ class MapState {
     var initialized by mutableStateOf(false)
     /** (xFt, yFt, scale) to centre on at the next layout */
     var pendingFocus by mutableStateOf<Triple<Double, Double, Float>?>(null)
-    fun flyTo(xFt: Double, yFt: Double, scale: Float) { pendingFocus = Triple(xFt, yFt, scale) }
+    fun flyTo(xFt: Double, yFt: Double, scale: Float) { pendingSpanNm = null; pendingFocus = Triple(xFt, yFt, scale) }
+    /** nautical miles across the map's narrower side, for [flyToSpan]: made a scale at the next layout */
+    internal var pendingSpanNm: Double? = null
+    /** Centres on (xFt, yFt) with [nm] nautical miles across the map's narrower side. */
+    fun flyToSpan(xFt: Double, yFt: Double, nm: Double) { pendingSpanNm = nm; pendingFocus = Triple(xFt, yFt, 1f) }
     /** set by the map while it is shown: its own gliding zoom about its middle ([ZoomMath]) */
     internal var zoomHook: ((Float) -> Unit)? = null
     /** Zooms by [factor] about the middle of the map, gliding as its own + and − keys do (a page that draws its own keys). */
@@ -98,10 +102,15 @@ fun TheaterMap(
     // nothing asked to be drawn again. Counting them here is what asks.
     @Suppress("UNUSED_VARIABLE") val tilesReady = base.images.size
     val geo = if (landmarks) rememberGeo(imagePath, sizeFt) else null
+    // close in, every field drawn as its own ground chart (AirfieldDiagrams)
+    val diagrams = rememberAirfieldDiagrams(imagePath)
     val landmarkText = androidx.compose.ui.text.rememberTextMeasurer(cacheSize = 192)
     // the border and province lines as a picture kept on the GPU between frames (LandmarkLayer)
     val lineGraphics = androidx.compose.ui.graphics.rememberGraphicsLayer()
     val lineLayer = remember(lineGraphics) { LandmarkLayer(lineGraphics) }
+    // the airfield diagrams' fills and strokes, kept the same way (DiagramLayer)
+    val diagramGraphics = androidx.compose.ui.graphics.rememberGraphicsLayer()
+    val diagramLayer = remember(diagramGraphics) { DiagramLayer(diagramGraphics) }
     // bumped a moment after the scale last changed: the lines, drawn scaled while zooming, are then drawn sharp again
     var zoomRest by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     androidx.compose.runtime.LaunchedEffect(state) {
@@ -125,6 +134,8 @@ fun TheaterMap(
         // A board is all map: the square never shrinks below the page, or the widest zoom step leaves a band of bare
         // board down one side. (It used to zoom out to the whole theater, which is what put that band there.)
         val minScale = 1f
+        // a theater's own map zooms on past the bundled levels to the PC's deepest (MapDeep), whatever the page asked
+        @Suppress("NAME_SHADOWING") val maxScale = MapDeep.maxScale(imagePath, cover, maxScale)
         // Nothing but map on a board. The theater is drawn as a square, so panning towards its edge — which is where
         // a mission near the top of the map puts it — slid the square off the page and left a band of bare board
         // above it. The pan is held inside the square whenever the square is big enough to cover the page.
@@ -181,7 +192,8 @@ fun TheaterMap(
         }
         state.pendingFocus?.let { (fx, fy, fs) ->
             if (w > 0) {
-                val sc = fs.coerceIn(minScale, maxScale)
+                val sc = (state.pendingSpanNm?.let { nm -> (sizeFt / 6076.12 / nm * min(w, h) / cover).toFloat() } ?: fs).coerceIn(minScale, maxScale)
+                state.pendingSpanNm = null
                 val side = cover * sc
                 state.scale = sc
                 state.panX = -((fy / sizeFt) * side - side / 2).toFloat()
@@ -211,6 +223,8 @@ fun TheaterMap(
         ) {
             val pr = proj()
             drawMapBase(pr, base, legacy?.asImageBitmap(), style)
+            diagramLayer.settled = zoomRest
+            diagrams?.let { drawAirfieldDiagrams(pr, it, landmarkText, style?.takeIf { s -> MapLook.styles.any { m -> m.first == s } } ?: MapLook.style, diagramLayer) }
             lineLayer.settled = zoomRest
             geo?.let { drawLandmarks(pr, it, landmarkText, mission, lineLayer) }
             overlay(pr)

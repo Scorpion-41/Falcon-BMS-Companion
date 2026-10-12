@@ -165,6 +165,16 @@ internal object TankerOutcome {
                 }
                 // and back to none on tanker 2
                 choose(r, stage, dir, size, 2, "No Tanker") { v(it) }
+                // 1.4.0 (D95): every tanker of the side is offered, and the Map page's Put on DataCard fills a row
+                if (size.name == "pc") {
+                    r.check(tankersOfSide.all { it in items }, "every tanker of the side is in the list", { "list ${items.joinToString(" | ")}, side ${tankersOfSide.joinToString()}" })
+                    tankersOfSide.firstOrNull()?.let { tk ->
+                        val said = edt { card.putSupport(tk, "Tanker2") }
+                        stage.settle(4, 20)
+                        r.check(v("txtTanker2").startsWith("$tk - ") && v("txtTanker2_TCN").isNotEmpty(),
+                            "Put on DataCard as Tanker 2 fills the row with $tk", { "$said / ${v("txtTanker2")} ${v("txtTanker2_TCN")}" })
+                    }
+                }
             } finally { stage.close() }
         }
     }

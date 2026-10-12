@@ -141,7 +141,7 @@ fun main(args: Array<String>) {
         Tray(
             icon = rememberVectorPainter(AppIcon),
             state = tray,
-            tooltip = "BMS Companion",
+            tooltip = "BMS Companion ${com.bmscompanion.app.AppVersion.NAME}",
             onAction = { windowOpen = true; ShowRequests.value++ },
             menu = {
                 Item("Open BMS Companion", onClick = { windowOpen = true; ShowRequests.value++ })
@@ -217,7 +217,7 @@ private fun ApplicationScope.MainWindow(startRoute: String?, nav: NavHostControl
         Window(
             onCloseRequest = onClose,
             state = state,
-            title = "BMS Companion",
+            title = "BMS Companion ${com.bmscompanion.app.AppVersion.NAME}",
             icon = rememberVectorPainter(AppIcon),
             undecorated = fullscreen,
             resizable = !fullscreen,

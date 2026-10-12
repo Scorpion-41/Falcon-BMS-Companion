@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -93,6 +94,9 @@ sealed interface MapSel {
     data class Ppt(val index: Int) : MapSel
     data class Pt(val x: Double, val y: Double) : MapSel
 }
+
+/** A steerpoint this close to an airfield (nm) is on it: the take-off, landing and alternate points. */
+internal const val FIELD_STPT_NM = 1.5
 
 /** How far the Attack chip zooms: an attack's cues, a few miles either side of the target, across the map. */
 private const val ATTACK_ZOOM = 110f
@@ -324,12 +328,23 @@ fun MissionMapPane(env: MissionEnv, state: MapState, sel: MapSel?, onSel: (MapSe
     val d = rememberMapData(env)
     // on a kneeboard the map is the whole board, so its options move into a ⋯ next to the sections button
     if (Kneeboard.on) KneeboardActionsSlot(Unit) { MapOptionsButton() }
+    // A tapped airfield opens its own card straight away (MissionFieldCard), floating over the map: at the map's foot
+    // on the left on a tablet or the PC, clear of the zoom buttons and the layer chips; a sheet over the foot of the
+    // map on a phone. Everything else keeps its selection card (the side column, or the phone's card).
+    val field = (sel as? MapSel.Field)?.let { f -> env.set?.airports?.firstOrNull { it.id == f.id } }
     if (isWide()) {
         Row(Modifier.fillMaxSize()) {
-            LiveMap(env, d, state, sel, onSel, Modifier.weight(1f).fillMaxHeight(), flightStrip = false)
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                LiveMap(env, d, state, sel, onSel, Modifier.fillMaxSize(), flightStrip = false)
+                if (field != null) MissionFieldCard(
+                    env, field, d,
+                    Modifier.align(Alignment.BottomStart).padding(start = 10.dp, end = 72.dp, top = 56.dp, bottom = 10.dp).widthIn(max = 470.dp).fillMaxWidth().fieldCardProbe(),
+                    onPick = onSel,
+                ) { onSel(null) }
+            }
             Box(Modifier.width(1.dp).fillMaxHeight().background(Hud.Outline.copy(alpha = 0.5f)))
             Column(Modifier.width(400.dp).fillMaxHeight().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (sel != null) SelectionCard(env, sel, d, Modifier.fillMaxWidth()) { onSel(null) }
+                if (sel != null && field == null) SelectionCard(env, sel, d, Modifier.fillMaxWidth()) { onSel(null) }
                 if (MapLayers.ownInfo) FlightTiles(d.live, d.bull, compact = true)
                 // the Map tab drops the card while hostile contacts are off (the Dashboard's keeps its note)
                 if (rememberHostilesOn()) PictureCard(d.ctcs, d.ownPos, d.ownHdg, d.bull, onPick = { onSel(MapSel.Ctc(it.id)) })
@@ -337,9 +352,15 @@ fun MissionMapPane(env: MissionEnv, state: MapState, sel: MapSel?, onSel: (MapSe
             }
         }
     } else {
-        Box(Modifier.fillMaxSize()) {
+        androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
             LiveMap(env, d, state, sel, onSel, Modifier.fillMaxSize(), flightStrip = true)
-            if (sel != null) SelectionCard(env, sel, d, Modifier.align(Alignment.BottomCenter).padding(start = 10.dp, end = 64.dp, bottom = 10.dp).widthIn(max = 520.dp).fillMaxWidth()) { onSel(null) }
+            if (field != null) MissionFieldCard(
+                env, field, d,
+                Modifier.align(Alignment.BottomCenter).padding(8.dp).widthIn(max = 560.dp).fillMaxWidth()
+                    .heightIn(max = maxHeight * 0.62f).fieldCardProbe(),
+                onPick = onSel,
+            ) { onSel(null) }
+            else if (sel != null) SelectionCard(env, sel, d, Modifier.align(Alignment.BottomCenter).padding(start = 10.dp, end = 64.dp, bottom = 10.dp).widthIn(max = 520.dp).fillMaxWidth()) { onSel(null) }
         }
     }
 }
@@ -375,6 +396,8 @@ fun LiveMap(
     val tm = rememberTextMeasurer(cacheSize = 256)
     val density = LocalDensity.current
     val hitPx = with(density) { 30.dp.toPx() }
+    // where each of the flight's fields was named in the last frame, so a tap on "HOME RKSO" opens the field
+    val fieldLabels = remember { HashMap<Int, androidx.compose.ui.geometry.Rect>() }
     var layersOpen by remember { mutableStateOf(!compactControls) }
     // Two independent switches, not one nested in the other: Traffic is your own side, Hostiles is theirs. A pilot who
     // turns Hostiles off wants the enemy off the map and his own flight left on it, and one who turns Traffic off wants
@@ -434,14 +457,34 @@ fun LiveMap(
                 fun dist(px: Double, py: Double) = pr.toScreen(px, py).let { hypot((it.x - tap.x).toDouble(), (it.y - tap.y).toDouble()) }
                 val cands = buildList<Pair<MapSel, Double>> {
                     visibleContacts.forEach { add(MapSel.Ctc(it.id) to dist(it.x, it.y)) }
-                    if (MapLayers.route) d.route.forEach { add(MapSel.Stp(it.n) to dist(it.x!!, it.y!!) + 4) }
+                    // The take-off and landing steerpoints sit on the flight's fields: a tap there is the field (its card
+                    // lists those steerpoints, one tap away), so a steerpoint on a field yields to it
+                    val ownFields = listOfNotNull(d.depField, d.arrField, d.altField)
+                    if (MapLayers.route) d.route.forEach { s ->
+                        val onField = ownFields.any { rangeNm(it.x, it.y, s.x!!, s.y!!) < FIELD_STPT_NM }
+                        add(MapSel.Stp(s.n) to dist(s.x!!, s.y!!) + if (onField) 14 else 4)
+                    }
                     if (MapLayers.sams || MapLayers.support) d.ppts.forEachIndexed { i, p -> if (if (p.marker) MapLayers.support || MapLayers.sams else MapLayers.sams) add(MapSel.Ppt(i) to dist(p.x, p.y) + 6) }
                     if (MapLayers.sams) d.sams.forEach { add(MapSel.Ctc(it.id) to dist(it.x, it.y) + 6) }
                     val flightFields = setOfNotNull(d.depField?.id, d.arrField?.id, d.altField?.id)
                     env.set?.airports?.forEach { if (it.id in flightFields || MapLayers.fields && mapsAirfield(it)) add(MapSel.Field(it.id) to dist(it.x, it.y) + 8) }
+                    // the flight's fields by their names too ("HOME RKSO" beside the symbol)
+                    fieldLabels.forEach { (id, r) -> if (r.inflate(4f).contains(tap)) add(MapSel.Field(id) to hitPx * 0.5) }
+                    // close in, a field is its diagram (whichever field it is): a tap anywhere on it is a tap on the
+                    // field — but a steerpoint, a contact or a PPT right under the finger still comes first
+                    com.bmscompanion.app.ui.components.AirfieldDiagrams.fieldAt(tap)?.let { at ->
+                        env.set?.airports?.minByOrNull { a -> pr.toScreen(a.x, a.y).let { hypot((it.x - at.x).toDouble(), (it.y - at.y).toDouble()) } }
+                            ?.takeIf { a -> pr.toScreen(a.x, a.y).let { hypot((it.x - at.x).toDouble(), (it.y - at.y).toDouble()) } < 6.0 }
+                            ?.let { a -> add(MapSel.Field(a.id) to minOf(dist(a.x, a.y) + 8, hitPx * 0.6)) }
+                    }
                 }
                 val best = cands.minByOrNull { it.second }
-                onSel(if (best != null && best.second < hitPx * 1.6) best.first else MapSel.Pt(x, y))
+                onSel(
+                    if (best != null && best.second < hitPx * 1.6) best.first
+                    // with an airfield's card up, a tap on nothing in particular closes it (a second one marks a point)
+                    else if (sel is MapSel.Field) null
+                    else MapSel.Pt(x, y),
+                )
             },
         ) { pr -> inMapInks(MapLook.light) {
             // The colours are taken here, inside the pass: remembered once, they kept whatever ink was current when
@@ -463,6 +506,7 @@ fun LiveMap(
             // ground, and either of them hid the airfield underneath. A carrier is drawn only when it is the flight's:
             // the theater's list has it where the campaign started it.
             val fieldSymbols = ArrayList<Triple<Offset, List<Offset>, FieldMark>>()
+            fieldLabels.clear()
             fieldRunways.forEach { (a, runways, drawn) ->
                 val p = pr.toScreen(a.x, a.y)
                 if (!on(p)) return@forEach
@@ -472,7 +516,12 @@ fun LiveMap(
                 val tag = fieldTag(dep, arr, alt)
                 if (tag == null && (!MapLayers.fields || !drawn)) return@forEach
                 fieldSymbols += Triple(p, runways, fieldMark(dep, arr, alt))
-                if (tag != null) nameField(a, tag, p, names)
+                if (tag != null) {
+                    nameField(a, tag, p, names)
+                    // where nameField puts it (the label is laid out once and kept, so measuring it here costs nothing)
+                    val size = com.bmscompanion.app.ui.components.MapText.label(this, tm, "$tag ${a.icao ?: a.name}", labelStyle.copy(color = Hud.Green)).layout.size
+                    fieldLabels[a.id] = androidx.compose.ui.geometry.Rect(p + Offset(15f, 3f), androidx.compose.ui.geometry.Size(size.width.toFloat(), size.height.toFloat()))
+                }
             }
 
             // Pre-planned threats: a ring for a threat, and for a marker (AWACS, tanker, a friendly — Ppt.ini gives those
@@ -856,6 +905,11 @@ private fun StripItem(label: String, value: String, color: Color = Hud.Text) {
 
 @Composable
 fun SelectionCard(env: MissionEnv, sel: MapSel, d: MapData, modifier: Modifier, onClose: () -> Unit) {
+    // an airfield has its own card: everything the field's page lists first, packed (the Dashboard's map cards too)
+    if (sel is MapSel.Field) {
+        env.set?.airports?.firstOrNull { it.id == sel.id }?.let { MissionFieldCard(env, it, d, modifier, onClose = onClose) }
+        return
+    }
     val stpts = d.stpts
     val ppts = d.ppts
     val ctcs = d.ctcs
@@ -933,7 +987,9 @@ fun SelectionCard(env: MissionEnv, sel: MapSel, d: MapData, modifier: Modifier, 
             title = a.name
             subtitle = listOfNotNull(a.icao, airportKindShort(a)).joinToString(" · ")
             a.tacan?.let { rows += "TACAN" to it.label }
+            a.freqs?.approachUhf?.takeIf { it.isNotBlank() }?.let { rows += "APPROACH" to it }
             a.freqs?.towerUhf?.let { rows += "TOWER" to (it + (a.freqs.towerVhf?.let { v -> " / $v" } ?: "")) }
+            a.freqs?.groundUhf?.takeIf { it.isNotBlank() }?.let { rows += "GROUND" to it }
             a.runways.flatMap { r -> r.ends.filter { it.ils != null } }.takeIf { it.isNotEmpty() }?.let { ils -> rows += "ILS" to ils.joinToString("  ") { "${it.designator} ${it.ils}" } }
             if (a.runways.isNotEmpty()) rows += "RWY" to a.runways.joinToString("  ") { it.name }
             pos = a.x to a.y

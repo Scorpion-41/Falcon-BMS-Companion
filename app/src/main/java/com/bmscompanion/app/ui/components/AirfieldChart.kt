@@ -346,6 +346,12 @@ fun AirfieldChart(
     fitRotation: Boolean = false,
     /** what the zoom buttons should close in on: the spot in hand, or the jet */
     zoomAnchor: Offset? = null,
+    /**
+     * The field alone, for a thumbnail too small to read the rest (the Mission map's airfield card): pavement,
+     * runways with their numbers, taxi lines and buildings, but no ramp spots and none of their numbers, taxiway
+     * letters, tower or cable plates, or scale bar. The Taxi page and the airfield page keep all of them.
+     */
+    fieldOnly: Boolean = false,
     state: ChartState = rememberChartState(),
     onTapSpot: ((AfSpot) -> Unit)? = null,
 ) {
@@ -515,7 +521,7 @@ fun AirfieldChart(
                 drawBuiltFeatures(field, v, inks)
                 // A deck has no ramp on the chart: see [TaxiView] for why a carrier's spot numbers cannot be drawn.
                 val ship = field.ship
-                if (ship == null) route?.let { r -> drawSpots(r, v, inks, selectedSpot, destinationSpot) }
+                if (ship == null && !fieldOnly) route?.let { r -> drawSpots(r, v, inks, selectedSpot, destinationSpot) }
                 // A deck is three hundred metres long and its spots are drawn where the real ship parks them, not
                 // where BMS stored them, so a line between the two would be a line to nowhere.
                 if (ship == null && route != null && path != null && path.size > 1) drawRoutePath(route, path, highlight, v, inks)
@@ -525,13 +531,15 @@ fun AirfieldChart(
 
             // Every label is placed after the drawing, so one can be nudged clear of another and joined back to what
             // it names with a leader line. Numbers that used to vanish into each other now spread out instead.
-            if (field.ship == null) route?.let { r -> spotLabels(r, v, inks, labels, labelScale, selectedSpot, destinationSpot) }
-            taxiwayLabels(field, route, v, inks, labels, labelScale)
+            if (field.ship == null && !fieldOnly) route?.let { r -> spotLabels(r, v, inks, labels, labelScale, selectedSpot, destinationSpot) }
+            if (!fieldOnly) taxiwayLabels(field, route, v, inks, labels, labelScale)
             runwayLabels(field, v, inks, labels, labelScale)
-            towerLabels(field, v, inks, labels, labelScale)
-            cableLabels(field, v, inks, labels, labelScale)
+            if (!fieldOnly) {
+                towerLabels(field, v, inks, labels, labelScale)
+                cableLabels(field, v, inks, labels, labelScale)
+            }
             labels.draw(this, tm)
-            drawScaleBar(v, inks, tm, labelScale)
+            if (!fieldOnly) drawScaleBar(v, inks, tm, labelScale)
             // Turned to the jet's heading, the page no longer has north at the top: say where it went.
             if (upHeading != null || fitRotation || state.twist != 0f) chartNorthArrow(Offset(size.width - 26f, 26f), shownTurn, inks, 13f)
         }

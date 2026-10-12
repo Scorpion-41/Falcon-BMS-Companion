@@ -127,12 +127,20 @@ internal object SaveWeather {
         val target = read(at.target, at.targetMs) ?: anywhere ?: takeoff
         val landing = read(at.landing, at.landingMs) ?: anywhere ?: takeoff
         val cols = listOf(takeoff, target, landing)
-        val rows = listOf(
+        // BMS's four tables: what its printed block takes beyond the card's figures (the cloud base of a sunny type,
+        // the contrail layer). Printed briefings of 4.38.1 saves: Sunny prints the type's high stratus as its Cloud Base
+        // (35,000 ft, where its cumulus entry says 5,000 and there is no cumulus), Fair its cumulus (5,000); Con Layer is
+        // the type's contrail layer (34,000 sunny, 28,000 fair) — the row this block once left out.
+        val fromMap = w.cols > 0 && w.rows > 0 && size > 0 && w.type.size == w.cols * w.rows
+        fun typeOf(c: CardWeather.Column) = w.twx?.types?.getOrNull(typeIndex(c.situation))
+        val rows = listOfNotNull(
             WeatherRow("Situation", cols.map { it.situation ?: "–" }),
             WeatherRow("Wind", cols.map(::wind)),
             WeatherRow("Visibility", cols.map { c -> c.visM?.let(::visibility) ?: "–" }),
             WeatherRow("Temp", cols.map { c -> c.tempC?.let { "${it}deg C." } ?: "–" }),
-            WeatherRow("Cloud Base", cols.map(::cloud)),
+            WeatherRow("Cloud Base", cols.map { c -> cloud(c, if (!fromMap && typeIndex(c.situation) == 0) typeOf(c)?.stratusFt?.takeIf { it > 0 } else null) }),
+            cols.map { c -> typeOf(c)?.contrailFt?.takeIf { it > 0 } }.takeIf { l -> l.any { it != null } }
+                ?.let { l -> WeatherRow("Con Layer", l.map { ft -> ft?.let { feet(it) + " ft MSL base" } ?: "–" }) },
             WeatherRow("QNH", cols.map { c -> c.qnhHpa?.let(::qnh) ?: "–" }),
         )
         val clock = w.twx?.clock ?: flight.clock
@@ -154,12 +162,23 @@ internal object SaveWeather {
     private fun visibility(m: Int): String =
         if (m >= 10_000) "${m / 1000}km" else "${m / 1000}.${m / 100 % 10}km"
 
-    /** "5,000 ft MSL base" as BMS prints it; "None" where a map's cell has no cloud. */
-    private fun cloud(c: CardWeather.Column): String {
+    /** "5,000 ft MSL base" as BMS prints it; "None" where a map's cell has no cloud. [base] overrides the column's. */
+    private fun cloud(c: CardWeather.Column, base: Int? = null): String {
         if (c.cover == 0) return "None"
-        val ft = c.cloudFt ?: return "–"
-        val grouped = ft.toString().reversed().chunked(3).joinToString(",").reversed()
-        return "$grouped ft MSL base"
+        val ft = base ?: c.cloudFt ?: return "–"
+        return "${feet(ft)} ft MSL base"
+    }
+
+    /** 35000 → "35,000". */
+    private fun feet(ft: Int): String = ft.toString().reversed().chunked(3).joinToString(",").reversed()
+
+    /** BMS's type from the Situation word: 0 Sunny, 1 Fair, 2 Poor, 3 Inclement (Fair when it says nothing known). */
+    private fun typeIndex(s: String?): Int = when {
+        s == null -> 1
+        s.contains("sun", true) -> 0
+        s.contains("poor", true) -> 2
+        s.contains("incl", true) -> 3
+        else -> 1
     }
 
     /** "1013 hPa · 29.91 inHg". */

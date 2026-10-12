@@ -317,6 +317,10 @@ fun ThreatDetail(nav: NavHostController, id: String, onBack: (() -> Unit)?) {
                         ListRow(e.name, e.subName ?: e.catName, onClick = { nav.go(Routes.ency(e.key)) })
                     }
                 }
+                // the system and its battalion drawn by the PC from BMS's own 3-D models (not for aircraft and missiles)
+                if (th.category != "AIRCRAFT" && th.category != "AAM") {
+                    com.bmscompanion.app.ui.screens.mission.ThreatModelPictures(listOfNotNull(th.tacref, th.name) + th.aliases)
+                }
                 Text("Source: BMS Threat Guide (4.38). Values observed in KTO; they vary with launch conditions.", style = MaterialTheme.typography.bodySmall, color = Hud.TextFaint)
             })
         }

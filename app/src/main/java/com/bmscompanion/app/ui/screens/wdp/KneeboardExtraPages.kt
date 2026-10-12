@@ -124,8 +124,10 @@ object KneeboardExtraPages {
         KbPageKind(KbKind.WEATHER, "Weather (the Briefing page's weather list)", "Weather") { CardPanelPage("pnlWx") },
         KbPageKind(KbKind.TARGETS_LEFT, "Target list, left: steerpoints and targets", "Targets L") { TargetListLeft(it) },
         KbPageKind(KbKind.TARGETS_RIGHT, "Target list, right: threats, lines, weapon targets", "Targets R") { TargetListRight(it) },
-        KbPageKind(KbKind.ROUTE_MAP, "Route map", "Route map") { RouteMapPage(it) },
+        KbPageKind(KbKind.ROUTE_MAP, "Route map", "Route map") { RouteMapPage(it, RouteInks.DAY) },
+        KbPageKind(KbKind.ROUTE_MAP_DARK, "Route map, dark (for the sun's glare)", "Route map (dark)") { RouteMapPage(it, RouteInks.NIGHT) },
         KbPageKind(KbKind.ATTACK, "Attack profile (Pop-up, HADB or TOSS)", "Attack") { AttackPage(it) },
+        KbPageKind(KbKind.SCHEDULE, "Airport Schedule (departures from your field)", "Apt Schedule") { SchedulePage(it) },
         KbPageKind(KbKind.DEPARTURE, "Departure ground chart", "Dep. chart") { GroundChartPage(it, 0) },
         KbPageKind(KbKind.ARRIVAL, "Arrival ground chart", "Arr. chart") { GroundChartPage(it, 1) },
         KbPageKind(KbKind.ALTERNATE, "Alternate ground chart", "Alt. chart") { GroundChartPage(it, 2) },
@@ -140,6 +142,9 @@ object KneeboardExtraPages {
      */
     val drawn = HashMap<String, String>()
 
+    /** The rows a table page laid out the last time it was drawn, each its cells joined by " | ": for the checks. */
+    val rows = HashMap<String, List<String>>()
+
     // ---------------------------------------------------------------- what the pages load
 
     /** Map tiles and pictures, by their path under the app's assets. */
@@ -152,6 +157,18 @@ object KneeboardExtraPages {
     internal val forms = mutableStateMapOf<String, WdpForm>()
     /** A theater's PPT types (its `Ppt.ini`), by the theater's PPT set. */
     internal val ppt = mutableStateMapOf<String, List<PptType>>()
+    /**
+     * The Airport Schedule the DataCard's window shows (`fclsAptSchedule`): a save's flight's departures, else the save
+     * that holds the printed briefing's flight (once it has been found), else the briefing's own package.
+     */
+    internal fun schedule(): AptSchedule? {
+        val m = mission()
+        m.flight?.departures?.let { return AptSchedule.of(it) }
+        val b = m.briefing ?: return null
+        if (m.flight == null && b.origin != "save") BriefedSave.cachedFlight(BriefedSave.key(b))?.departures?.let { return AptSchedule.of(it) }
+        val field = runCatching { WdpSession.dataCard.plan.tblApt[0].name }.getOrNull() ?: cardAirport(0)?.name ?: ""
+        return AptSchedule.ofBriefing(b, field)
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var warmedFor: Any? = null
@@ -178,9 +195,15 @@ object KneeboardExtraPages {
             KbKind.BRIEFING -> { form(KneeboardPages.CARD_FORM); designerPicture("${KneeboardPages.CARD_FORM}.pnlBrief.BackgroundImage") }
             KbKind.WEATHER -> form(KneeboardPages.CARD_FORM)
             KbKind.TARGETS_LEFT, KbKind.TARGETS_RIGHT -> pptTypes(m.theater)
-            KbKind.ROUTE_MAP -> {
+            KbKind.ROUTE_MAP, KbKind.ROUTE_MAP_DARK -> {
                 pptTypes(m.theater)
-                routeFrame(planData(), ROUTE_W_PX, ROUTE_H_PX)?.let { loadTiles(it.keys) }
+                val style = if (kind == KbKind.ROUTE_MAP_DARK) RouteInks.NIGHT.style else RouteInks.DAY.style
+                routeFrame(planData(), ROUTE_W_PX, ROUTE_H_PX, style)?.let { loadTiles(it.keys) }
+            }
+            KbKind.SCHEDULE -> {
+                // the save that holds the printed briefing's flight, for its whole schedule (as the card's window turns to it)
+                val b = m.briefing
+                if (m.flight == null && b != null && b.origin != "save") runCatching { BriefedSave.flight(BriefedSave.key(b)) }
             }
             KbKind.ATTACK -> attackPage()?.let { p ->
                 val f = form(p.form)
@@ -412,6 +435,8 @@ private val INK = Color(0xFF111111)
 private val FAINT = Color(0xFF666B70)
 private val RULE = Color(0xFFBBBFC2)
 private val BAND = Color(0xFFF0F1F2)
+/** the band under your own flight on the Airport Schedule */
+private val HIGHLIGHT = Color(0xFFFFE9A8)
 private val ROUTE_INK = Color(0xFF0B3D91)
 private val RED = Color(0xFFC0271E)
 /** a hostile SAM's ring and name on the route map: every map's SAM red for a light ground */
@@ -420,19 +445,54 @@ private val LINE_INK = Color(0xFF7B2FA8)
 private val BASE_INK = Color(0xFF1B6E3C)
 
 /**
+ * The inks of a page of this app's own and of its route map: [DAY] is paper (dark inks on white, the map's chart style
+ * under a light wash), [NIGHT] the dark page for a kneeboard in the sun's glare (1.4.0) — the map's dark style under a
+ * dark wash, and light inks on it, each at least 7:1 against the page ([page]): the text 15.6:1, the small print 8.4,
+ * the route 11.3, the threats and targets 7.2, the lines 10.0, the airfields 12.0 (WCAG contrast); every label sits in
+ * a dark [halo], so it reads where the white page was blinding.
+ */
+internal class RouteInks(
+    val style: String, val page: Color, val map: Color, val wash: Color, val ink: Color, val faint: Color,
+    val route: Color, val red: Color, val threat: Color, val line: Color, val base: Color, val halo: Color, val stptFill: Color,
+) {
+    companion object {
+        val DAY = RouteInks(
+            "chart", Color.White, Color(0xFFF4F3EE), Color.White.copy(alpha = 0.30f), INK, FAINT,
+            ROUTE_INK, RED, THREAT, LINE_INK, BASE_INK, Color.White, Color.White,
+        )
+        val NIGHT = RouteInks(
+            "dark", Color(0xFF111518), Color(0xFF151A1E), Color(0xFF0B0E10).copy(alpha = 0.35f), Color(0xFFE9EDF0), Color(0xFFA7B1B8),
+            Color(0xFF8FD3FF), Color(0xFFFF7A6E), Color(0xFFFF7A6E), Color(0xFFD9AEFF), Color(0xFF8FE3A8), Color(0xFF0B0E10), Color(0xFF111518),
+        )
+    }
+}
+
+/**
  * A page of this app's own: a title, a line under it, the body, and the page's own words at its foot. The body is
  * given what is left of the page (so a table can count its rows, and a chart can know its box).
  */
 @Composable
-private fun Sheet(scope: KbPageScope, title: String, sub: String?, body: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 5.dp)) {
-        Text(title, color = INK, fontSize = 15.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (!sub.isNullOrBlank()) Text(sub, color = FAINT, fontSize = 8.sp, lineHeight = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Box(Modifier.padding(top = 3.dp, bottom = 4.dp).fillMaxWidth().height(1.2.dp).background(INK))
+private fun Sheet(scope: KbPageScope, title: String, sub: String?, inks: RouteInks = RouteInks.DAY, body: @Composable ColumnScope.() -> Unit) {
+    // the page's own type, not the app theme's: Material's body style stands every line in 24 sp, which inside a
+    // table's 12-unit rows left no line that fits, so an ellipsized cell drew nothing (1.3.9: the target list printed
+    // empty rows under the app's theme, while the headless check, drawn without one, showed them)
+    androidx.compose.runtime.CompositionLocalProvider(
+        androidx.compose.material3.LocalTextStyle provides androidx.compose.material3.LocalTextStyle.current.copy(
+            lineHeight = TextUnit.Unspecified, letterSpacing = TextUnit.Unspecified,
+        ),
+    ) { SheetBody(scope, title, sub, inks, body) }
+}
+
+@Composable
+private fun SheetBody(scope: KbPageScope, title: String, sub: String?, inks: RouteInks, body: @Composable ColumnScope.() -> Unit) {
+    Column(Modifier.fillMaxSize().background(inks.page).padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 5.dp)) {
+        Text(title, color = inks.ink, fontSize = 15.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (!sub.isNullOrBlank()) Text(sub, color = inks.faint, fontSize = 8.sp, lineHeight = 10.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Box(Modifier.padding(top = 3.dp, bottom = 4.dp).fillMaxWidth().height(1.2.dp).background(inks.ink))
         Column(Modifier.fillMaxWidth().weight(1f)) { body() }
         Text(
             "Page ${scope.n} · ${KneeboardPages.knee(scope.side)} · BMS Companion",
-            Modifier.fillMaxWidth().padding(top = 3.dp), color = FAINT, fontSize = 7.sp, textAlign = TextAlign.Center,
+            Modifier.fillMaxWidth().padding(top = 3.dp), color = inks.faint, fontSize = 7.sp, textAlign = TextAlign.Center,
         )
     }
 }
@@ -494,9 +554,13 @@ private fun TableHead(title: String, cols: List<Col>, note: String? = null) {
 }
 
 @Composable
-private fun Cells(cols: List<Col>, cells: List<String>, head: Boolean = false, band: Boolean = false, color: Color = INK) {
+private fun Cells(
+    cols: List<Col>, cells: List<String>, head: Boolean = false, band: Boolean = false, color: Color = INK, into: MutableList<String>? = null,
+    bold: Boolean = false, highlight: Boolean = false,
+) {
+    into?.add(cells.joinToString(" | "))
     Row(
-        Modifier.fillMaxWidth().height(ROW_H).background(if (band) BAND else Color.Transparent),
+        Modifier.fillMaxWidth().height(ROW_H).background(if (highlight) HIGHLIGHT else if (band) BAND else Color.Transparent),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         cols.forEachIndexed { i, c ->
@@ -504,7 +568,7 @@ private fun Cells(cols: List<Col>, cells: List<String>, head: Boolean = false, b
             Text(
                 cells.getOrElse(i) { "" }, m.padding(horizontal = 2.dp),
                 color = if (head) FAINT else color, fontSize = if (head) 7.sp else CELL,
-                fontWeight = if (head) FontWeight.SemiBold else FontWeight.Normal,
+                fontWeight = if (head) FontWeight.SemiBold else if (bold) FontWeight.Bold else FontWeight.Normal,
                 fontFamily = if (c.mono && !head) FontFamily.Monospace else FontFamily.Default,
                 textAlign = if (c.end) TextAlign.End else TextAlign.Start,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false,
@@ -562,6 +626,7 @@ private fun TargetListLeft(scope: KbPageScope) {
             var budget = rowsFitting(maxHeight, sections)
             var shownRoute = 0
             var shownTargets = 0
+            val laid = ArrayList<String>()
             Column(Modifier.fillMaxSize()) {
                 if (d.route.isNotEmpty()) {
                     TableHead("Flight plan", cols, "${d.route.size} steerpoints")
@@ -575,7 +640,7 @@ private fun TargetListLeft(scope: KbPageScope) {
                                 p.n.toString(), what(d, p), row?.time?.removeSuffix("z")?.takeIf { it != "--" } ?: "",
                                 row?.alt?.takeIf { it != "--" } ?: "", lat, lon, srcWord(p.source),
                             ),
-                            band = i % 2 == 1, color = if (p.n in d.targetStpts) RED else INK,
+                            band = i % 2 == 1, color = if (p.n in d.targetStpts) RED else INK, into = laid,
                         )
                     }
                     shownRoute = take
@@ -590,7 +655,7 @@ private fun TargetListLeft(scope: KbPageScope) {
                         Cells(
                             tcols,
                             listOf(p.n.toString(), p.name?.trim() ?: what(d, p), p.altFt.roundToInt().toString(), lat, lon, srcWord(p.source)),
-                            band = i % 2 == 1,
+                            band = i % 2 == 1, into = laid,
                         )
                     }
                     shownTargets = take
@@ -602,6 +667,7 @@ private fun TargetListLeft(scope: KbPageScope) {
                     color = FAINT, fontSize = 6.5.sp, lineHeight = 8.5.sp,
                 )
             }
+            KneeboardExtraPages.rows[KbKind.TARGETS_LEFT] = laid
             KneeboardExtraPages.drawn[KbKind.TARGETS_LEFT] =
                 "$shownRoute of ${d.route.size} flight-plan steerpoints, $shownTargets of ${targets.size} target points (${d.cartridgeFrom})"
         }
@@ -633,13 +699,14 @@ private fun TargetListRight(scope: KbPageScope) {
             val sections = listOf(d.ppts.isNotEmpty(), linePts.isNotEmpty(), d.weapons.isNotEmpty()).count { it }
             var budget = rowsFitting(maxHeight, sections)
             val counts = IntArray(3)
+            val laid = ArrayList<String>()
             Column(Modifier.fillMaxSize()) {
                 if (d.ppts.isNotEmpty()) {
                     TableHead("Pre-planned threats", pcols, "STPT ${DtcPage.ranges(d.ppts.map { it.n })}")
                     val take = min(d.ppts.size, budget)
                     for ((i, p) in d.ppts.take(take).withIndex()) {
                         val (lat, lon) = latLon(d.coords, p.north, p.east)
-                        Cells(pcols, listOf(p.n.toString(), p.label, if (p.rangeFt > 0) one(p.rangeFt / FT_PER_NM) + " nm" else "point", lat, lon), band = i % 2 == 1, color = RED)
+                        Cells(pcols, listOf(p.n.toString(), p.label, if (p.rangeFt > 0) one(p.rangeFt / FT_PER_NM) + " nm" else "point", lat, lon), band = i % 2 == 1, color = RED, into = laid)
                     }
                     counts[0] = take
                     budget -= take
@@ -650,7 +717,7 @@ private fun TargetListRight(scope: KbPageScope) {
                     for ((i, p) in linePts.take(take).withIndex()) {
                         val (lat, lon) = latLon(d.coords, p.north, p.east)
                         val first = d.lines.firstOrNull { it.first == p.line }?.second?.firstOrNull() === p
-                        Cells(lcols, listOf(p.n.toString(), if (first) "Line ${p.line}" else "", lat, lon), band = p.line % 2 == 0)
+                        Cells(lcols, listOf(p.n.toString(), if (first) "Line ${p.line}" else "", lat, lon), band = p.line % 2 == 0, into = laid)
                     }
                     counts[1] = take
                     budget -= take
@@ -661,14 +728,70 @@ private fun TargetListRight(scope: KbPageScope) {
                     val take = min(d.weapons.size, budget)
                     for ((i, p) in d.weapons.take(take).withIndex()) {
                         val (lat, lon) = latLon(d.coords, p.north, p.east)
-                        Cells(wcols, listOf(p.n.toString(), p.name ?: "Target ${p.n}", p.altFt.roundToInt().toString(), lat, lon), band = i % 2 == 1)
+                        Cells(wcols, listOf(p.n.toString(), p.name ?: "Target ${p.n}", p.altFt.roundToInt().toString(), lat, lon), band = i % 2 == 1, into = laid)
                     }
                     counts[2] = take
                     if (take < d.weapons.size) Text("… and ${d.weapons.size - take} more on the DTC page", color = FAINT, fontSize = 7.sp)
                 }
             }
+            KneeboardExtraPages.rows[KbKind.TARGETS_RIGHT] = laid
             KneeboardExtraPages.drawn[KbKind.TARGETS_RIGHT] =
                 "${counts[0]} of ${d.ppts.size} PPTs, ${counts[1]} of ${linePts.size} line points, ${counts[2]} of ${d.weapons.size} weapon targets (${d.cartridgeFrom})"
+        }
+    }
+}
+
+// ==================================================================================================== the airport schedule
+
+/**
+ * The DataCard's **Airport Schedule** on a page (1.4.0; `fclsAptSchedule`, the card's Apt Schedule button): the flights
+ * leaving the flight's field, earliest first, in WDP's six columns — what pilots saved as a picture and inserted with
+ * Picture…. A save's flight carries the whole save's departures; with the printed briefing it is the save that holds
+ * that flight, once found, else the briefing's own package (and the page says so). Your own flight is in bold on a band.
+ * A schedule longer than the page is cut where it runs out, round your own flight, with what was left out said.
+ */
+@Composable
+private fun SchedulePage(scope: KbPageScope) {
+    // the save that holds the printed briefing's flight was looked for by [KneeboardExtraPages.preload] before the capture
+    val s = remember { KneeboardExtraPages.schedule() }
+    val flight = KneeboardExtraPages.mission().let { m -> m.briefing?.overview?.flight ?: m.flight?.row?.callsign }
+    Sheet(scope, "AIRPORT SCHEDULE", listOfNotNull(s?.field?.takeIf { it.isNotBlank() }?.let { "Departures from $it" }, flight).joinToString(" · ")) {
+        if (s == null) {
+            Note("No mission is open: press PRINT in BMS, or Open mission… in the Planner.")
+            KneeboardExtraPages.drawn[KbKind.SCHEDULE] = "no schedule"
+            KneeboardExtraPages.rows[KbKind.SCHEDULE] = emptyList()
+            return@Sheet
+        }
+        if (s.rows.isEmpty()) {
+            Note("Currently no flights planned from ${s.field}".trimEnd() + ".")
+            KneeboardExtraPages.drawn[KbKind.SCHEDULE] = "0 departures"
+            KneeboardExtraPages.rows[KbKind.SCHEDULE] = emptyList()
+            return@Sheet
+        }
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
+            val cols = listOf(
+                Col("DEP TIME", 62.dp, mono = true), Col("AIRCRAFT", null), Col("CALLSIGN", 70.dp), Col("SQUAD", 40.dp),
+                Col("PACK", 34.dp, end = true), Col("MISSION", 70.dp),
+            )
+            val fit = rowsFitting(maxHeight, 1) - (if (s.note != null) 3 else 0)
+            // round your own flight when the schedule runs past the page: the departures just before it and those after
+            val own = s.rows.indexOfFirst { it.own }
+            val from = if (s.rows.size <= fit || own < 0) 0 else (own - fit / 3).coerceIn(0, (s.rows.size - fit).coerceAtLeast(0))
+            val shown = s.rows.drop(from).take(fit.coerceAtLeast(0))
+            val laid = ArrayList<String>()
+            Column(Modifier.fillMaxSize()) {
+                TableHead("Departures", cols, "${s.rows.size} flight" + (if (s.rows.size == 1) "" else "s") + ", earliest first")
+                if (from > 0) Text("… $from earlier", color = FAINT, fontSize = 7.sp)
+                for ((i, r) in shown.withIndex()) {
+                    Cells(cols, listOf(r.time, r.aircraft, r.callsign, r.squad, r.pack, r.mission), band = r.own || i % 2 == 1, color = INK, into = laid, bold = r.own, highlight = r.own)
+                }
+                val after = s.rows.size - from - shown.size
+                if (after > 0) Text("… and $after later", color = FAINT, fontSize = 7.sp)
+                Spacer(Modifier.weight(1f))
+                s.note?.let { Text(it, color = FAINT, fontSize = 6.5.sp, lineHeight = 8.5.sp) }
+            }
+            KneeboardExtraPages.rows[KbKind.SCHEDULE] = laid
+            KneeboardExtraPages.drawn[KbKind.SCHEDULE] = "${shown.size} of ${s.rows.size} departures" + (if (own >= 0) ", own flight ${s.rows[own].callsign}" else "")
         }
     }
 }
@@ -695,6 +818,8 @@ internal class RouteFrame(
     val keys: List<String>,
     val z: Int,
     val off: List<KbPoint>,
+    /** the map style it is drawn on: "chart" by day, "dark" for the dark page */
+    val style: String = MAP_STYLE,
 ) {
     val projection: MapProjection
         get() {
@@ -707,7 +832,7 @@ internal class RouteFrame(
 private const val MAP_STYLE = "chart"
 
 /** Frames the route (and the targets near it) in a [w] x [h] pixel box; null with no theater or nothing placed. */
-internal fun routeFrame(d: KbPlanData, w: Int, h: Int): RouteFrame? {
+internal fun routeFrame(d: KbPlanData, w: Int, h: Int, style: String = MAP_STYLE): RouteFrame? {
     val theater = d.mission.theater ?: return null
     if (w <= 0 || h <= 0) return null
     val core = d.route.ifEmpty { d.stptTargets + d.open }.ifEmpty { d.weapons }
@@ -739,7 +864,7 @@ internal fun routeFrame(d: KbPlanData, w: Int, h: Int): RouteFrame? {
     val keys = ArrayList<String>()
     var z = 0
     if (id != null) {
-        keys += "maps/$id/$MAP_STYLE.webp"
+        keys += "maps/$id/$style.webp"
         val side = theater.sizeFt * k
         if (side >= 1300.0) {
             z = ceil(ln(side / 512.0) / ln(2.0)).toInt().coerceIn(2, 4)
@@ -751,10 +876,10 @@ internal fun routeFrame(d: KbPlanData, w: Int, h: Int): RouteFrame? {
             val c1 = floor((w - left) / ts).toInt().coerceIn(0, count - 1)
             val r0 = floor(-topPx / ts).toInt().coerceIn(0, count - 1)
             val r1 = floor((h - topPx) / ts).toInt().coerceIn(0, count - 1)
-            for (r in r0..r1) for (c in c0..c1) keys += "maps/$id/$MAP_STYLE/$z/${r}_$c.webp"
+            for (r in r0..r1) for (c in c0..c1) keys += "maps/$id/$style/$z/${r}_$c.webp"
         }
     }
-    return RouteFrame(theater, id, top, minE, k, w, h, keys, z, off)
+    return RouteFrame(theater, id, top, minE, k, w, h, keys, z, off, style)
 }
 
 /**
@@ -763,19 +888,20 @@ internal fun routeFrame(d: KbPlanData, w: Int, h: Int): RouteFrame? {
  * the DataCard's small map shows, at the size of a page and in paper inks.
  */
 @Composable
-private fun RouteMapPage(scope: KbPageScope) {
+private fun RouteMapPage(scope: KbPageScope, inks: RouteInks) {
     val d = remember { planData() }
     val flight = d.mission.briefing?.overview?.flight ?: d.mission.flight?.row?.callsign
-    Sheet(scope, "ROUTE MAP", listOfNotNull(flight, d.mission.briefing?.overview?.mission, d.mission.theater?.name).joinToString(" · ")) {
-        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).border(1.dp, INK)) {
-            val frame = remember(d, constraints.maxWidth, constraints.maxHeight) { routeFrame(d, constraints.maxWidth, constraints.maxHeight) }
+    val kind = if (inks === RouteInks.NIGHT) KbKind.ROUTE_MAP_DARK else KbKind.ROUTE_MAP
+    Sheet(scope, "ROUTE MAP", listOfNotNull(flight, d.mission.briefing?.overview?.mission, d.mission.theater?.name).joinToString(" · "), inks) {
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).border(1.dp, inks.ink)) {
+            val frame = remember(d, constraints.maxWidth, constraints.maxHeight) { routeFrame(d, constraints.maxWidth, constraints.maxHeight, inks.style) }
             if (frame == null) {
                 Note(
                     if (d.mission.theater == null) "Falcon BMS's theater is not known to this copy of the app, so there is no map to draw."
                     else "No steerpoint has a position yet: press PRINT in BMS, or Open mission… in the Planner.",
                     Modifier.align(Alignment.Center),
                 )
-                KneeboardExtraPages.drawn[KbKind.ROUTE_MAP] = "no map"
+                KneeboardExtraPages.drawn[kind] = "no map"
                 return@BoxWithConstraints
             }
             LaunchedEffect(frame.keys) { KneeboardExtraPages.loadTiles(frame.keys) }
@@ -783,12 +909,12 @@ private fun RouteMapPage(scope: KbPageScope) {
             val have = frame.keys.count { it in KneeboardExtraPages.images }
             val airports = (0..2).map { KneeboardExtraPages.cardAirport(it) }
             Canvas(Modifier.fillMaxSize().clipToBounds()) {
-                drawRouteMap(frame, d, airports, tm)
+                drawRouteMap(frame, d, airports, tm, inks)
             }
-            KneeboardExtraPages.drawn[KbKind.ROUTE_MAP] =
-                "${d.route.size} flight-plan steerpoints, ${d.ppts.size} PPTs, ${d.lines.size} lines; map ${frame.mapId}/$MAP_STYLE z${frame.z}: $have of ${frame.keys.size} pictures"
+            KneeboardExtraPages.drawn[kind] =
+                "${d.route.size} flight-plan steerpoints, ${d.ppts.size} PPTs, ${d.lines.size} lines; map ${frame.mapId}/${frame.style} z${frame.z}: $have of ${frame.keys.size} pictures"
         }
-        Legend(d, frameOffNote(d))
+        Legend(d, frameOffNote(d), inks)
     }
 }
 
@@ -813,23 +939,23 @@ private fun frameOffNote(d: KbPlanData): String? {
 private fun compass(brg: Double): String = listOf("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")[((brg + 22.5) / 45).toInt() % 8]
 
 @Composable
-private fun Legend(d: KbPlanData, off: String?) {
+private fun Legend(d: KbPlanData, off: String?, inks: RouteInks = RouteInks.DAY) {
     Column(Modifier.fillMaxWidth().padding(top = 3.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            LegendMark { drawLine(ROUTE_INK, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 2.dp.toPx()) }
-            LegendWord("Flight plan")
-            LegendMark { drawCircle(Color.White, 3.5.dp.toPx()); drawCircle(ROUTE_INK, 3.5.dp.toPx(), style = Stroke(1.4.dp.toPx())) }
-            LegendWord("Steerpoint")
-            LegendMark { drawPath(triangle(Offset(size.width / 2, size.height / 2), 4.5.dp.toPx()), RED) }
-            LegendWord("Target")
-            LegendMark { drawCircle(THREAT, size.height / 2 - 1f, style = Stroke(1.6.dp.toPx())) }
-            LegendWord("Threat ring")
-            LegendMark { drawLine(LINE_INK, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 1.8.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f))) }
-            LegendWord("Line")
-            LegendMark { drawRect(BASE_INK, Offset(size.width / 2 - 3.dp.toPx(), size.height / 2 - 3.dp.toPx()), Size(6.dp.toPx(), 6.dp.toPx())) }
-            LegendWord("Airfield")
+            LegendMark { drawLine(inks.route, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 2.dp.toPx()) }
+            LegendWord("Flight plan", inks)
+            LegendMark { drawCircle(inks.stptFill, 3.5.dp.toPx()); drawCircle(inks.route, 3.5.dp.toPx(), style = Stroke(1.4.dp.toPx())) }
+            LegendWord("Steerpoint", inks)
+            LegendMark { drawPath(triangle(Offset(size.width / 2, size.height / 2), 4.5.dp.toPx()), inks.red) }
+            LegendWord("Target", inks)
+            LegendMark { drawCircle(inks.threat, size.height / 2 - 1f, style = Stroke(1.6.dp.toPx())) }
+            LegendWord("Threat ring", inks)
+            LegendMark { drawLine(inks.line, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 1.8.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f))) }
+            LegendWord("Line", inks)
+            LegendMark { drawRect(inks.base, Offset(size.width / 2 - 3.dp.toPx(), size.height / 2 - 3.dp.toPx()), Size(6.dp.toPx(), 6.dp.toPx())) }
+            LegendWord("Airfield", inks)
         }
-        if (off != null) Text(off, color = FAINT, fontSize = 7.sp, lineHeight = 9.sp, maxLines = 2)
+        if (off != null) Text(off, color = inks.faint, fontSize = 7.sp, lineHeight = 9.sp, maxLines = 2)
     }
 }
 
@@ -840,8 +966,8 @@ private fun LegendMark(draw: DrawScope.() -> Unit) {
 }
 
 @Composable
-private fun LegendWord(text: String) {
-    Text(text, color = INK, fontSize = 7.sp, maxLines = 1)
+private fun LegendWord(text: String, inks: RouteInks = RouteInks.DAY) {
+    Text(text, color = inks.ink, fontSize = 7.sp, maxLines = 1)
     Spacer(Modifier.width(8.dp))
 }
 
@@ -853,7 +979,7 @@ private fun triangle(c: Offset, r: Float): Path = Path().apply {
 }
 
 /** Labels that must not sit on each other: each one tried at a few places beside its point, and left off if all are taken. */
-private class Labels(private val tm: TextMeasurer) {
+private class Labels(private val tm: TextMeasurer, private val halo: Color = Color.White) {
     private val taken = ArrayList<Rect>()
 
     fun block(r: Rect) { taken += r }
@@ -872,7 +998,7 @@ private class Labels(private val tm: TextMeasurer) {
             if (r.left < 0 || r.top < 0 || r.right > size.width || r.bottom > size.height) continue
             if (taken.any { it.overlaps(r) }) continue
             taken += r
-            drawText(layout, color = Color.White, topLeft = p, drawStyle = Stroke(2f * density))
+            drawText(layout, color = halo, topLeft = p, drawStyle = Stroke(2f * density))
             drawText(layout, topLeft = p)
             return true
         }
@@ -880,11 +1006,19 @@ private class Labels(private val tm: TextMeasurer) {
     }
 }
 
-private fun DrawScope.drawRouteMap(f: RouteFrame, d: KbPlanData, airports: List<Airport?>, tm: TextMeasurer) {
-    drawRect(Color(0xFFF4F3EE))
-    // the map: the chart style's overview, and the sharper tiles over it
+private fun DrawScope.drawRouteMap(f: RouteFrame, d: KbPlanData, airports: List<Airport?>, tm: TextMeasurer, inks: RouteInks = RouteInks.DAY) {
+    drawRect(inks.map)
+    val ROUTE_INK = inks.route
+    val RED = inks.red
+    val THREAT = inks.threat
+    val LINE_INK = inks.line
+    val BASE_INK = inks.base
+    val INK = inks.ink
+    val halo = inks.halo
+    // the map: the style's overview, and the sharper tiles over it
     val pr = f.projection
     val imgs = KneeboardExtraPages.images
+    val MAP_STYLE = f.style
     f.mapId?.let { id ->
         imgs["maps/$id/$MAP_STYLE.webp"]?.let {
             drawImage(it, dstOffset = IntOffset(pr.left.roundToInt(), pr.top.roundToInt()), dstSize = IntSize(pr.side.roundToInt(), pr.side.roundToInt()))
@@ -905,10 +1039,10 @@ private fun DrawScope.drawRouteMap(f: RouteFrame, d: KbPlanData, airports: List<
         }
     }
     // a wash, so the inks stand out from the map
-    drawRect(Color.White.copy(alpha = 0.30f))
+    drawRect(inks.wash)
     // one of the page's units, in pixels
     val px = density
-    val labels = Labels(tm)
+    val labels = Labels(tm, halo)
 
     // threats first, under everything
     for (p in d.ppts) {
@@ -916,7 +1050,7 @@ private fun DrawScope.drawRouteMap(f: RouteFrame, d: KbPlanData, airports: List<
         if (p.rangeFt > 0) {
             val r = (p.rangeFt * f.k).toFloat()
             drawCircle(THREAT.copy(alpha = 0.10f), r, c)
-            drawCircle(Color.White.copy(alpha = 0.7f), r, c, style = Stroke(3.6f * px))
+            drawCircle(halo.copy(alpha = 0.7f), r, c, style = Stroke(3.6f * px))
             drawCircle(THREAT, r, c, style = Stroke(2f * px))
         }
         drawLine(THREAT, Offset(c.x - 4 * px, c.y - 4 * px), Offset(c.x + 4 * px, c.y + 4 * px), 1.8f * px)
@@ -934,7 +1068,7 @@ private fun DrawScope.drawRouteMap(f: RouteFrame, d: KbPlanData, airports: List<
     for (i in 1 until route.size) if (route[i].n == route[i - 1].n + 1) {
         val a = f.at(route[i - 1].north, route[i - 1].east)
         val b = f.at(route[i].north, route[i].east)
-        drawLine(Color.White, a, b, 5f * px)
+        drawLine(halo, a, b, 5f * px)
         drawLine(ROUTE_INK, a, b, 2.2f * px)
     }
     // the airfields of the card
@@ -943,7 +1077,7 @@ private fun DrawScope.drawRouteMap(f: RouteFrame, d: KbPlanData, airports: List<
     for ((_, rows) in bases) {
         val a = rows.first().value!!
         val c = f.at(a.x, a.y)
-        drawRect(Color.White, Offset(c.x - 4.5f * px, c.y - 4.5f * px), Size(9f * px, 9f * px))
+        drawRect(halo, Offset(c.x - 4.5f * px, c.y - 4.5f * px), Size(9f * px, 9f * px))
         drawRect(BASE_INK, Offset(c.x - 3.5f * px, c.y - 3.5f * px), Size(7f * px, 7f * px))
         labels.block(Rect(c.x - 5 * px, c.y - 5 * px, c.x + 5 * px, c.y + 5 * px))
     }
@@ -952,7 +1086,7 @@ private fun DrawScope.drawRouteMap(f: RouteFrame, d: KbPlanData, airports: List<
         val c = f.at(p.north, p.east)
         val tgt = p.n in d.targetStpts
         if (tgt) drawPath(triangle(c, 6f * px), RED) else {
-            drawCircle(Color.White, 4.2f * px, c)
+            drawCircle(inks.stptFill, 4.2f * px, c)
             drawCircle(ROUTE_INK, 4.2f * px, c, style = Stroke(1.5f * px))
         }
         labels.block(Rect(c.x - 5 * px, c.y - 5 * px, c.x + 5 * px, c.y + 5 * px))
@@ -1002,7 +1136,7 @@ private fun DrawScope.drawRouteMap(f: RouteFrame, d: KbPlanData, airports: List<
     val len = nice * pxPerNm
     val sy = size.height - 10f * px
     val sx = 10f * px
-    drawRect(Color.White.copy(alpha = 0.8f), Offset(sx - 3 * px, sy - 12 * px), Size(len + 6 * px, 16 * px))
+    drawRect(halo.copy(alpha = 0.8f), Offset(sx - 3 * px, sy - 12 * px), Size(len + 6 * px, 16 * px))
     drawLine(INK, Offset(sx, sy), Offset(sx + len, sy), 1.5f * px)
     drawLine(INK, Offset(sx, sy - 3 * px), Offset(sx, sy + 1 * px), 1.5f * px)
     drawLine(INK, Offset(sx + len, sy - 3 * px), Offset(sx + len, sy + 1 * px), 1.5f * px)

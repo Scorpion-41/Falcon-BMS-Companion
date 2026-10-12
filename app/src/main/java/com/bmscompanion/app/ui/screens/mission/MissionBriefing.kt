@@ -107,6 +107,8 @@ fun MissionBriefingPane(env: MissionEnv, showOnMap: (MapSel, Double, Double) -> 
             PackageCard(b)
             LoadoutCard(b, weapons) { w -> env.nav.go("m/weapon/${android.net.Uri.encode(w.key)}") }
             ThreatCard(b, threats, ppts, bull, showPpt, openThreat)
+            // the targets and threats drawn by the PC from BMS's own 3-D models (TargetPicturesCard.kt)
+            if (!Hud.onPaper) TargetPicturesCard()
             SupportCard(rememberSupportAssets(env))
             // WDP mode's weather is the save's own file as Populate read it: where there is none, the card says why
             if (wdp && b.weather?.rows.isNullOrEmpty()) SectionCard("Weather", accent = Hud.Cyan) {
@@ -228,6 +230,7 @@ private fun AirbaseRow(env: MissionEnv, role: String, name: String, a: Airport?)
             Spacer(Modifier.height(4.dp))
             TagFlow {
                 a.tacan?.let { Tag("TCN ${it.label}", Hud.Green, filled = true) }
+                a.freqs?.approachUhf?.takeIf { it.isNotBlank() }?.let { Tag("APP $it", Hud.Amber) }
                 a.freqs?.towerUhf?.let { Tag("TWR $it", Hud.Amber) }
                 a.freqs?.groundUhf?.let { Tag("GND $it", Hud.TextDim) }
                 a.runways.flatMap { r -> r.ends.filter { it.ils != null } }.forEach { Tag("ILS ${it.designator} ${it.ils}", Hud.Cyan) }
@@ -466,7 +469,8 @@ private fun ThreatCard(
 fun WeatherCard(b: Briefing) {
     val w = b.weather ?: return
     if (w.rows.isEmpty()) return
-    SectionCard("Weather", accent = Hud.Cyan) {
+    // MAP: the Weather tab's Mission weather page (the maps the mission flies, over the theater)
+    SectionCard("Weather", accent = Hud.Cyan, trailing = { com.bmscompanion.app.ui.screens.editor.MissionWeatherMapButton() }) {
         val same = w.rows.all { r -> r.values.distinct().size <= 1 }
         if (same) {
             w.rows.forEach { r -> KV(r.label, r.values.firstOrNull()) }

@@ -702,7 +702,7 @@ object CampTest {
                     "  ${names.mission(f.mission) ?: f.mission}: \"${names.task(f.mission) ?: ""}\"")
                 appendLine("    squadron ${sq?.name ?: f.squadronId} @ ${sq?.airbase ?: place((save.squadronOf(f))?.airbase)}; team ${h?.team(f.owner)?.name ?: f.owner}" +
                     "; T/O ${f.waypoints.firstOrNull()?.let { CampaignArchive.clock(it.depart) } ?: "-"}; TOT ${CampaignArchive.clock(f.tot)}; mission over ${CampaignArchive.clock(f.missionOver)}" +
-                    "; current wp ${f.core.currentWp}; player slots ${f.playerSlots}; fuel ${f.fuelInitial}; laser ${f.laser}; TACAN ${tacan ?: "-"}")
+                    "; current wp ${f.core.currentWp}; player slots ${f.playerSlots}; fuel ${f.fuelInitial}; cft ${f.cft}; laser ${f.laser}; TACAN ${tacan ?: "-"}")
                 f.loadouts.forEachIndexed { i, l ->
                     appendLine("    loadout[$i] " + l.stores.joinToString(", ") { (id, n) -> "${n}x ${names.weapon(id) ?: "#$id"}" })
                     // per weapon, the way the briefing's Ordnance adds it up for one aircraft

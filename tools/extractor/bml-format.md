@@ -135,3 +135,55 @@ network drawn at real width, as before.
 
 Also unknown: what bytes +20..77 of a mesh entry mean; why a few entries are longer than 78 bytes; and the 108
 bytes Osan leaves after its vertex array.
+
+## The whole format, read from the sim (1.4.0)
+
+Everything above was worked out from the bytes. The target pictures needed vehicles, whose models are trees (a
+turret on a DOF, missiles on slots, track frames on a switch), so the format was read out of `Falcon BMS.exe` with its
+pdb (`bp::RTModel::loadFromFile`, `RTModel::readNodeFromFile` and each node's `readFromBuffer`; the scratchpad's
+disassembler `parking-predict/dis.js RTModel.obj <rva> <length>`). It answers the open questions above. The reader is
+`desktop/.../bridge/BmlModel.kt` (with `Lzma.kt`, a plain LZMA decoder: the app does not call `xz`).
+
+```
+file        "BML\0", u32 version (1 or 2), u32 compression (2 = LZMA; 1 = LZ4, one model of 4,400), u64 size,
+            u64 packed size, LZMA properties (5 bytes) at 0x1C, the stream at 0x21
+unpacked    u32 ?
+            version 1: u32 n, n x u32 texture numbers (KoreaObj/<n>.dds)
+            version 2: u32 n, n x (u32 length, bytes) material names
+            u32 index format (2 = 32-bit), u32 ?, u32 vertex count, u32 node count
+            the nodes
+            u32 bytes + the index buffer, u32 bytes + the vertex buffer
+node        u32 type, u32 id, u32 version, then
+  1 primitive     u32 topology (4 triangle list, 5 strip, 1 points, 2 lines), u32 index start, u32 index count,
+                  u32, u32, u32 vertex-buffer byte offset, u32 vertex count, u32 stride, vec3 centre, u8, u8,
+                  then version 1: 5 x i32 (material), version 2: u16            = 78 / 60 bytes with the header
+  2 DOF           u32 DOF number, u32 type (0-2), u32, f32, f32, u32 flags, vec3 scale, vec3 move, 3 x 3 rotation
+  3 DOF end       nothing
+  4 switch        u32 switch number, u32 branch, u8
+  5 switch end    nothing
+  6 slot          u32 slot number, 3 x 3 rotation, vec3 move
+  7 slot end      nothing
+  8 render ctrl   u32, 32 bytes
+```
+
+So the "mesh table" above is a run of primitive nodes (each entry's count is a primitive's vertex count and the
+4 bytes before it its byte offset into the vertex buffer), "78 plus 48" is a primitive followed by a render-control
+node, and the "gap" before the vertex array is whatever nodes follow the last primitive plus the two buffers' length
+words. The vertex array starts exactly where the vertex buffer's length word says; nothing has to be found. (Gunsan's
+taxiway model reads as seventeen plain triangle-list primitives this way too, so the overlap its tiling test finds
+is most likely layered surfaces in the model itself; not checked further.)
+
+**The tree.** The nodes are written in order; a DOF, a switch or a slot opens a group that its end node closes. A
+vertex inside a DOF or a slot goes through its transform — scale, then the rotation applied to the row vector
+(`x' = x r0 + y r3 + z r6`), then the move — the innermost first. A T-72's turret is a DOF (its mesh stored on its own
+axes), its gun a DOF inside it; read without the transforms the turret lies on its side. A switch shows one of its
+branches (an SA-6's six track frames; a building's intact and destroyed states): the pictures take the lowest
+branch of each switch. A slot is where the sim hangs a weapon (`Falcon4_VCD.xml` `WpnOrHpIdx_n` with bit n of
+`VisibleFlags`): the pictures hang the weapon's own model there, which is what puts the missiles on an SA-2's rail.
+
+**Axes.** x to starboard, y up, z forward — a left-handed frame (Direct3D's). The Nimitz's island stands at +x, a
+T-72's gun points to +z.
+
+**Index buffers.** Every version-2 model (216 of them) carries one, and in every one it is the identity — each
+primitive's index count equals its vertex count and its indices run from its first vertex — so a primitive is drawn
+straight from the vertex buffer. Version 1 has none. Records are 32, 36, 40 or 48 bytes; the position is always first.

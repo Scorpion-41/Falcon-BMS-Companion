@@ -153,7 +153,10 @@ object PcServer {
                         MissionLink.mode.value == LinkMode.REMOTE && MissionLink.host != null -> proxy(ex.requestMethod, ex.requestURI.rawPath + (ex.requestURI.rawQuery?.let { "?$it" } ?: ""), body)
                         else -> ApiResponse.json("""{"error":"BMS Companion on this PC has no mission data source: choose where Falcon BMS runs in the Setup section"}""", 502)
                     }
-                    send(ex, resp, cache = false)
+                    // a map tile is BMS's terrain, the same until BMS is updated: a browser may keep it for a day (MapTiles)
+                    val tile = path == "/api/maptile" && resp.status == 200
+                    if (tile) ex.responseHeaders.add("Cache-Control", "max-age=86400")
+                    send(ex, resp, cache = tile)
                 }
                 !PcConfig.webEnabled -> send(ex, ApiResponse(200, "text/html; charset=utf-8", statusPage().toByteArray()), cache = false)
                 // /kneeboard is the same page, asked for in board layout: an address a kneeboard program cannot

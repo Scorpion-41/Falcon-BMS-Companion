@@ -439,9 +439,9 @@ class PerformanceWiring(
         missionBurn()
         val fuel = missionFuel()
         val l = loadout
-        // the save's fuel says whether the jet carries its conformal tanks (their fuel is loaded with the rest)
+        // the save says whether the jet carries its conformal tanks: its own flag, else its fuel (theirs is loaded with the rest)
         val cftBefore = plan.cftDrag
-        if (fuel != null) plan.cftFromFuel(fuel)
+        seatCft(seat)?.let { plan.cftCarried(it) }
         if (l == null) {
             // no hardpoints known for the jet: its stores stay as they are, its fuel is still the save's
             if (fuel != null) plan.applyLoadout(plan.intLoadout, plan.intDrag - cftBefore + plan.cftDrag, fuel, plan.intExtFuel) else plan.setFuel()
@@ -460,10 +460,25 @@ class PerformanceWiring(
      * printed briefing (it does not say), and for another F-16 picked in Type: WDP gave it the mission jet's fuel too,
      * whatever its own tanks hold (a CFT jet's 10,219 lb read as 7,162), and here it keeps its own.
      */
-    private fun missionFuel(): Int? {
+    private fun missionFuel(): Int? = seatFuel(seat)
+
+    /**
+     * What the save says of seat [s]'s conformal tanks (the flight's own jet, a jet that can carry them): whether its
+     * starting fuel holds theirs (D66); null where it does not say. The save's per-aircraft byte after the TACAN
+     * (version 109, `CampaignArchive.Flight.cft`) is not it: on Hellas WCP's Auto Save every flight of tank-capable
+     * jets has 1, 1, 1, 1 there, those starting with 7,162 lb (no tank fuel) as much as those with 10,222.
+     */
+    private fun seatCft(s: Int): Boolean? {
+        if (plan.cftData == null) return null
+        if (mission?.flight == null || !ownJet()) return null
+        return seatFuel(s)?.let { plan.cftInFuel(it) }
+    }
+
+    /** The save's starting fuel for seat [s] (0-3) of the flight's own jet, as [missionFuel]; null where there is none. */
+    private fun seatFuel(s: Int): Int? {
         val f = mission?.flight ?: return null
         if (!ownJet()) return null
-        return (f.fuelLb.getOrNull(seat.coerceIn(0, 3)) ?: f.fuelLb.firstOrNull())?.takeIf { it > 0 }
+        return (f.fuelLb.getOrNull(s.coerceIn(0, 3)) ?: f.fuelLb.firstOrNull())?.takeIf { it > 0 }
     }
 
     /** Whether Type shows the mission's own jet (WDP: `intAC == GetFlightVehId(SelFlightNr)`). */
@@ -645,11 +660,23 @@ class PerformanceWiring(
         val missionOpen = mission?.briefing != null || mission?.flight != null
         // the jet's conformal tanks, when it carries them, are part of its drag in the window as on the page
         l.airframeDrag = plan.cftDrag
-        PerfLoadoutWindow(l, plan.cboType.text, plan.intEmpty, plan.intIntFuel, plan.intMax, seat, missionOpen, f16, pic) { newSeat ->
+        val cft = if (onOtherAircraft()) null else plan.cftData
+        PerfLoadoutWindow(
+            l, plan.cboType.text, plan.intEmpty, plan.intIntFuel, plan.intMax, seat, missionOpen, f16, pic,
+            cft = cft, cftStart = plan.cftOn,
+            // a save's seat carries its tanks when its starting fuel holds theirs (BMS loads them with the rest)
+            seatCft = { s -> seatCft(s) },
+        ) { newSeat, cftOn ->
             seat = newSeat
+            // the seat's own fuel from the save, as WDP's window takes fuel_initial[PilotSeat]; what the save says of
+            // the seat's conformal tanks first, then the window's CFT switch over it (1.4.0: the switch fits or takes
+            // them off, their fuel, weight and drag with them)
+            val fuel = missionFuel()
+            seatCft(seat)?.let { plan.cftCarried(it) }
+            l.airframeDrag = if (cftOn) cft?.drag ?: 0 else 0
             val t = l.totals(seat)
-            // the seat's own fuel from the save, as WDP's window takes fuel_initial[PilotSeat]
-            plan.applyLoadout(t.loadWeight, t.totalDrag, missionFuel() ?: plan.intIntFuel, t.extFuel)
+            plan.applyLoadout(t.loadWeight, t.totalDrag, fuel ?: plan.intIntFuel, t.extFuel)
+            plan.setCft(cftOn)
             plan.programFlow()
             // DatacardLabels: the card's Config rows from these stores, each store once with its count
             onLoadoutApplied?.invoke(

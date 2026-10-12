@@ -3,7 +3,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { DATA, parseRecords, findFileCI, readText } from './util.mjs';
 import { loadDb } from './db.mjs';
-import { terrainSampler, groundUnder } from './elevation.mjs';
+import { terrainSampler, groundUnder, levelledUnder } from './elevation.mjs';
+import { levelling } from './tld.mjs';
 
 const OBJ_TYPES = { 1: 'Airbase', 2: 'Airstrip' };
 const PLACE_TYPES = { 8: 'city', 28: 'town', 29: 'village' };
@@ -201,6 +202,10 @@ export function buildAirports(th) {
   const atcByCamp = loadAtcDir(th);
   // BMS's own terrain, for the fields whose ATC file gives no elevation (elevation.mjs)
   const terrain = terrainSampler(th);
+  // and BMS's levelling of it under the airbases (tld.mjs), which wins over both
+  const lev = levelling(th);
+  // how each field's elevation was found, for the checks (not written out)
+  const elevations = new Map();
 
   const ocdType = (ocd) => {
     const ocdDir = findFileCI(path.join(th.data3dDir, 'ObjectiveRelatedData'), `OCD_${String(ocd).padStart(5, '0')}`)
@@ -296,6 +301,11 @@ export function buildAirports(th) {
       runways.length = 0;
       runways.push({ dbRunway: 0, name: "Deck", lengthFt: null, ends: (ends.length ? ends : []).map((e) => ({ ...e, designator: "Deck " + e.designator, pattern: null })) });
     }
+    const ground = isCarrier || !geo?.feats?.length ? null : {
+      tld: levelledUnder(lev, terrain, o.x, o.y, geo.rects),
+      map: groundUnder(terrain, o.x, o.y, geo.rects),
+    };
+    elevations.set(o.campId, { name: o.name, atc: atc?.elevationFt ?? null, tld: ground?.tld?.ft ?? null, zones: ground?.tld?.zones ?? [], map: ground?.map ?? null });
     airports.push({
       id: o.campId,
       name: o.name.replace(/\s*\([A-Z0-9]{4}\)\s*$/, '').trim(),
@@ -303,10 +313,11 @@ export function buildAirports(th) {
       icao,
       type: isCarrier ? 'Carrier' : OBJ_TYPES[t.type],
       x: Math.round(o.x), y: Math.round(o.y),
-      // the ATC file's figure; where it has none, or 0 (Hellas's placeholder: Kasteli is 1,180 ft up), the ground BMS
-      // puts the jet on, its height map under the runways (elevation.mjs). A ship has none: it is told by having no
-      // features at all, as the ground charts tell it (the Falklands type their whole fleet "Airbase")
-      elevationFt: (isCarrier || !geo?.feats?.length || (atc?.elevationFt ?? 0) !== 0 ? null : groundUnder(terrain, o.x, o.y, geo.rects)) ?? atc?.elevationFt ?? null,
+      // the level BMS flattens the field's runways to (TerrainRelatedData/TLD_<CampId>.TPB, tld.mjs); else the ATC
+      // file's figure; where it has none, or 0 (Hellas's placeholder: Kasteli is 1,180 ft up), the ground BMS puts the
+      // jet on, its height map under the runways (elevation.mjs). A ship has none: it is told by having no features
+      // at all, as the ground charts tell it (the Falklands type their whole fleet "Airbase")
+      elevationFt: ground?.tld?.ft ?? ((atc?.elevationFt ?? 0) !== 0 ? null : ground?.map) ?? atc?.elevationFt ?? null,
       tacan: st?.tacan ? { channel: st.tacan.channel, band: st.tacan.band, rangeNm: st.tacan.rangeNm || null } : null,
       freqs: st ? { towerUhf: st.towerUhf, towerVhf: st.towerVhf, groundUhf: st.groundUhf, approachUhf: st.approachUhf, opsUhf: st.opsUhf, lsoUhf: st.lsoUhf, atisVhf: st.atisVhf } : null,
       atc: atc ? { activeRunways: atc.activeRunways ?? null, shortPattern: atc.shortPattern ?? false, ifrMinVisM: atc.ifrMinVisM ?? null, ifrMinCloudFt: atc.ifrMinCloudFt ?? null, vfrMinVisM: atc.vfrMinVisM ?? null, vfrMinCloudFt: atc.vfrMinCloudFt ?? null } : null,
@@ -346,5 +357,5 @@ export function buildAirports(th) {
   const placeList = places.map((p) => ({ n: p.n, t: p.t, x: Math.round(p.x), y: Math.round(p.y) }))
     .sort((a, b) => rank[a.t] - rank[b.t] || a.n.localeCompare(b.n));
   terrain?.close();
-  return { airports, navaids, radio, places: placeList, geo: geoByCamp };
+  return { airports, navaids, radio, places: placeList, geo: geoByCamp, elevations };
 }

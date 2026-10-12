@@ -107,7 +107,15 @@ private val PAD_H = 12.dp
  * radios are the page's only list of the field's frequencies (they replaced the old "Radio frequencies" card).
  */
 @Composable
-internal fun DivertBlock(th: Theater, a: Airport, modifier: Modifier = Modifier) {
+internal fun DivertBlock(
+    th: Theater, a: Airport, modifier: Modifier = Modifier,
+    /** false: the tables alone, no card of their own (the Mission map's airfield card holds them) */
+    framed: Boolean = true,
+    /** the narrowest a column may be: the Mission map's card takes two narrower ones rather than one */
+    colWidth: Dp = RADIO_COL,
+    /** the width of a line's label ("APPROACH"); the Mission map's card takes a little less */
+    labelWidth: Dp = 64.dp,
+) {
     val ship = divertIsShip(a)
     val coords = remember(th, a.id) { divertCoords(th, a) }
     val clip = LocalClipboardManager.current
@@ -121,8 +129,8 @@ internal fun DivertBlock(th: Theater, a: Airport, modifier: Modifier = Modifier)
     // The width is worked out here, once: both tables lay their columns on it, so the coordinates' labels and
     // figures stand exactly over the radios'. As many columns as fit (at most three), each read downwards.
     BoxWithConstraints(modifier.fillMaxWidth()) {
-        val cols = ((maxWidth - PAD_H * 2 + RADIO_GAP) / (RADIO_COL + RADIO_GAP)).toInt().coerceIn(1, 3)
-        CompactBox("Info", Hud.Green, Modifier.fillMaxWidth().airfieldProbe("info")) {
+        val cols = ((maxWidth - (if (framed) PAD_H * 2 else 0.dp) + RADIO_GAP) / (colWidth + RADIO_GAP)).toInt().coerceIn(1, 3)
+        val body: @Composable ColumnScope.() -> Unit = {
             when {
                 ship -> {
                     Text("Moves with the ship", fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, color = Hud.Text)
@@ -139,10 +147,12 @@ internal fun DivertBlock(th: Theater, a: Airport, modifier: Modifier = Modifier)
             }
             // the coordinates, one tight block (LAT and LNG as BMS shows them, then ELEV), then a hairline, the radios
             val position = coordCells(a, coords)
-            if (position.isNotEmpty()) FieldTable(position, cols, copied, copy)
+            if (position.isNotEmpty()) FieldTable(position, cols, copied, copy, labelWidth)
             Box(Modifier.fillMaxWidth().padding(vertical = 6.dp).height(1.dp).background(Hud.Outline.copy(alpha = 0.55f)))
-            FieldTable(radios, cols, copied, copy)
+            FieldTable(radios, cols, copied, copy, labelWidth)
         }
+        if (framed) CompactBox("Info", Hud.Green, Modifier.fillMaxWidth().airfieldProbe("info"), body)
+        else Column(Modifier.fillMaxWidth(), content = body)
     }
 }
 
@@ -234,19 +244,19 @@ private fun radioCells(a: Airport, ship: Boolean): List<InfoCell> {
  * Base Ops, LSO down the next.
  */
 @Composable
-private fun FieldTable(cells: List<InfoCell>, cols: Int, copied: String?, copy: (String, String) -> Unit) {
+private fun FieldTable(cells: List<InfoCell>, cols: Int, copied: String?, copy: (String, String) -> Unit, labelWidth: Dp = 64.dp) {
     val rows = (cells.size + cols - 1) / cols
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(RADIO_GAP)) {
         for (ci in 0 until cols) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                cells.drop(ci * rows).take(rows).forEach { cell -> InfoRow(cell, copied == cell.key) { v -> copy(cell.key, v) } }
+                cells.drop(ci * rows).take(rows).forEach { cell -> InfoRow(cell, copied == cell.key, labelWidth) { v -> copy(cell.key, v) } }
             }
         }
     }
 }
 
 @Composable
-private fun InfoRow(c: InfoCell, copied: Boolean, onCopy: (String) -> Unit) {
+private fun InfoRow(c: InfoCell, copied: Boolean, labelWidth: Dp, onCopy: (String) -> Unit) {
     val shape = RoundedCornerShape(5.dp)
     val value = c.value?.takeIf { it.isNotBlank() }
     val copyText = c.copyText ?: value
@@ -258,7 +268,7 @@ private fun InfoRow(c: InfoCell, copied: Boolean, onCopy: (String) -> Unit) {
     ) {
         Text(
             c.label, style = LocalExtra.current.overline.copy(fontSize = 9.5.sp, letterSpacing = 0.6.sp), color = c.color,
-            maxLines = 1, softWrap = false, modifier = Modifier.width(64.dp),
+            maxLines = 1, softWrap = false, modifier = Modifier.width(labelWidth),
         )
         Text(
             value ?: "none", style = LocalExtra.current.mono.copy(fontSize = 14.5.sp, lineHeight = 18.sp), fontWeight = FontWeight.Bold,

@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.foundation.background
@@ -360,11 +363,16 @@ private fun AirportMap(th: Theater, set: AirportSet, directOpen: Boolean = false
     var navLabels by remember { mutableStateOf(Repo.getInt("map_nav_labels", 0) == 1) }
     var query by remember { mutableStateOf("") }
     var searchFocused by remember { mutableStateOf(false) }
+    // The suggestions stay open from the moment the pilot types until one is picked, cleared or the map is tapped —
+    // not only while the field has the keyboard: with a mouse, pressing a suggestion took the focus off the field
+    // first, the list closed under the pointer, and the click landed on the map (only typing a whole name worked).
+    var suggesting by remember { mutableStateOf(false) }
+    var highlighted by remember { mutableIntStateOf(0) }
     var marker by remember { mutableStateOf<MapHit?>(null) }
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     // zoom after the keyboard has closed, otherwise the view height changes under the fly-to and the target ends off-centre
-    val flyAfterKeyboard: (Double, Double, Float) -> Unit = { x, y, z -> focus.clearFocus(); scope.launch { kotlinx.coroutines.delay(350); state.flyTo(x, y, z) } }
+    val flyAfterKeyboard: (Double, Double, Double) -> Unit = { x, y, nm -> focus.clearFocus(); scope.launch { kotlinx.coroutines.delay(350); state.flyToSpan(x, y, nm) } }
 
     val shadow = androidx.compose.ui.graphics.Shadow(Color.Black, blurRadius = 5f)
     val labelStyle = remember { TextStyle(color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, shadow = shadow) }
@@ -398,12 +406,20 @@ private fun AirportMap(th: Theater, set: AirportSet, directOpen: Boolean = false
             }.sortedByDescending { it.second }.take(8).map { it.first }
         }
     }
+    /** A suggestion picked (click, tap, or Enter for the highlighted one): marked, and the map brought to it. */
+    val pick: (MapHit) -> Unit = { h ->
+        marker = h; picked = h.airport; suggesting = false
+        // close enough for an airfield to be drawn as its own diagram (AirfieldDiagrams); a town and its surroundings
+        flyAfterKeyboard(h.x, h.y, when (h.kind) { "Airfield" -> 6.0; "Navaid" -> 10.0; else -> 16.0 })
+        if (directOpen) h.airport?.let { onOpen(it.id) }
+    }
 
     Box(Modifier.fillMaxSize()) {
         TheaterMap(
             th.map, th.sizeFt, Modifier.fillMaxSize(), state, fillWidth = isWide(),
             onTap = { x, y, pr ->
                 focus.clearFocus()
+                suggesting = false
                 val best = set.airports.minByOrNull { hypot(it.x - x, it.y - y) }
                 picked = best?.takeIf { val p = pr.toScreen(it.x, it.y); val t = pr.toScreen(x, y); hypot((p.x - t.x).toDouble(), (p.y - t.y).toDouble()) < 60 }
                 if (directOpen) picked?.let { onOpen(it.id) }
@@ -425,8 +441,11 @@ private fun AirportMap(th: Theater, set: AirportSet, directOpen: Boolean = false
                 if (off(p)) return@forEach
                 val col = when (airportKind(a)) { "Carrier" -> Hud.Blue; "Airbase" -> Hud.Amber; else -> Hud.Green }
                 val sel = picked?.id == a.id
-                drawCircle(Color.Black.copy(alpha = 0.6f), if (sel) 13f else 9f, p)
-                drawCircle(col, if (sel) 10f else 6f, p)
+                // close in the field is drawn as its own diagram (AirfieldDiagrams), and its symbol steps aside
+                if (!com.bmscompanion.app.ui.components.AirfieldDiagrams.drawnAt(p)) {
+                    drawCircle(Color.Black.copy(alpha = 0.6f), if (sel) 13f else 9f, p)
+                    drawCircle(col, if (sel) 10f else 6f, p)
+                }
                 val text = when { fieldLabels == 2 -> a.name; fieldLabels == 1 -> a.icao ?: a.name; sel -> a.icao ?: a.name; else -> null }
                 val shown = text != null && (sel || placeLabel(tm, text, p + Offset(11f, -14f), labelStyle, placed))
                 if (sel && text != null) safeText(tm, text, p + Offset(11f, -14f), labelStyle)
@@ -470,30 +489,41 @@ private fun AirportMap(th: Theater, set: AirportSet, directOpen: Boolean = false
                 Box(Modifier.weight(1f)) {
                     if (query.isEmpty()) Text("Find airfield, ICAO, TACAN, navaid, town…", color = Hud.TextFaint, fontSize = 13.sp, maxLines = 1)
                     androidx.compose.foundation.text.BasicTextField(
-                        value = query, onValueChange = { query = it }, singleLine = true,
+                        value = query, onValueChange = { query = it; suggesting = true; highlighted = 0 }, singleLine = true,
                         textStyle = TextStyle(color = Hud.Text, fontSize = 14.sp),
                         cursorBrush = androidx.compose.ui.graphics.SolidColor(Hud.Cyan),
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search),
                         keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = {
-                            results.firstOrNull()?.let { h -> marker = h; picked = h.airport; flyAfterKeyboard(h.x, h.y, 6f); if (directOpen) h.airport?.let { onOpen(it.id) } }
+                            (results.getOrNull(highlighted) ?: results.firstOrNull())?.let(pick)
                         }),
-                        modifier = Modifier.fillMaxWidth().onFocusChanged { searchFocused = it.isFocused },
+                        modifier = Modifier.fillMaxWidth().onFocusChanged { searchFocused = it.isFocused; if (it.isFocused && query.isNotEmpty()) suggesting = true }
+                            // a keyboard: ↓ and ↑ move through the suggestions, Enter picks (the first unless moved), Escape closes
+                            .onPreviewKeyEvent { e ->
+                                if (e.type != androidx.compose.ui.input.key.KeyEventType.KeyDown || !suggesting || results.isEmpty()) return@onPreviewKeyEvent false
+                                when (e.key) {
+                                    androidx.compose.ui.input.key.Key.DirectionDown -> { highlighted = (highlighted + 1).coerceAtMost(results.size - 1); true }
+                                    androidx.compose.ui.input.key.Key.DirectionUp -> { highlighted = (highlighted - 1).coerceAtLeast(0); true }
+                                    androidx.compose.ui.input.key.Key.Enter, androidx.compose.ui.input.key.Key.NumPadEnter -> {
+                                        (results.getOrNull(highlighted) ?: results.first()).let(pick); true
+                                    }
+                                    androidx.compose.ui.input.key.Key.Escape -> { suggesting = false; true }
+                                    else -> false
+                                }
+                            },
                     )
                 }
                 if (query.isNotEmpty() || marker != null) {
-                    Icon(Icons.Default.Clear, "Clear", tint = Hud.TextDim, modifier = Modifier.size(20.dp).clickable { query = ""; marker = null })
+                    Icon(Icons.Default.Clear, "Clear", tint = Hud.TextDim, modifier = Modifier.size(20.dp).clickable { query = ""; marker = null; suggesting = false })
                 }
             }
-            if (searchFocused && results.isNotEmpty()) {
+            if (suggesting && results.isNotEmpty()) {
                 Column(
                     Modifier.widthIn(max = 560.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Hud.Surface.copy(alpha = 0.97f)).border(1.dp, Hud.Outline, RoundedCornerShape(12.dp)),
                 ) {
-                    results.forEach { h ->
+                    results.forEachIndexed { i, h ->
                         Row(
-                            Modifier.fillMaxWidth().clickable {
-                                marker = h; picked = h.airport; flyAfterKeyboard(h.x, h.y, if (h.kind == "Town") 7f else 6f)
-                                if (directOpen) h.airport?.let { onOpen(it.id) }
-                            }.padding(horizontal = 12.dp, vertical = 9.dp),
+                            Modifier.fillMaxWidth().background(if (i == highlighted) Hud.Cyan.copy(alpha = 0.14f) else Color.Transparent)
+                                .clickable { pick(h) }.padding(horizontal = 12.dp, vertical = 9.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Tag(h.kind, when (h.kind) { "Airfield" -> Hud.Amber; "Navaid" -> Hud.Cyan; "Town" -> Color(0xFFFFD27A); else -> Hud.TextDim })

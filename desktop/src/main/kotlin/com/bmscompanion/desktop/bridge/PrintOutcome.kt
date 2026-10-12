@@ -29,6 +29,7 @@ import com.bmscompanion.app.data.mission.MissionMode
 import com.bmscompanion.app.ui.screens.wdp.KneeboardPageHost
 import com.bmscompanion.app.ui.screens.wdp.KneeboardPages
 import com.bmscompanion.app.ui.screens.wdp.KneeboardPictures
+import com.bmscompanion.app.ui.screens.wdp.KneeboardTargets
 import com.bmscompanion.app.ui.screens.wdp.KneeboardPrintSession
 import com.bmscompanion.app.ui.screens.wdp.PlannerWindow
 import com.bmscompanion.app.ui.screens.wdp.PlannerWindowHost
@@ -227,13 +228,15 @@ object PrintOutcome {
                     "the window opened on the Mission set: Briefing + Weather on page ${set.getOrNull(0)}, DataCard on page ${set.getOrNull(1)}, Coordination on page ${set.getOrNull(2)}", "$plan")
                 stage.frames(20, 30)   // the thumbnails
                 stage.shot(File(pics, "window-linked.png"))
-                // the picker: a half set by its menu, then set back
+                // the picker: a half set by its menu, then set back to what the Mission set had there (since 1.3.9 the
+                // Coordination Card's left half, so the print below is still the whole set)
+                val was4L = KneeboardPrintSession.kind(4, 'L')
                 if (stage.click("Print/Pick/4L") && stage.click("Print/Kind/${KbKind.BLANK}")) {
                     check(KneeboardPrintSession.kind(4, 'L') == KbKind.BLANK, "the picker sets a half (page 4 left: Blank)", KneeboardPrintSession.kind(4, 'L'))
                     stage.shot(File(pics, "window-picked.png"))
-                    stage.click("Print/Pick/4L"); stage.click("Print/Kind/${KbKind.LEAVE}")
+                    stage.click("Print/Pick/4L"); stage.click("Print/Kind/$was4L")
                     stage.frames(12)
-                    check(KneeboardPrintSession.kind(4, 'L') == KbKind.LEAVE, "and back to Leave as it is", KneeboardPrintSession.kind(4, 'L'))
+                    check(KneeboardPrintSession.kind(4, 'L') == was4L, "and back to what it was ($was4L)", KneeboardPrintSession.kind(4, 'L'))
                 } else check(false, "the picker opens and offers the kinds", "no rectangle for Print/Pick/4L or Print/Kind/blank")
                 line("")
 
@@ -298,6 +301,21 @@ object PrintOutcome {
                 stage.click("Print/Print")
                 stage.until(180_000) { !KneeboardPrintSession.busy && KneeboardPrintSession.results.isNotEmpty() && KneeboardPrintSession.progress == null }
                 val again = KneeboardPrintSession.results
+                // the halves drawn the second time against the first: where they differ, when they do
+                if (captures.size == 12) for (i in 0 until 6) {
+                    val a = ImageIO.read(ByteArrayInputStream(captures[i].third)) ?: continue
+                    val b = ImageIO.read(ByteArrayInputStream(captures[i + 6].third)) ?: continue
+                    if (a.width != b.width || a.height != b.height) { line("  half ${order[i]}: drawn at another size the second time"); continue }
+                    var n = 0; var x0 = Int.MAX_VALUE; var y0 = Int.MAX_VALUE; var x1 = -1; var y1 = -1
+                    for (y in 0 until a.height) for (x in 0 until a.width) if (a.getRGB(x, y) != b.getRGB(x, y)) {
+                        n++; x0 = minOf(x0, x); y0 = minOf(y0, y); x1 = maxOf(x1, x); y1 = maxOf(y1, y)
+                    }
+                    if (n > 0) {
+                        line("  half ${order[i]}: $n pixels differ the second time, within x $x0-$x1, y $y0-$y1")
+                        ImageIO.write(a, "png", File(pics, "again-${order[i].first}-${order[i].second}-first.png"))
+                        ImageIO.write(b, "png", File(pics, "again-${order[i].first}-${order[i].second}-second.png"))
+                    }
+                }
                 val sameFiles = shaTree(root) == shaMid
                 check(again.size == 3 && again.all { it.status == KbFileResult.UNCHANGED } && sameFiles, "printing again changes nothing (the same page draws the same picture)",
                     again.joinToString { "${it.file} ${it.status}" } + if (sameFiles) "" else "; files changed")
@@ -729,14 +747,30 @@ object PrintOutcome {
             // the kind menu of a half, and every kind in it
             for (k in KneeboardPages.kinds) {
                 val want = if (k.id == KbKind.LEAVE) KbKind.BLANK else KbKind.LEAVE
-                press("Print/Pick/${b}L", "opens the kind menu", { s.cancelPicture(); s.set(b, 'L', want) }) { WdpProbe.rects.containsKey("planner/Print/Kind/${k.id}") }
+                press("Print/Pick/${b}L", "opens the kind menu", { s.cancelPicture(); KneeboardTargets.picking = null; s.set(b, 'L', want) }) { WdpProbe.rects.containsKey("planner/Print/Kind/${k.id}") }
                 if (k.id == KbKind.PICTURE) {
                     press("Print/Kind/${k.id}", "opens Browse picture for the half", {}, inMenu = true) { s.browse != null }
                     stage.onUi { s.cancelPicture() }
+                } else if (k.id == KbKind.TARGET_PICTURES) {
+                    press("Print/Kind/${k.id}", "sets the half to target pictures and opens the picker", {}, inMenu = true) {
+                        s.kind(b, 'L') == k.id && KneeboardTargets.picking?.n == b
+                    }
+                    stage.onUi { KneeboardTargets.picking = null }
                 } else {
                     press("Print/Kind/${k.id}", "sets the half to ${k.id}", {}, inMenu = true) { s.kind(b, 'L') == k.id }
                 }
             }
+            // the target pictures picker (1.4.0): its buttons; Default and Done only where the mission names targets
+            val t = KneeboardTargets
+            kotlinx.coroutines.runBlocking { t.load(force = true) }
+            val hasTargets = t.entries().isNotEmpty()
+            fun openPicker() { s.set(b, 'L', KbKind.TARGET_PICTURES); t.pick(b, 'L') }
+            if (hasTargets) {
+                press("Print/Tgt/Clear", "clears the picker's ticks", { openPicker() }) { t.picking?.draft?.isEmpty() == true }
+                press("Print/Tgt/Default", "ticks the list's first four again", {}) { t.picking?.draft?.isNotEmpty() == true }
+                press("Print/Tgt/Done", "closes the picker with the half's targets", {}) { t.picking == null && s.kind(b, 'L') == KbKind.TARGET_PICTURES }
+            } else line("  (the mission names no target with a model: the picker's Default and Done are not pressed)")
+            press("Print/Tgt/Cancel", "closes the picker", { openPicker() }) { t.picking == null }
             // the buttons under the table
             press("Print/MissionSet", "lays the Mission set", { s.leaveAll() }) { s.plan.isNotEmpty() && s.laidFor != null }
             press("Print/TestPage", "puts the test page on both knees of page $a", { s.missionSet(); s.selN = a; s.selSide = 'L' }) {

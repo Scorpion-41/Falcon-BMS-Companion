@@ -324,7 +324,9 @@ object CardWeather {
             windKts = row.windKt.getOrNull(tod) ?: row.windKt.lastOrNull(),
             visM = visM,
             tempC = temp,
-            cloudFt = row.cumulusFt,
+            // D98: a Sunny day has no cumulus (its cumulus entry still says 5,000 ft): BMS's printed briefing gives the
+            // type's high stratus as its Cloud Base (35,000 ft on 4.38.1's saves), Fair and worse their cumulus
+            cloudFt = if (k == 0 && row.stratusFt > 0) row.stratusFt else row.cumulusFt,
             dewC = temp?.let { dewPoint(it, visM) },
             qnhHpa = (row.qnhMb.getOrNull(tod) ?: row.qnhMb.lastOrNull())?.toDouble(),
         )

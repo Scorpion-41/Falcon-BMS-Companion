@@ -267,8 +267,39 @@ fun DedPanel(l: Live) {
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFF030A04)).border(1.dp, Hud.Green.copy(alpha = 0.3f), RoundedCornerShape(8.dp)).padding(10.dp),
     ) {
-        (lines ?: listOf("", "   DED NOT AVAILABLE", "")).forEach { s ->
-            Text(s.ifEmpty { " " }, fontFamily = Mono, fontSize = 15.sp, color = Color(0xFF7CFF9A), maxLines = 1, softWrap = false)
+        (lines ?: listOf("", "   DED NOT AVAILABLE", "")).forEachIndexed { i, s ->
+            Text(dedLine(s, if (lines != null) l.dedInvert.getOrNull(i) else null), fontFamily = Mono, fontSize = 15.sp, color = DedInk, maxLines = 1, softWrap = false)
+        }
+        // the Pilot Fault List, only while it shows something (BMS leaves it blank with no fault)
+        val pfl = l.pfl.takeIf { it.any { s -> s.isNotBlank() } }
+        if (pfl != null) {
+            Text("PFL", fontSize = 10.sp, color = Hud.TextFaint, modifier = Modifier.padding(top = 8.dp, bottom = 2.dp))
+            pfl.forEachIndexed { i, s ->
+                Text(dedLine(s, l.pflInvert.getOrNull(i)), fontFamily = Mono, fontSize = 15.sp, color = DedInk, maxLines = 1, softWrap = false)
+            }
+        }
+    }
+}
+
+private val DedInk = Color(0xFF7CFF9A)
+private val DedGround = Color(0xFF030A04)
+
+/**
+ * One DED line with its highlighted cells drawn as the jet draws them: inverse video, a block of the display's green
+ * with the glyph in the dark of the glass. [invert] is `Live.dedInvert`'s line (`#` = highlighted); the text is padded
+ * to it so a highlighted run of spaces (an empty scratchpad) still shows as a block.
+ */
+internal fun dedLine(text: String, invert: String?): androidx.compose.ui.text.AnnotatedString {
+    val inv = invert.orEmpty()
+    val s = text.padEnd(inv.length).ifEmpty { " " }
+    return androidx.compose.ui.text.buildAnnotatedString {
+        append(s)
+        var k = 0
+        while (k < inv.length && k < s.length) {
+            if (inv[k] != '#') { k++; continue }
+            val start = k
+            while (k < inv.length && k < s.length && inv[k] == '#') k++
+            addStyle(androidx.compose.ui.text.SpanStyle(color = DedGround, background = DedInk), start, k)
         }
     }
 }

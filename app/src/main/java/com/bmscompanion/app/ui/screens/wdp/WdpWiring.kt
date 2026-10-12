@@ -30,7 +30,12 @@ import com.bmscompanion.app.data.wdp.WdpValues
  *   typed as well as picked (WDP reads its Text); `"<updown>.increment"`: what its arrows add (1 by default);
  *   `"<updown>.arrows"` = `"click"`: its arrows come back by name rather than as the stepped value ([upDownArrow]);
  *   `"<name>.tip"`: its tooltip as the page works it out (WDP's `SetToolTip` at run time: a weapon's id, a comment),
- *   over the one in `tips/<form>.json`, and `""` for none ([WdpTips]).
+ *   over the one in `tips/<form>.json`, and `""` for none ([WdpTips]);
+ * - `"<box>.wrap"` = `"true"`: a box the page lays out again as it is typed, a word processor's line (the Briefing
+ *   page's prose, D100): it sends `"<box>.caret"` (the caret's place) before each change, and `"<box>.join"` =
+ *   `"back"`/`"fwd"` for Backspace at its start and Delete at its end; the page answers a change it lays out again
+ *   through [WdpRelayout] (the boxes' new texts, and the box and column the caret goes to), which the box takes
+ *   before its key handler returns.
  *
  * What comes back: [onValue] for a typed field (every keystroke, then `"<name>.leave"` when it is left: a press
  * elsewhere, Tab, Enter, its page going away), a slider, an up/down box (the value, when stepped or when what was

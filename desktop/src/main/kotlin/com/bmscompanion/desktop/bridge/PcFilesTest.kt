@@ -250,6 +250,8 @@ object PcFilesTest {
                 PcFiles.save("Save Callsign.ini File", dir.path, "Viper1", FileFilter.parse("Callsign DTC File|*.ini"), 0, ".ini")
             }
         }
+        // the Files tab's routes, under the same guards (FileViewTest.kt)
+        sb.append(FileViewTest.run(scratch))
         return sb.toString()
     }
 

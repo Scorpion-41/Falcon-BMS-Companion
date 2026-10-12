@@ -1125,6 +1125,46 @@ private fun Slider(c: WdpControl, values: WdpValues, scale: Float, p: Palette, b
 }
 
 /**
+ * **A page laying a box out again while it is typed in** (the Briefing page's prose, `"<name>.wrap"`, D100): the
+ * wiring, answering the box's change, posts the new texts and where the caret goes ([post]), and the box that was
+ * typed in takes them before its key handler returns ([TypingField]) — its own text and caret, the other boxes'
+ * texts, and the keyboard moved to the box the caret went to. Through the page's values the change would arrive two
+ * frames later, and the keys typed meanwhile went into the old text of the old box.
+ */
+internal object WdpRelayout {
+    /** The boxes' new texts (by control name), and the box that gets the caret at [caret]. */
+    class Move(val texts: Map<String, String>, val box: String, val caret: Int)
+
+    private var pending: Move? = null
+
+    /** A wiring's layout, for the box being typed in to take ([take]). */
+    fun post(move: Move) { pending = move }
+
+    internal fun take(): Move? = pending.also { pending = null }
+
+    internal fun clear() { pending = null }
+
+    /** A typed box on show: what sets its text and caret (null: kept), and what gives it the keyboard. */
+    internal class Box(val relaid: (String, Int?) -> Unit, val focus: () -> Unit)
+    /** the typed boxes on show, by `"<form>/<name>"` */
+    internal val boxes = HashMap<String, Box>()
+
+    /**
+     * [move] taken by the box [from] (`"<form>/<name>"`) that was typed in: every box of its form named in it shows its
+     * new text, the box with the caret has it at its place, and the keyboard goes there.
+     */
+    internal fun apply(from: String, move: Move) {
+        val form = from.substringBeforeLast('/')
+        for ((n, t) in move.texts) if (n != move.box) boxes["$form/$n"]?.relaid?.invoke(t, null)
+        val target = boxes["$form/${move.box}"]
+        WdpProbe.note("$from relayout: caret to ${move.box} at ${move.caret}" + if (target == null) " (not on show)" else "")
+        if (target == null) return
+        target.relaid(move.texts[move.box] ?: return, move.caret)
+        if ("$form/${move.box}" != from) target.focus()
+    }
+}
+
+/**
  * What a box being typed in keeps between drawings: the text and caret it shows, what the wiring said last, what the
  * box itself last sent it, and whether it has the keyboard.
  */
@@ -1142,6 +1182,29 @@ private class TypingState(shown: String) {
     var leavePending = false
     /** the control's rectangle in the scene, for [WdpTyping] */
     var bounds = Rect.Zero
+    /**
+     * the keyboard was moved to this box by a layout of the page's ([WdpRelayout]) and its focus event has not come
+     * yet (Compose delivers it a frame later, while keys already arrive): the box counts as typed in meanwhile
+     */
+    var keysComing = false
+
+    /**
+     * the text a layout of the page's took from this box ([relaid]): the text field may hand it back once more as a
+     * change, which is not one (it would be typed twice); forgotten at the first other change
+     */
+    var replaced: String? = null
+    /** the page's value before a layout given directly ([relaid]), until the page's values have caught up ([take]) */
+    private var lagging: String? = null
+
+    /** A layout of the page's ([WdpRelayout]): [text] with the caret at [caret] (null: kept where it is). */
+    fun relaid(text: String, caret: Int?) {
+        if (tfv.text != text) replaced = tfv.text
+        if (incoming != text) lagging = incoming
+        sent.clear()
+        incoming = text
+        tfv = TextFieldValue(text, if (caret != null) TextRange(caret.coerceIn(0, text.length))
+            else TextRange(tfv.selection.start.coerceAtMost(text.length), tfv.selection.end.coerceAtMost(text.length)))
+    }
 
     /**
      * The wiring's value, [shown], against what the box holds. It is taken when the box is not being typed in, and
@@ -1150,6 +1213,13 @@ private class TypingState(shown: String) {
      * stays where the pilot put it and no keystroke is lost however late the wiring answers.
      */
     fun take(shown: String) {
+        // the page's values reach a box a frame or two after a layout it was given directly ([relaid]): the value it
+        // had before is not news
+        if (lagging != null) {
+            if (shown == lagging) return
+            lagging = null
+        }
+        val focused = focused || keysComing
         if (shown != incoming) {
             if (!focused || shown !in sent) {
                 tfv = if (focused) TextFieldValue(shown, TextRange(tfv.selection.start.coerceAtMost(shown.length), tfv.selection.end.coerceAtMost(shown.length)))
@@ -1230,6 +1300,19 @@ private fun TypingField(
         WdpProbe.boxes[key] = st.tfv
         if (hasKeys) WdpProbe.focused = key else if (WdpProbe.focused == key) WdpProbe.focused = null
     }
+    // the box as a layout of the page's reaches it ([WdpRelayout]): its text, and the keyboard
+    androidx.compose.runtime.DisposableEffect(key, st) {
+        val box = WdpRelayout.Box(
+            relaid = { t, caret -> st.relaid(t, caret) },
+            focus = {
+                st.keysComing = true
+                if (!st.armed && WdpTouch.device && !st.focused) st.armed = true
+                runCatching { requester.requestFocus() }
+            },
+        )
+        WdpRelayout.boxes[key] = box
+        onDispose { if (WdpRelayout.boxes[key] === box) WdpRelayout.boxes.remove(key) }
+    }
     // On a finger's device (WdpTouch.device) a box is typed in the bar on the keyboard (WdpEditBar), so on the page it
     // is only its text until something gives it the keyboard here: a mouse's press, a finger the page did not take for
     // the bar, or the wiring's "<name>.focus". A text field is heavy to compose (selection, magnifier, menus, an input
@@ -1257,12 +1340,21 @@ private fun TypingField(
         }
         return
     }
+    // a wrapping box (`"<name>.wrap"`): the caret goes with each change, Backspace at the start and Delete at the end
+    // join a line to the one it carries on, and the page's layout is taken at once ([WdpRelayout])
+    val wraps = values["${c.name}.wrap"] == "true"
+    fun relayout() { WdpRelayout.take()?.let { WdpRelayout.apply(key, it) } }
     // armed by a press: the keyboard comes to it at once, as the press would have given it
     if (st.armed && !hasKeys) androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { requester.requestFocus() } }
     BasicTextField(
         value = st.tfv,
         onValueChange = { new ->
             if (WdpProbe.on) WdpProbe.note("$key change '${new.text}' ${new.selection}")
+            // the text field repeating the text a layout of the page's has just replaced ([TypingState.relaid]) is no edit
+            if (st.replaced != null) {
+                if (new.text == st.replaced) return@BasicTextField
+                st.replaced = null
+            }
             val t = accept(new.text)
             // a character the box does not take (a letter in a number box) is simply not there: nothing moves
             val v = when {
@@ -1275,9 +1367,11 @@ private fun TypingField(
             if (changed) {
                 st.leavePending = true
                 if (perKey) {
+                    if (wraps) { WdpRelayout.clear(); latestValue.value("${c.name}.caret", v.selection.end.toString()) }
                     st.sent += v.text
                     if (st.sent.size > 32) st.sent.removeAt(0)
                     latestValue.value(c.name, v.text)
+                    if (wraps) relayout()
                 }
             }
         },
@@ -1285,6 +1379,8 @@ private fun TypingField(
             .focusRequester(requester)
             .onFocusChanged { f ->
                 WdpProbe.note("$key focus " + f.isFocused)
+                st.keysComing = false
+                if (!f.isFocused) st.replaced = null
                 if (f.isFocused && !st.focused) {
                     st.focused = true
                     st.leavePending = true
@@ -1303,6 +1399,12 @@ private fun TypingField(
                 if (WdpProbe.on && e.type == KeyEventType.KeyDown) WdpProbe.note("$key key ${e.key} on '${st.tfv.text}' ${st.tfv.selection}")
                 when {
                     e.type == KeyEventType.KeyDown && singleLine && (e.key == Key.Enter || e.key == Key.NumPadEnter) -> { enter(); true }
+                    wraps && e.type == KeyEventType.KeyDown && e.key == Key.Backspace && st.tfv.selection.collapsed && st.tfv.selection.start == 0 -> {
+                        WdpRelayout.clear(); st.leavePending = true; latestValue.value("${c.name}.join", "back"); relayout(); true
+                    }
+                    wraps && e.type == KeyEventType.KeyDown && e.key == Key.Delete && st.tfv.selection.collapsed && st.tfv.selection.start == st.tfv.text.length -> {
+                        WdpRelayout.clear(); st.leavePending = true; latestValue.value("${c.name}.join", "fwd"); relayout(); true
+                    }
                     e.type == KeyEventType.KeyDown && e.key == Key.Tab -> {
                         val moved = focusManager.moveFocus(if (e.isShiftPressed) FocusDirection.Previous else FocusDirection.Next)
                         if (!moved) focusManager.clearFocus()

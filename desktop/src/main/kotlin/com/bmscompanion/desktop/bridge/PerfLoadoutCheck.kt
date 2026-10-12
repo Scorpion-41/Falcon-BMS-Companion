@@ -73,6 +73,7 @@ internal object PerfLoadoutCheck {
             devices(out, briefing, cartridge, theater)
             charts(out, briefing, cartridge, theater)
             handOff(briefing, cartridge, theater)
+            cft(briefing, cartridge, theater)
             if (otherBriefing != null) otherAircraft(out, otherBriefing, theater)
         } finally {
             WdpProbe.on = false
@@ -186,6 +187,70 @@ internal object PerfLoadoutCheck {
                 ok(top() == null && page["lblLoadout_val"] == load, "OK hands the new load to the page (${page["lblLoadout_val"]})")
                 ok(g1 == page["lblGross_Val"] && g1 != g0 && d1 == page["lblDrag_Val"],
                     "the card has the new gross weight and drag at once, its page never opened ($g0 → $g1, drag $d1)")
+            }
+        } finally { edt { WdpDialogs.stack.clear() } }
+    }
+
+    // ------------------------------------------------------------------------------------------------ CFT (1.4.0, D97)
+
+    /**
+     * The Loadout window's CFT switch on a jet that can carry conformal tanks: the first Type whose window offers it.
+     * Fitted, the window's internal fuel, empty weight and drag grow by the tanks' (3,060 lb, 1,700 lb, 20); Apply
+     * hands them to the page; off again and Apply puts the page back.
+     */
+    private fun cft(briefing: File?, cartridge: File?, theater: com.bmscompanion.app.data.Theater?) {
+        text.appendLine("\n== Conformal tanks (the Loadout window's CFT switch)")
+        val p = page(briefing, cartridge, theater)
+        val items = v(p)["cboType.items"].orEmpty().split('\n').filter { it.isNotBlank() }
+        try {
+            var found: String? = null
+            for (t in items.sortedByDescending { it.contains("CFT", true) || it.contains("52+") }) {
+                edt { p.onValue("cboType", t) }
+                edt { p.onClick("btnLoadout") }
+                val has = edt { top()?.wiring?.values(emptyList())?.get("cft") }.orEmpty()
+                if (has.isNotEmpty()) { found = t; break }
+                edt { top()?.wiring?.onClick("btnCancel"); WdpDialogs.stack.clear() }
+            }
+            ok(found != null, "a Type with conformal tanks offers the CFT switch (${found ?: "none of ${items.size}"})")
+            val w = edt { top()?.wiring } ?: return
+            fun wv(k: String) = edt { w.values(emptyList())[k].orEmpty() }
+            val on0 = wv("cft") == "true"
+            val fuel0 = wv("lblFuelIntW").toIntOrNull() ?: 0
+            val empty0 = wv("lblEmptyW").toIntOrNull() ?: 0
+            val drag0 = wv("lblDragVal").toIntOrNull() ?: 0
+            val page0 = v(p)
+            info("$found: CFT ${if (on0) "fitted" else "off"}, internal fuel $fuel0, empty $empty0, drag $drag0")
+            // to fitted (off first, when the type starts with them)
+            if (on0) edt { (w as com.bmscompanion.app.ui.screens.wdp.PerfLoadoutWindow).toggleCft() }
+            val fuelOff = wv("lblFuelIntW").toIntOrNull() ?: 0
+            val emptyOff = wv("lblEmptyW").toIntOrNull() ?: 0
+            val dragOff = wv("lblDragVal").toIntOrNull() ?: 0
+            edt { (w as com.bmscompanion.app.ui.screens.wdp.PerfLoadoutWindow).toggleCft() }
+            val fuelOn = wv("lblFuelIntW").toIntOrNull() ?: 0
+            val emptyOn = wv("lblEmptyW").toIntOrNull() ?: 0
+            val dragOn = wv("lblDragVal").toIntOrNull() ?: 0
+            ok(wv("cft") == "true" && fuelOn - fuelOff == 3060 && emptyOn - emptyOff == 1700 && dragOn - dragOff == 20,
+                "CFT on: the window's internal fuel +${fuelOn - fuelOff}, empty +${emptyOn - emptyOff}, drag +${dragOn - dragOff} (3,060 / 1,700 / 20)")
+            edt { w.onClick("btnOK") }
+            yes()
+            val page1 = v(p)
+            val tf0 = page0["lblFuel_val"]?.trim()?.toIntOrNull()
+            val tf1 = page1["lblFuel_val"]?.trim()?.toIntOrNull()
+            info("page: take-off fuel ${page0["lblFuel_val"]} → ${page1["lblFuel_val"]}, empty ${page0["lblEmpty_Val"]} → ${page1["lblEmpty_Val"]}, drag ${page0["lblDrag_Val"]} → ${page1["lblDrag_Val"]}")
+            ok(top() == null && page1["lblEmpty_Val"] == emptyOn.toString() && tf1 != null && (on0 || tf0 != null && tf1 - tf0 == 3060) && page1["lblDrag_Val"] == dragOn.toString(),
+                "Apply hands the tanks to the page: empty ${page1["lblEmpty_Val"]}, take-off fuel ${page1["lblFuel_val"]}, drag ${page1["lblDrag_Val"]}")
+            // off again
+            edt { p.onClick("btnLoadout") }
+            val w2 = edt { top()?.wiring }
+            ok(w2 != null && edt { w2.values(emptyList())["cft"] } == "true", "the window opens again with the tanks fitted")
+            if (w2 != null) {
+                edt { (w2 as com.bmscompanion.app.ui.screens.wdp.PerfLoadoutWindow).toggleCft() }
+                edt { w2.onClick("btnOK") }
+                yes()
+                val page2 = v(p)
+                val tf2 = page2["lblFuel_val"]?.trim()?.toIntOrNull()
+                ok(page2["lblEmpty_Val"] == emptyOff.toString() && tf1 != null && tf2 != null && tf1 - tf2 == 3060 && page2["lblDrag_Val"] == dragOff.toString(),
+                    "off again: empty ${page2["lblEmpty_Val"]}, take-off fuel ${page2["lblFuel_val"]}, drag ${page2["lblDrag_Val"]}")
             }
         } finally { edt { WdpDialogs.stack.clear() } }
     }

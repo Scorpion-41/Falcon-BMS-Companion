@@ -75,7 +75,7 @@ import kotlin.math.roundToInt
 
 /** Map look, shared by every map and remembered across launches. */
 object MapLook {
-    val styles = listOf("relief" to "Relief", "satellite" to "Satellite", "dark" to "Dark", "chart" to "Chart")
+    val styles = listOf("relief" to "Relief", "satellite" to "Satellite", "dark" to "Dark", "chart" to "Chart", "topo" to "Topographic")
 
     var style by mutableStateOf(Repo.getString("map_style")?.takeIf { s -> styles.any { it.first == s } } ?: "relief")
         private set
@@ -92,7 +92,10 @@ object MapLook {
     fun showProvinces(on: Boolean) { provinces = on; Repo.putInt("map_provinces", if (on) 1 else 0) }
     fun showPlaces(level: Int) { places = level.coerceIn(0, MISSION); Repo.putInt("map_places", places) }
 
-    val light get() = style == "chart"
+    /** a paper-light style (Chart, Topographic): the mission's inks are drawn dark over it */
+    val light get() = isLight(style)
+    /** [s] is a paper-light style: Chart or Topographic */
+    fun isLight(s: String?) = s == "chart" || s == "topo"
     const val MISSION = 4
     /** menu order: value to label */
     val placeOptions = listOf(0 to "Off", MISSION to "Mission", 1 to "Cities", 2 to "Cities and towns", 3 to "All places")
@@ -134,19 +137,77 @@ fun mapIdOf(imagePath: String?): String? = imagePath?.removePrefix("maps/")?.sub
 private const val TILE = 512
 /** Tile levels bundled with the app (tools/extractor/src/maps.mjs): z2 = 2048 px across the theater … z4 = 8192 px. */
 /** tiles held in memory: one screen needs about a dozen, the rest is head-room for panning */
-private const val MAX_TILES = 32
+private const val MAX_TILES = 40
 /** half-size tiles on devices with little memory (a quarter of the pixels) */
 internal val tileSample get() = if (Repo.lowMemory) 2 else 1
 private const val MIN_Z = 2
+/** the deepest level bundled with the apps; keep equal to MAX_Z in tools/extractor/src/maps.mjs */
 private const val MAX_Z = 4
+
+/**
+ * The levels past the bundled ones: drawn by the BMS PC from Falcon BMS's own terrain (`GET /api/maptile`,
+ * desktop `MapTiles`) — the height map for Relief, Dark, Chart and Topographic, BMS's photoreal textures for
+ * Satellite — and fetched while the map shows them. Nothing is kept on the device's disk: the decoded tiles live in
+ * the map's own set ([MAX_TILES]) and the fetched bytes in a small memory cache ([BYTES]); a browser keeps them in its
+ * HTTP cache for a day. Without a PC (or with one that has no BMS) the map shows the deepest bundled level enlarged.
+ */
+object MapDeep {
+    /** the deepest level the PC draws (Korea: 0.49 m a pixel, BMS's Hires photoreal) */
+    const val MAX_Z = 12
+    /** the map zooms one step past the deepest level */
+    private const val MAX_SIDE = (TILE.toFloat() * (1 shl (MAX_Z + 1)))
+    private const val BYTES = 24 * 1024 * 1024
+    private const val SUFFIX = ".pc"
+    /** a failed fetch is tried again after this long (the PC may come back, or BMS be found) */
+    internal const val RETRY_MS = 20_000L
+
+    /** The deepest level bundled for [style]: the Topographic style bundles the overview, z2 and z3. */
+    fun bundledMax(style: String) = if (style == "topo") 3 else BUNDLED_MAX_Z
+
+    /** The largest zoom for a map whose square is [cover] px at scale 1: the page's own limit, or deeper on a theater map. */
+    fun maxScale(imagePath: String?, cover: Float, pageMax: Float): Float =
+        if (mapIdOf(imagePath) == null || cover <= 0f) pageMax else max(pageMax, MAX_SIDE / cover)
+
+    internal fun key(id: String, style: String, z: Int, r: Int, c: Int) =
+        "maps/$id/$style/$z/${r}_$c" + if (z > bundledMax(style)) SUFFIX else ".webp"
+
+    internal fun isDeep(key: String) = key.endsWith(SUFFIX)
+
+    /** set by a headless check that draws the PC's tiles without a link: path → bytes */
+    var fetcher: (suspend (String) -> ByteArray?)? = null
+
+    private val cache = LinkedHashMap<String, ByteArray>()
+    private var cached = 0
+
+    /** A deep tile, fetched (or from memory) and decoded; null when the PC cannot give it now. Main thread only. */
+    internal suspend fun load(key: String): ImageBitmap? {
+        val parts = key.removeSuffix(SUFFIX).split('/')
+        if (parts.size != 5) return null
+        val (r, c) = parts[4].split('_').let { (it.getOrNull(0)?.toIntOrNull() ?: return null) to (it.getOrNull(1)?.toIntOrNull() ?: return null) }
+        val path = "/api/maptile?map=${parts[1]}&style=${parts[2]}&z=${parts[3]}&r=$r&c=$c"
+        val bytes = cache.remove(path)?.also { cache[path] = it }
+            ?: (fetcher?.invoke(path) ?: com.bmscompanion.app.data.mission.MissionLink.fetchBytes(path, 12_000))?.also { b ->
+                cache[path] = b
+                cached += b.size
+                val it = cache.entries.iterator()
+                while (cached > BYTES && it.hasNext()) { val e = it.next(); cached -= e.value.size; it.remove() }
+            }
+            ?: return null
+        return Repo.decodeBitmap(bytes, tileSample)?.asImageBitmap()
+    }
+}
+/** [MAX_Z] where [MapDeep]'s own shadows it */
+private const val BUNDLED_MAX_Z = MAX_Z
 
 /** Loaded images of one map, and the tiles the last frame asked for. */
 class MapBaseState(val mapId: String?) {
     val images = mutableStateMapOf<String, ImageBitmap>()
     internal val wanted = LinkedHashSet<String>()
     internal val loading = HashSet<String>()
-    internal val failed = HashSet<String>()
+    /** when each tile failed: a bundled one stays failed, a PC one is tried again after [MapDeep.RETRY_MS] */
+    internal val failed = HashMap<String, Long>()
     var lastOverview: ImageBitmap? = null
+    internal fun blocked(key: String, now: Long): Boolean = failed[key]?.let { !MapDeep.isDeep(key) || now - it < MapDeep.RETRY_MS } ?: false
 }
 
 @Composable
@@ -158,14 +219,16 @@ fun rememberMapBase(imagePath: String?): MapBaseState {
         while (true) {
             // toList().asReversed(), never LinkedHashSet.reversed(): that is Java 21 (SequencedCollection), which
             // compiles against API 35 but does not exist before Android 15 (NoSuchMethodError on Android 9).
-            val next = state.wanted.toList().asReversed().filter { it !in state.images && it !in state.loading && it !in state.failed }.take(4 - state.loading.size)
+            val now = System.currentTimeMillis()
+            val next = state.wanted.toList().asReversed().filter { it !in state.images && it !in state.loading && !state.blocked(it, now) }.take(4 - state.loading.size)
             for (key in next) {
                 state.loading += key
                 launch {
-                    // the same bitmap object is shared with Repo's cache, so this costs nothing extra and avoids re-decoding
-                    val bmp = Repo.bitmap(key, sample = tileSample)
+                    // the same bitmap object is shared with Repo's cache, so this costs nothing extra and avoids re-decoding;
+                    // a level past the bundled ones comes from the PC (MapDeep)
+                    val img = if (MapDeep.isDeep(key)) MapDeep.load(key) else Repo.bitmap(key, sample = tileSample)?.asImageBitmap()
                     state.loading -= key
-                    if (bmp == null) state.failed += key else state.images[key] = bmp.asImageBitmap()
+                    if (img == null) state.failed[key] = System.currentTimeMillis() else { state.failed -= key; state.images[key] = img }
                 }
             }
             // keep memory bounded: drop tiles the last frame didn't need (a full view needs about a dozen)
@@ -191,7 +254,9 @@ fun DrawScope.drawMapBase(pr: MapProjection, base: MapBaseState, fallbackImage: 
     val overview = overviewKey?.let { base.images[it] } ?: base.lastOverview ?: fallbackImage
     if (overviewKey != null && overviewKey !in base.images) wanted += overviewKey
     val tiled = id != null && pr.side >= 1300f && !(pr.left + pr.side < 0 || pr.top + pr.side < 0 || pr.left > size.width || pr.top > size.height)
-    val target = ceil(ln(pr.side / TILE.toDouble()) / ln(2.0)).toInt().coerceIn(MIN_Z, MAX_Z)
+    // past the bundled levels the PC draws the tiles (MapDeep); the bundled top level stays under them until they come
+    val top = MapDeep.bundledMax(style)
+    val target = ceil(ln(pr.side / TILE.toDouble()) / ln(2.0)).toInt().coerceIn(MIN_Z, if (id != null) MapDeep.MAX_Z else top)
     // Once the sharpest level's tiles cover the view, the coarser ones under them are never seen: drawing them anyway
     // filled the whole screen up to four times a frame, and a tablet's GPU spent most of a pan's frame on that.
     val covered = tiled && targetCovered(pr, base, id!!, style, target)
@@ -200,6 +265,9 @@ fun DrawScope.drawMapBase(pr: MapProjection, base: MapBaseState, fallbackImage: 
     }
     overview?.let { if (overviewKey != null && base.images[overviewKey] != null) base.lastOverview = it }
     if (!tiled) return
+    // Deep in, two more levels are kept wanted under the one asked of the PC: the bundled top level (on the device,
+    // there at once, and all there is without a PC) and one three steps up (one PC tile, sharp enough while the rest come).
+    val backing = if (target > top) setOfNotNull(top, (target - 3).takeIf { it > top }) else emptySet()
     for (z in (if (covered) target else MIN_Z)..target) {
         val count = 1 shl z
         val ts = pr.side / count
@@ -207,11 +275,12 @@ fun DrawScope.drawMapBase(pr: MapProjection, base: MapBaseState, fallbackImage: 
         val c1 = floor((size.width - pr.left) / ts).toInt().coerceIn(0, count - 1)
         val r0 = floor((-pr.top) / ts).toInt().coerceIn(0, count - 1)
         val r1 = floor((size.height - pr.top) / ts).toInt().coerceIn(0, count - 1)
+        val keep = z == target || z in backing
         for (r in r0..r1) for (c in c0..c1) {
-            val key = "maps/$id/$style/$z/${r}_$c.webp"
+            val key = MapDeep.key(id!!, style, z, r, c)
             val img = base.images[key]
-            if (img == null) { if (z == target) wanted += key; continue }
-            if (z == target) wanted += key // still needed: keep it cached
+            if (img == null) { if (keep) wanted += key; continue }
+            if (keep) wanted += key // still needed: keep it cached
             val x0 = (pr.left + c * ts).roundToInt(); val x1 = (pr.left + (c + 1) * ts).roundToInt()
             val y0 = (pr.top + r * ts).roundToInt(); val y1 = (pr.top + (r + 1) * ts).roundToInt()
             drawImage(img, dstOffset = IntOffset(x0, y0), dstSize = IntSize(x1 - x0, y1 - y0))
@@ -229,7 +298,7 @@ private fun DrawScope.targetCovered(pr: MapProjection, base: MapBaseState, id: S
     val c1 = floor((size.width - pr.left) / ts).toInt().coerceIn(0, count - 1)
     val r0 = floor((-pr.top) / ts).toInt().coerceIn(0, count - 1)
     val r1 = floor((size.height - pr.top) / ts).toInt().coerceIn(0, count - 1)
-    for (r in r0..r1) for (c in c0..c1) if (base.images["maps/$id/$style/$z/${r}_$c.webp"] == null) return false
+    for (r in r0..r1) for (c in c0..c1) if (base.images[MapDeep.key(id, style, z, r, c)] == null) return false
     return true
 }
 
@@ -465,7 +534,8 @@ fun DrawScope.drawLandmarks(pr: MapProjection, g: GeoPaths, tm: TextMeasurer, mi
             if (c.x < -40 || c.y < -40 || c.x > size.width + 40 || c.y > size.height + 40) continue
             val radiusFt = when (level) { 1 -> 9000.0; 2 -> 4200.0; else -> 1900.0 }
             val rPx = (radiusFt / 6076.12 * pr.pxPerNm).toFloat()
-            val ring = rPx >= 5f
+            // a ring far larger than the page (deep in) is a dashed circle of thousands of dashes nobody sees whole
+            val ring = rPx >= 5f && rPx < 3f * max(size.width, size.height)
             if (ring) {
                 drawCircle(ringFill, rPx, c)
                 // A dashed circle is stroked and dashed on the processor every frame (the GPU draws only a plain one
@@ -512,7 +582,9 @@ internal fun DrawScope.drawLandmarkLines(pr: MapProjection, g: GeoPaths) {
         // Zoomed far enough in that divides the dash intervals to zero, and Skia answers a dash of nothing with a
         // null effect — which Compose then tries to wrap, and the window dies with "Can't wrap nullptr". A dash
         // nobody could see is not worth a crash: below that, the line is simply drawn solid.
-        val effect = dash?.let { d ->
+        // Deep in (past the bundled levels) one cell of the grid holds tens of kilometres of line dashed every few
+        // metres: the line is drawn solid there, which is also how a border looks at that scale.
+        val effect = dash?.takeIf { pr.side < 300_000f }?.let { d ->
             val lengths = FloatArray(d.size) { d[it] * dp * unit }
             if (lengths.any { it > 0f } && lengths.all { it.isFinite() && it >= 0f }) PathEffect.dashPathEffect(lengths) else null
         }

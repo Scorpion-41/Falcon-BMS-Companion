@@ -286,9 +286,32 @@ which its own default minimum of 28 reaches; the app's carries on at the ends.
 WeatherGen also writes a `.twx`; the app does not. BMS writes the `.twx` itself, with SAVE WTH in a TE and with every
 campaign save, and WeatherGen's own template admits "most of the below doesn't work".
 
-## The page
+## Mission weather (the tab's first page, 1.4.0)
 
-The Weather tab is the generator and nothing else. Above it is one row, the **theater** selector: every theater BMS
+The Weather tab has two pages: **Mission weather**, first, and **Make weather**, the generator (below). Mission weather
+is read only and shows, on every device, the weather the mission flies, drawn over the theater with the route, the
+flight's airfields and the target on top. The PC reads it (`GET /api/weather/mission`, docs/PROTOCOL.md) from the save
+BMS flies — in EZBoards mode the newest save of the theater and the printed flight in it, in WDP mode the populated save
+and flight — through the same reading of its `.twx` as the Planner's card and Populate (*Who reads the weather*).
+
+- **Map Model**: the save's own `<save>.fmap`; with MAPS AUTO UPDATE on, the update map in force at the save's clock
+  and every later one to six hours past the landing (at most 36), stepped with a time line that marks the save's clock,
+  the take-off, the time over target and the landing. Layers: one colouring (cloud cover with its base, precipitation —
+  BMS rains in inclement cells and snows at or below 0 °C, plus a version 8 map's shower flag —, visibility or
+  temperature), the wind barbs at any of the ten levels, and QNH isobars (marching squares over the cell centres, a
+  dozen lines at most). A tap gives a cell's whole column. Beside the map: the figures at the take-off, target and
+  landing cells on the map shown, and the briefing's own block. The header's drift between updates is **not** applied
+  (its units and sense are untested in the sim); the page says so.
+- **Probabilistic / Deterministic**: there is no map, and none is drawn. The page lays a wash of the current type over
+  the theater and gives the four types' tables from the `.twx`, the type now, and how BMS changes it: the four chances
+  and the change interval, or the Deterministic schedule (six changes at byte 244) with the caveat that campaigns have
+  been seen to change off it (*Weather changes by itself*).
+
+Weather pictures a pilot keeps on the PC (PNG, JPG) open in the Mission section's **Files** tab; the page says so.
+
+## Make weather (the generator)
+
+Above the generator is one row, the **theater** selector: every theater BMS
 defines (one that cannot be written listed greyed, with the reason), opening on the one Falcon BMS is running (marked
 "running"); with no PC, the theater the app is set to, so the preview still works. The map under the weather is always
 the theater being edited, which need not be the one being flown. The Save panel ends with the steps in BMS (*How a map
@@ -425,5 +448,8 @@ and checks the settings kept beside them.
   Landing, or repeats the current weather (a Fair save printed Fair in all three).
 - **The time of day** in version 8's single temperature and pressure per type: whether BMS applies a night/dawn/day
   curve to them.
-- **Reading the campaign's live weather** (`WeatherMapsUpdates`) onto the mission map: cloud base and visibility
-  under the route, wind at each steerpoint's altitude. Entirely read-only, and the decode above already covers it.
+- **The live weather on the mission map itself** (cloud base and visibility under the route, wind at each steerpoint's
+  altitude): the Weather tab's Mission weather page draws the maps over the theater (1.4.0); the Mission map does not
+  yet carry them.
+- **Mission weather's update series has been checked only on a synthesised series** (`--wxviewrender` writes hourly
+  maps into its copy): no install on the development machine has a save with MAPS AUTO UPDATE on.

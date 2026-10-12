@@ -276,6 +276,45 @@ object WxRender {
         multi.regions = setOf(0, 2)
         multi.removeOverrides(setOf(0))
         check("removing a region renumbers the rest of the selection", multi.regions == setOf(1), "${multi.regions}")
+        // Select several on a touch screen, then the banner's Clear pressed by a finger: the button's, not the map's
+        // (the map took every press in Select several on the way down, so Clear picked the cell under it — 1.4.0 test build)
+        run {
+            val tapped = state()
+            tapped.multi = true
+            tapped.cells = setOf(20 to 20, 21 to 20, 22 to 21)
+            tapped.grid = WxModel.grid(tapped.params)
+            val probeWas = com.bmscompanion.app.ui.screens.wdp.WdpProbe.on
+            com.bmscompanion.app.ui.screens.wdp.WdpProbe.on = true
+            val scene = ImageComposeScene(1000, 800, Density(1f)) {
+                CompositionLocalProvider(LocalConfiguration provides Configuration(1000, 800)) {
+                    Box(Modifier.fillMaxSize().background(Hud.Bg)) {
+                        WeatherGenBody(th, null, online = false, busy = false, error = null, onBusy = {}, onState = {}, reload = {}, st = tapped)
+                    }
+                }
+            }
+            try {
+                var t = 0L
+                repeat(20) { scene.render(t); t += 50_000_000; Thread.sleep(20) }
+                val r = com.bmscompanion.app.ui.screens.wdp.WdpProbe.rects["weather/banner-action"]
+                if (r == null) check("the banner's Clear is on the map in Select several", false, "no banner-action rect")
+                else {
+                    val at = r.center
+                    scene.sendPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Press, at, type = androidx.compose.ui.input.pointer.PointerType.Touch)
+                    repeat(3) { scene.render(t); t += 16_000_000 }
+                    scene.sendPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Release, at, type = androidx.compose.ui.input.pointer.PointerType.Touch)
+                    repeat(10) { scene.render(t); t += 16_000_000; Thread.sleep(10) }
+                    check(
+                        "Select several: a finger on the banner's Clear clears the picked cells (it does not pick the cell under it)",
+                        tapped.cells.isEmpty() && tapped.selected == null, "cells ${tapped.cells}",
+                    )
+                }
+            } catch (e: Exception) {
+                check("the banner's Clear tap", false, "${e::class.simpleName}: ${e.message}")
+            } finally {
+                scene.close()
+                com.bmscompanion.app.ui.screens.wdp.WdpProbe.on = probeWas
+            }
+        }
         foldsWere.forEach { (k, v) -> if (v < 0) Repo.putString("open_wx_$k", null) else Repo.putInt("open_wx_$k", v) }
 
         // ---- each theater its own weather: switching theater switches the settings, so the grid changes with the map

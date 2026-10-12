@@ -323,13 +323,16 @@ object WdpRender {
         }
         val probe = com.bmscompanion.app.ui.screens.wdp.WdpProbe
         probe.on = true
+        // BMSC_WDP_PAGE=<page> (e.g. briefing; with BMSC_WDP_ONLY=widths): that page alone at every size, no windows,
+        // and a 1600 x 1000 window besides
+        val pageOnly = System.getenv("BMSC_WDP_PAGE")?.takeIf { it.isNotBlank() }
         val sizes = listOf(
             Triple("phone", 400 to 860, 2.625f), Triple("tablet", 840 to 1180, 2f),
             Triple("w400x800", 400 to 800, 1f), Triple("w840x1000", 840 to 1000, 1f), Triple("w1280x800", 1280 to 800, 1f),
             Triple("w1920x1080", 1920 to 1080, 1f), Triple("w2560x1440", 2560 to 1440, 1f),
             // a phone held sideways (R3-PLAN U2)
             Triple("w860x393", 860 to 393, 2f),
-        )
+        ) + (if (pageOnly != null) listOf(Triple("w1600x1000", 1600 to 1000, 1f)) else emptyList())
         // the child windows drawn over their page at every size: a small one, a middling one, one larger than the page
         val windows: List<Triple<WdpPage, String, () -> Unit>> = listOf(
             Triple(WdpPage.DTC, "fclsChangeSTPT") { s.dtc.onValue("tabDTC", "tabSTPT"); s.dtc.onClick("btnChange_2") },
@@ -341,6 +344,7 @@ object WdpRender {
             val shots = WdpPage.entries.map { p -> Triple(p, p.name.lowercase(), null as (() -> Unit)?) } +
                 windows.map { (p, n, open) -> Triple(p, "win-" + n.removePrefix("fcls").lowercase(), open) }
             for ((p, shotName, open) in shots) {
+                if (pageOnly != null && (open != null || !p.name.equals(pageOnly, true))) continue
                 s.page = p.name
                 com.bmscompanion.app.ui.screens.wdp.WdpDialogs.stack.clear()
                 if (open != null) runCatching { open() }

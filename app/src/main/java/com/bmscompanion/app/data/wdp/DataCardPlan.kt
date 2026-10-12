@@ -1147,6 +1147,27 @@ class DataCardPlan {
         else -> DataCardNet.roundInt(fuel.toFloat().toDouble() + 10.0 * fp.distance.toDouble())
     }
 
+    /**
+     * The route's bingo (1.4.0, not WDP's): the fuel to leave the flight's turn-for-home point with — the card's own
+     * Min Fuel figure there (the ladder [createFlightplan] works back from the last steerpoint with [altnFuel], 1,000 lb,
+     * over the alternate), rounded up to the hundred. The turn-for-home point is the last strike steerpoint before the
+     * landing, else the steerpoint before the landing farthest from the landing field. The steerpoint (1-based) and
+     * the fuel; null with no flight plan, or no figure there.
+     */
+    fun routeBingo(): Pair<Int, Int>? {
+        val f = flight() ?: return null
+        val wps = f.waypoints
+        val n = minOf(f.numWaypoints, wps.size, 24)
+        if (n < 3) return null
+        val land = (1 until n).firstOrNull { wps[it].action == 7 } ?: (n - 1)
+        val strikes = listOf(priStrikeStpt, secStrikeStpt, terStrikeStpt, quaStrikeStpt).filter { it in 1 until land }
+        val i = strikes.maxOrNull()
+            ?: (1 until land).maxByOrNull { distance(wps[it].gridX, wps[it].gridY, wps[land].gridX, wps[land].gridY) }
+            ?: return null
+        val fuel = flightPlan[i].fuel.takeIf { it > 0 } ?: return null
+        return try { (i + 1) to roundUp(fuel, 100) } catch (e: ArithmeticException) { null }
+    }
+
     /** A fuel box: rounded up to the hundred, or blank where that overflows (D19: WDP's `RoundUp` threw). */
     private fun fuelText(fuel: Int): String =
         try { roundUp(fuel, 100).toString() } catch (e: ArithmeticException) { fixesUsed += "D19-fuel"; "" }

@@ -226,6 +226,9 @@ object SharedMemoryReader {
             desiredCourse = fd.f(FD.desiredCourse).toDouble(),
             beaconBrg = fd.f(FD.bearingToBeacon).toDouble(), beaconNm = fd.f(FD.distanceToBeacon).toDouble(),
             ded = (0 until 5).map { dedString(fd, FD.dedLines + it * 26, 26) },
+            dedInvert = invertLines(fd, FD.invert),
+            pfl = (0 until 5).map { dedString(fd, FD.pflLines + it * 26, 26) }.takeIf { it.any { s -> s.isNotBlank() } } ?: emptyList(),
+            pflInvert = invertLines(fd, FD.pflInvert),
             rwr = rwr,
         )
         if (fd2 != null) {
@@ -413,6 +416,19 @@ object SharedMemoryReader {
             if (c == 0) break
             append(when { c == 1 -> '*'; c == 2 -> '°'; c < 32 -> ' '; else -> c.toChar() })
         }
+    }
+
+    /**
+     * The DED's (or PFL's) `Invert[5][26]` lines as five strings of the same cells as the text, `#` where BMS draws the
+     * cell highlighted (inverse video), a space elsewhere, trailing spaces dropped. A cell counts as inverted when its
+     * invert byte is neither 0 nor a space (BMS writes 2 there; some tools copy the character itself). Empty when no
+     * cell is inverted, so a plain DED costs nothing on the wire.
+     */
+    internal fun invertLines(b: ByteBuffer, off: Int): List<String> {
+        val lines = (0 until 5).map { row ->
+            buildString { for (k in 0 until 25) { val c = b.get(off + row * 26 + k).toInt() and 0xFF; append(if (c != 0 && c != 32) '#' else ' ') } }.trimEnd()
+        }
+        return if (lines.all { it.isEmpty() }) emptyList() else lines
     }
 
     private fun latin1(b: ByteBuffer, off: Int, max: Int): String {

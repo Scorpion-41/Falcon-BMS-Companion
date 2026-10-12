@@ -4,6 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import com.bmscompanion.app.AppVersion
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import com.bmscompanion.app.ui.Routes
@@ -25,8 +28,11 @@ import com.bmscompanion.app.ui.theme.Hud
  */
 @Composable
 fun SetupScreen(nav: NavHostController) {
+    // the version shown here and in the About page is AppVersion's; a device linked to a PC of another version says so
+    val info by com.bmscompanion.app.data.mission.MissionLink.info.collectAsState()
+    val pc = info?.version?.takeIf { it.isNotBlank() && it != "dev" && it != AppVersion.NAME }
     Column(Modifier.fillMaxSize().background(Hud.Bg)) {
-        BmsTopBar("Setup", "BMS Companion, and the PC that reads Falcon BMS")
+        BmsTopBar("Setup", "BMS Companion ${AppVersion.NAME}" + (pc?.let { " · the PC runs $it" } ?: " · this device and the PC that reads Falcon BMS"))
         // Connecting is the thing this page exists for, so when it succeeds the pilot goes where the data is.
         MissionSetupPane(onConnected = { nav.go(Routes.MISSION) })
     }

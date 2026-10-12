@@ -183,6 +183,8 @@ internal fun nameField(a: Airport, tag: String, p: Offset, names: NameSink) =
  * any other field the same, small and faint. Each sits on a dark halo so it holds on relief and satellite alike.
  */
 internal fun DrawScope.drawAirfield(p: Offset, runways: List<Offset>, mark: FieldMark) {
+    // close in the map draws the field as its own diagram (AirfieldDiagrams): the symbol steps aside, the name stays
+    if (com.bmscompanion.app.ui.components.AirfieldDiagrams.drawnAt(p)) return
     val ink = Hud.Green
     val halo = MapHalo
     when (mark) {
