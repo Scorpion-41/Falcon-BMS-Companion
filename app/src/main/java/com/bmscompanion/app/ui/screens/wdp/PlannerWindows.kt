@@ -81,6 +81,8 @@ enum class PlannerWindow(val title: String, val probe: String) {
     GUIDE("Planner guide", "Guide"),
     /** WDP's Settings window (Options → Settings), with what means something here ([PlannerSettings]) */
     SETTINGS("Planner settings", "Settings"),
+    /** The Noteboard editor on its own (the Kneeboards page's Edit notes, 1.4.1; [NoteboardWindow]); arg = the board, 0 or 1 */
+    NOTES("Noteboard", "Notes"),
     // WDP's ATO Target List is a page of the Planner's own now (WdpPage.ATO, AtoTargetsPage), not a window
 }
 
@@ -174,6 +176,7 @@ fun PlannerWindowHost(
                     PlannerWindow.PRINT -> KneeboardPrintWindow(onClose = PlannerWindows::close)
                     PlannerWindow.GUIDE -> PlannerGuideWindow(section = PlannerWindows.arg, onClose = PlannerWindows::close)
                     PlannerWindow.SETTINGS -> PlannerSettingsWindow(onClose = PlannerWindows::close)
+                    PlannerWindow.NOTES -> NoteboardWindow(PlannerWindows.arg?.toIntOrNull() ?: 0, onClose = PlannerWindows::close)
                 }
             }
         }

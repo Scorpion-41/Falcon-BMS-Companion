@@ -51,8 +51,9 @@ One light page for a PC that serves your devices (the full app isn't loaded, so 
 | **Status tiles** | Falcon BMS (running, in 3D, theater), AWACS feed, briefing, connected devices |
 | **Open the full app** | Turns the window into the full app (and back with **Server**) |
 | **Connect your devices** | The browser address with a QR code, what Android devices and laptops need, **Browser access** on/off, the firewall button, connected devices |
+| **Falcon BMS installs** | Every Falcon BMS install on this PC (the ones Windows' registry knows are found by themselves, e.g. 4.38.1 and 4.37 side by side) and any folder you add with **Add folder…**; the one in use is marked, and one click on another switches to it for every device. Added folders can be renamed and taken out of the list (nothing on disk is touched). The same card is on the Setup page of every device |
 | **Setup checklist** | Live ✓/✕ checks with a fix button for each step: BMS found, network, briefing export, DTC, live data, AWACS feed, EZBoards (and the .NET 8 runtime) |
-| **Falcon BMS settings** | EZBoards folder and auto-generate on PRINT, Tacview stream on/off with host, port and password, BMS folder and screenshots folder (only if not found), network port, **Edit Falcon BMS User.cfg**, **Open screenshots folder** |
+| **Falcon BMS settings** | EZBoards folder and auto-generate on PRINT, Tacview stream on/off with host, port and password, the BMS folder in use and screenshots folder, network port, **Edit Falcon BMS User.cfg**, **Open screenshots folder** |
 | **Is Falcon BMS on another PC?** | Turns this PC into a client (full app with data from the BMS PC) |
 | **Activity** | Devices seen in the last two minutes, and the recent log |
 | **Start-up and closing** | Keep running in the tray when the window closes; start with Windows (in the tray) |
@@ -170,7 +171,7 @@ The **EZBoards | WDP** switch at the top of the section (also in **Setup**) deci
 
 1. Switch the Mission section to **WDP** (the switch at its top, or in Setup). The Planner tab unlocks; EZBoards and Run HTML Briefing pause.
 2. On a phone, tablet or browser, link the device to the PC first ([sections 2-4](#2-android-phones-and-tablets)): the Planner works through the PC, where your saves, cartridge and cockpit pages are. On the BMS PC's own window it works straight away.
-3. Follow the **Steps** on the Planner's toolbar: in BMS pick your flight, SAVE the DTC and the campaign or TE, PRINT; in the Planner **Open mission…**, plan, **Save to DTC**; in BMS **LOAD** and SAVE the DTC; **Populate from Planner**; **Upd Kneeboard**; fly, and LOAD on the DTE page.
+3. Follow the **Steps** on the Planner's toolbar: in BMS pick your flight, SAVE the DTC and the campaign or TE, PRINT; in the Planner **Open mission…**, plan, **Save to DTC**; in BMS **LOAD** and SAVE the DTC; **Populate from Planner**; **Upd Kneeboard**; **TAKEOFF**, and LOAD on the DTE page.
 4. The **Guide** (toolbar) has the long version and opens by itself the first time.
 
 The Planner writes your cartridge (`User\Config\<callsign>.ini`) and the cockpit kneeboard pages directly when you press Save to DTC and Upd Kneeboard, as WDP does; its own files go into `User\BMS Companion Planner` inside your BMS folder. At each new mission and each switch of mode, the PC takes what the Planner saved for an earlier flight back out of the cartridge by itself. `docs/DATA-STORES.md` has the detail.

@@ -292,6 +292,25 @@ private fun BoardRow(
         if (tuning && kind == BoardKind.MAP) MapOptions(slot.options, onOptions)
         if (tuning && kind == BoardKind.RUNWAYS) GroundChartOptions(slot.options, onOptions)
         if (tuning && kind == BoardKind.LIVETAXI) LiveTaxiOptions(slot.options, onOptions)
+        if (tuning && kind == BoardKind.NOTES) NotesOptions(slot.options, onOptions)
+    }
+}
+
+/** The Notes board shows Noteboard 1, Noteboard 2, or both as two pages (1.4.1). */
+@Composable
+private fun NotesOptions(options: Map<String, String>, onChange: (Map<String, String>) -> Unit) {
+    Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("WHICH NOTEBOARD", style = LocalExtra.current.overline, color = Hud.TextFaint)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf("Noteboard 1" to "1", "Noteboard 2" to "2", "Both (two pages)" to "both").forEach { (label, key) ->
+                Choice(label, (options["board"] ?: "1") == key) { onChange(options + ("board" to key)) }
+            }
+        }
+        Text(
+            "Written on any device: Mission → Kneeboards → Edit notes, or a Noteboard page in Upd Kneeboard. The board "
+                + "reads them again every few seconds.",
+            fontSize = 11.sp, color = Hud.TextFaint,
+        )
     }
 }
 

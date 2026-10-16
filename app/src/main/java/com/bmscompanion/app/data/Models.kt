@@ -366,8 +366,17 @@ data class AtcInfo(
     val vfrMinCloudFt: Int? = null,
 )
 
+/**
+ * A runway of the airport record. [lengthFt] and [widthFt] are BMS's own runway rectangle (the field's point header of
+ * type 8, the ground chart's strip to the foot, the figure BMS's ground charts print in metres); [lenEst] marks a field
+ * with no rectangle that fits, where [lengthFt] is the extractor's estimate between the threshold lights (no width).
+ * A deck has neither.
+ */
 @Serializable
-data class Runway(val dbRunway: Int = 0, val name: String = "", val lengthFt: Int? = null, val ends: List<RunwayEnd> = emptyList())
+data class Runway(
+    val dbRunway: Int = 0, val name: String = "", val lengthFt: Int? = null, val ends: List<RunwayEnd> = emptyList(),
+    val widthFt: Int? = null, val lenEst: Boolean = false,
+)
 
 @Serializable
 data class RunwayEnd(val designator: String = "", val headingTrue: Double = 0.0, val ils: String? = null, val pattern: Pattern? = null)

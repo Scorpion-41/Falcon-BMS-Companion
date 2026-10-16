@@ -93,7 +93,10 @@ fun ServerScreen(onOpenApp: () -> Unit, onOpenAbout: () -> Unit, onUseAsClient: 
             val i = status.info
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Tile("FALCON BMS", when { i == null -> "—"; i.bms.flying -> "In 3D"; i.bms.running -> "Running"; i.bms.installed -> "Not running"; else -> "Not found" },
-                    i?.bms?.running == true, i?.bms?.theater, Modifier.weight(1f))
+                    i?.bms?.running == true,
+                    // the install in use, when there are two or more (1.4.1)
+                    listOfNotNull(i?.bms?.install?.takeIf { i.bms.installs > 1 }, i?.bms?.theater).joinToString(" · ").ifEmpty { null },
+                    Modifier.weight(1f))
                 Tile("AWACS FEED", if (i?.tacview?.connected == true) "Connected" else "Waiting", i?.tacview?.connected == true,
                     i?.tacview?.let { if (it.connected) "${it.objects} objects" else it.state }, Modifier.weight(1f))
                 if (!narrow) Tile("BRIEFING", if (i?.briefing?.available == true) "Printed" else "Not yet", i?.briefing?.available == true, i?.briefing?.generated, Modifier.weight(1f))
@@ -106,6 +109,8 @@ fun ServerScreen(onOpenApp: () -> Unit, onOpenAbout: () -> Unit, onUseAsClient: 
                 UpdateCard(onOpenAbout = onOpenAbout)
                 PrerequisitesCard(status)
                 ConnectDevicesCard(status)
+                // the Falcon BMS installs and which one is read, one click to switch (1.4.1)
+                PcInstallsCard()
                 SetupChecklistCard(status)
                 BmsSettingsCard()
                 ClientHintCard(onUseAsClient)

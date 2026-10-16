@@ -68,8 +68,9 @@ import kotlin.math.min
  * 207 x 129 units each, so four rows (a name line over the two views) fill the page's height; three rows would leave a
  * quarter of the page empty at the same picture size, and five would shrink every picture by a fifth.
  *
- * **What goes on a half** is the card's list — the mission's targets (`/api/targets/mission`) less the entries the pilot
- * removed on the card, plus the ones added there, both kept per mission by [TargetPics] — opened up into its vehicles,
+ * **What goes on a half** is the card's list for **the flight open in the Planner** (1.4.1, [query]: no Briefing card
+ * visit and no Populate needed) — its targets (`/api/targets/mission`) less the entries the pilot removed on the card,
+ * plus the ones added there or with the picker's own **Add…** ([add]), both kept per mission by [TargetPics] — opened up into its vehicles,
  * radars and buildings ([entries]). A half the pilot has not chosen for takes the next [PER_PAGE] of the list in its
  * default order ([defaultOrder]: each target's main vehicle, each threat system's launcher and main radar, each ship and
  * each added target, in the card's order; then the rest), so a second Target pictures half takes the next four, and an
@@ -119,9 +120,12 @@ object KneeboardTargets {
 
     // ---------------------------------------------------------------- the list
 
-    /** The card's list as entries: the mission's groups less those removed on the card, then the targets added there. */
+    /**
+     * The card's list as entries: the mission's groups less those removed on the card, then the targets added there or
+     * in the picker. (It reads [revision], never negative, so a list made of it is made again after an Add.)
+     */
     fun entries(s: TargetSet? = set): List<Entry> {
-        if (s == null) return emptyList()
+        if (s == null || revision < 0) return emptyList()
         val removed = TargetPics.removed(s.mission).toSet()
         val groups = s.groups.filter { TargetPics.groupId(it) !in removed } +
             TargetPics.added(s.mission).map { TargetGroup(title = it.name, kind = "added", note = it.category, items = listOf(it)) }
@@ -193,15 +197,64 @@ object KneeboardTargets {
     /** Opens the picker on a half, with what is on it now. */
     fun pick(n: Int, side: Char) { picking = Picking(n, side, itemsFor(n, side).map { it.id }) }
 
-    /** Reads the mission's list from the PC ([force]: even when it has it). */
+    /**
+     * Which mission the list is asked for (1.4.1): **the Planner's own flight** — the save's flight opened with Open
+     * mission… or Pick a flight (`save=`, `flight=`, `theater=`), else the printed briefing's (`printed=1`) — so the
+     * picker works straight from the Planner, with no visit to the Briefing card and no Populate first. The PC answers
+     * WDP mode's snapshot when it is that same flight (the Briefing card's additions are then the same); an older PC
+     * ignores the query and answers the Mission section's mission, as before.
+     */
+    fun query(): String {
+        val r = PlannerMissionState.ref
+        // in EZBoards mode the printed briefing's flight, never a save the Planner had open in WDP mode (1.4.1)
+        return if (KneeboardPrintSession.wdpMode() && PlannerMissionState.fromSave && r != null && r.file.isNotBlank() && r.flight.isNotBlank())
+            "?theater=${TargetPics.enc(PlannerMissionState.theater ?: r.theater)}&save=${TargetPics.enc(r.file)}&flight=${TargetPics.enc(r.flight)}"
+        else "?printed=1"
+    }
+
+    /** The query [set] was read for: another flight planned since reads the list again. */
+    private var loadedFor: String? = null
+
+    /** Bumped when the device's additions change ([add], [unadd]), so the lists made of [entries] are made again. */
+    var revision by mutableStateOf(0)
+        private set
+
+    /** Reads the mission's list from the PC ([force]: even when it has it for the Planner's flight). */
     suspend fun load(force: Boolean = false) {
-        if (loading || (!force && set != null)) return
+        val q = query()
+        if (loading || (!force && set != null && loadedFor == q)) return
         loading = true
         try {
-            val s = TargetPics.json("/api/targets/mission", TargetSet.serializer())
+            val s = TargetPics.json("/api/targets/mission$q", TargetSet.serializer())
             if (s == null) error = "The BMS PC did not give the mission's targets (an older BMS Companion draws no target pictures)."
-            else { set = s; error = null }
+            else { set = s; loadedFor = q; error = null }
         } finally { loading = false }
+    }
+
+    /** The picker's **Add…** list while it is open. */
+    var adding by mutableStateOf(false)
+
+    /**
+     * Adds [item] (from the Add list, [com.bmscompanion.app.ui.screens.mission.TargetCatalogDialog]) to the mission's
+     * list on this device, as the Briefing card's Add does (kept per mission, [TargetPics.added]); the open picker ticks
+     * it while the half has room. Answers the entry's id, or null without a list.
+     */
+    fun add(item: TargetItem): String? {
+        val s = set ?: return null
+        val now = TargetPics.added(s.mission)
+        if (now.none { it.key == item.key }) TargetPics.saveAdded(s.mission, now + item.copy(role = "added"))
+        revision++
+        val id = entries(s).firstOrNull { it.group.kind == "added" && it.item.key == item.key }?.id
+        picking?.let { p -> if (id != null && id !in p.draft && p.draft.size < PER_PAGE) p.draft.add(id) }
+        return id
+    }
+
+    /** Takes a target added on this device ([add], or on the Briefing card) off the mission's list again. */
+    fun unadd(key: String) {
+        val s = set ?: return
+        TargetPics.saveAdded(s.mission, TargetPics.added(s.mission).filter { it.key != key })
+        revision++
+        picking?.draft?.removeAll { it.startsWith("added|") && it.endsWith("#$key") }
     }
 
     // ---------------------------------------------------------------- the pictures
@@ -237,7 +290,7 @@ object KneeboardTargets {
         val head = "Page $n, ${KneeboardPages.knee(side)}, was left as it is"
         val s = set ?: return "$head: ${error ?: "the BMS PC did not give the mission's targets."}"
         val all = entries(s)
-        if (all.isEmpty()) return "$head: " + (s.error ?: "the mission names no target that has a model (the Briefing's Target pictures card is empty).")
+        if (all.isEmpty()) return "$head: " + (s.error ?: "the flight names no target that has a model (the picker's Add… puts one on the list).")
         val items = itemsFor(n, side, s)
         if (items.isEmpty()) return "$head: no target is left for it — the Target pictures halves before it hold all ${all.size} of the mission's."
         for (e in items) for ((view, label) in TargetPictureApi.VIEWS) {
@@ -408,8 +461,8 @@ internal fun ColumnScope.TargetPicker(p: KneeboardTargets.Picking, modifier: Mod
                 s == null && t.loading -> "Reading the mission's targets on the PC…"
                 s == null -> t.error ?: "The BMS PC did not give the mission's targets."
                 s.error != null && list.isEmpty() -> s.error
-                list.isEmpty() -> "The mission names no target that has a model. Add one on the Briefing's Target pictures card."
-                else -> "The Briefing's Target pictures card (what was removed there stays out, what was added is in). Up to $max, each printed in its two views."
+                list.isEmpty() -> "The flight names no target that has a model. Add… puts any ground target of the theater on the list."
+                else -> "The targets of the flight open in the Planner (removed on the Briefing card stays out; added there or with Add… is in). Up to $max, each printed in its two views."
             },
             color = Hud.TextDim, fontSize = fingerSp(11f), maxLines = 2, overflow = TextOverflow.Ellipsis,
         )
@@ -435,7 +488,17 @@ internal fun ColumnScope.TargetPicker(p: KneeboardTargets.Picking, modifier: Mod
                                     Text(
                                         listOfNotNull(g.title, g.note).joinToString("  ·  "), color = Hud.Text, fontSize = fingerSp(12f),
                                         fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false),
                                     )
+                                    // a target added on this device comes off the list again here
+                                    if (g.kind == "added") {
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(
+                                            "✕", color = com.bmscompanion.app.ui.screens.mission.Hostile, fontSize = fingerSp(13f), fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.clip(RoundedCornerShape(4.dp)).clickable { g.items.firstOrNull()?.let { t.unadd(it.key) } }
+                                                .padding(horizontal = 8.dp, vertical = 2.dp).plannerProbe("Print/Tgt/Unadd/${g.items.firstOrNull()?.key}"),
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -501,6 +564,7 @@ internal fun ColumnScope.TargetPicker(p: KneeboardTargets.Picking, modifier: Mod
                 p.draft.clear(); p.draft.addAll(d)
             }
             Btn("Clear", enabled = p.draft.isNotEmpty(), probe = "Print/Tgt/Clear") { p.draft.clear() }
+            Btn("Add…", enabled = s != null, probe = "Print/Tgt/Add") { t.adding = true }
             Spacer(Modifier.weight(1f))
             Btn("Cancel", probe = "Print/Tgt/Cancel") { t.picking = null }
             Btn("Done", enabled = s != null && p.draft.isNotEmpty(), primary = true, probe = "Print/Tgt/Done") {
@@ -509,5 +573,10 @@ internal fun ColumnScope.TargetPicker(p: KneeboardTargets.Picking, modifier: Mod
                 t.picking = null
             }
         }
+    }
+    // the Briefing card's Add list, here too: any ground target of the flight's theater onto the list (and onto this half)
+    if (t.adding && s != null) com.bmscompanion.app.ui.screens.mission.TargetCatalogDialog(s.theater, onDismiss = { t.adding = false }) { item ->
+        t.add(item)
+        t.adding = false
     }
 }

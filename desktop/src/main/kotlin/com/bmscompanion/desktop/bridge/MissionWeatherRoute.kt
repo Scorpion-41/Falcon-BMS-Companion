@@ -1,5 +1,6 @@
 package com.bmscompanion.desktop.bridge
 
+import com.bmscompanion.app.data.mission.BmsSky
 import com.bmscompanion.app.data.mission.CampFlight
 import com.bmscompanion.app.data.mission.MissionMode
 import com.bmscompanion.app.data.mission.MissionWeather
@@ -192,7 +193,32 @@ internal object MissionWeatherRoute {
             ok = true, twxModified = w.modified, model = twx.model, condition = twx.condition, clock = clockNow,
             mapUpdates = twx.mapUpdates > 0, twx = twx, frames = frames, start = start, places = places,
             notes = notes + listOfNotNull(w.note?.takeIf { frames.isEmpty() && twx.model == MissionWeather.MAP_MODEL }),
+            sky = safe(null) { sky(t) },
         ) to files
+    }
+
+    /**
+     * The theater's `<terraindir>\Weather\weather.ini` (BMS's `Weather::Setup`: `TimeZone`, `Latitude`, `Longitude`,
+     * whole numbers), or null when it is not there or says nothing. Read only.
+     */
+    fun sky(t: Theaters.Theater): BmsSky? {
+        // the Data folder: the theater definition's file less the path theater.lst names it by
+        var data: File? = t.tdf.absoluteFile
+        repeat(t.listed.replace('/', '\\').split('\\').count { it.isNotBlank() }) { data = data?.parentFile }
+        val dir = data ?: return null
+        val terrain = Theaters.resolveDir(dir, t.terrainDir?.trim()?.trim('"')?.takeIf { it.isNotEmpty() } ?: "TerrData\\Korea") ?: return null
+        val ini = Theaters.resolveFile(terrain, "Weather\\weather.ini") ?: return null
+        if (ini.length() > 64 * 1024) return null
+        val keys = HashMap<String, Int>()
+        ini.readLines(Charsets.ISO_8859_1).forEach { line ->
+            val parts = line.trim().split(Regex("\\s+"))
+            if (parts.size >= 2) parts[1].toIntOrNull()?.let { keys.putIfAbsent(parts[0].lowercase(), it) }
+        }
+        val tz = keys["timezone"] ?: return null
+        val lat = keys["latitude"] ?: return null
+        val lon = keys["longitude"] ?: return null
+        if (tz !in -14..14 || lat !in -90..90 || lon !in -180..180) return null
+        return BmsSky(tz, lat, lon)
     }
 
     /** The flight's take-off, target and landing ([SaveWeather.places]), each named where the save names it. */

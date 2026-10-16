@@ -89,8 +89,12 @@ import kotlinx.serialization.Serializable
  * for the Mission section's mode on the PC ([KbPrintState.mode]):
  * - **WDP mode** (where the Planner is used): pages 1, 2 and 3 — the first three that can be printed. EZBoards does not
  *   run at PRINT in WDP mode, so its pages are the Planner's.
- * - **EZBoards mode**: the first three pages EZBoards does not claim (2, 3 and 4 on a stock install, beside EZBoards'
- *   page 1).
+ * - **EZBoards mode** (1.4.1: Upd Kneeboard opens from the Kneeboards page in either mode): not the Mission set but the
+ *   window's EZBoards-mode default, [EZ_SET] — Noteboard 1 and the Target pictures (the Briefing page where the PC can
+ *   draw no target, [ezDefault]), the route map and the departure chart — on the first two pages EZBoards does not
+ *   claim (2 and 3 on a stock install, beside EZBoards' page 1, which is left as EZBoards wrote it). The **Mission set**
+ *   button lays the Mission set itself in either mode (pages 2, 3 and 4 in EZBoards mode), and an untouched plan is
+ *   laid again as what laid it ([byButton]).
  * A theater with fewer such pages gets the first pairs that fit.
  *
  * Every other half is left as it is. A Mission set the pilot has not touched since is laid again when the mode it was
@@ -117,6 +121,63 @@ object KneeboardPrintSession {
         KbKind.COORDINATION_LEFT to KbKind.COORDINATION_RIGHT,
     )
 
+    /**
+     * The window's **default plan in EZBoards mode** (1.4.1, when Upd Kneeboard opened from the Kneeboards page): Noteboard
+     * 1 beside the Target pictures, then the route map beside the departure ground chart, on the first pages EZBoards
+     * does not claim. EZBoards' own page already carries the briefing, the comm ladder, the steerpoints and the weather
+     * from the same printed briefing, so the default brings what EZBoards cannot make — the pilot's own notes and laser
+     * codes, pictures of the targets, a map and the field — rather than the same briefing twice. Where the mission has no
+     * target the PC can draw (an install without the models, no target known), the Target pictures' half is left as it
+     * is ([ezDefault]), so the default never holds a half the PC would refuse. In EZBoards mode the **Mission set** button
+     * lays this default (never a page of the Planner's); in WDP mode the [MISSION_SET].
+     */
+    val EZ_SET: List<Pair<String, String>> = listOf(
+        KbKind.NOTES to KbKind.TARGET_PICTURES,
+        KbKind.ROUTE_MAP to KbKind.DEPARTURE,
+    )
+
+    /** [EZ_SET] as laid now: Target pictures only while the mission's list holds a target the PC can draw, else left as it is. */
+    fun ezDefault(): List<Pair<String, String>> {
+        val drawable = KneeboardTargets.set?.let { KneeboardTargets.entries(it).isNotEmpty() } == true
+        return EZ_SET.map { (l, r) ->
+            (if (l == KbKind.TARGET_PICTURES && !drawable) KbKind.LEAVE else l) to (if (r == KbKind.TARGET_PICTURES && !drawable) KbKind.LEAVE else r)
+        }
+    }
+
+    /**
+     * The kinds the window offers **in EZBoards mode** (1.4.1): nothing of the Planner's (the DataCard, the Coordination
+     * Card, its Briefing and Weather pages, the target list, the Airport Schedule, the attack profile), only what is drawn
+     * from the Mission section's own data ([KneeboardEzSource]), the PC or the pilot: the Noteboards, the Target pictures,
+     * the route maps, the ground charts, a picture, Blank, Test and Leave as it is.
+     */
+    val EZ_KINDS: Set<String> = setOf(
+        KbKind.LEAVE, KbKind.PICTURE, KbKind.NOTES, KbKind.NOTES_2, KbKind.BLANK, KbKind.TEST, KbKind.TARGET_PICTURES,
+        KbKind.ROUTE_MAP, KbKind.ROUTE_MAP_DARK, KbKind.DEPARTURE, KbKind.ARRIVAL, KbKind.ALTERNATE,
+    )
+
+    /** A kind the window offers in the mode of [st]: every kind in WDP mode, [EZ_KINDS] in EZBoards mode. */
+    fun offered(kind: String, st: KbPrintState? = state): Boolean = wdpMode(st) || kind in EZ_KINDS
+
+    /**
+     * EZBoards mode: a half EZBoards writes at every PRINT (its `CONFIG_USER.BAT` claims): it is EZBoards' page, shown as
+     * the file holds it, never planned or printed by this window, whatever a saved plan says.
+     */
+    fun ezClaimed(n: Int, side: Char, st: KbPrintState? = state): Boolean =
+        !wdpMode(st) && st?.pages?.firstOrNull { it.n == n }?.let { if (side == 'L') it.ezLeft else it.ezRight } == true
+
+    /** The window's default plan for [mode]: the Mission set in WDP mode, [ezDefault] in EZBoards mode. */
+    fun setFor(mode: String): List<Pair<String, String>> = if (mode == MissionMode.WDP) MISSION_SET else ezDefault()
+
+    /**
+     * The untouched plan was laid by the **Mission set** button ([missionSet]) rather than as the window's default
+     * ([layDefault]): it is laid again as the Mission set, not as the default of the mode now. The same in WDP mode.
+     */
+    var byButton by mutableStateOf(false)
+
+    /** Why a kind cannot be printed now, or null: in EZBoards mode a page of the Planner's ([offered]). */
+    fun unavailable(kind: String, st: KbPrintState? = state): String? =
+        if (offered(kind, st)) null else "A page of the Planner's: printed in WDP mode only."
+
     /** The Mission set's layout this build lays; an untouched set kept with an older one is laid again. */
     const val LAYOUT = 2
 
@@ -138,7 +199,51 @@ object KneeboardPrintSession {
         val layout: Int = 0,
         /** the Target pictures halves' own choices ([KneeboardTargets.choices], 1.4.0); absent from an earlier build */
         val targets: Map<String, KbTargetChoice> = emptyMap(),
+        /** the untouched plan was laid by the Mission set button ([byButton], 1.4.1); absent (false) from an earlier build */
+        val byButton: Boolean = false,
+        /** the mode ([MissionMode]) the plan above is of (1.4.1); absent from an earlier build: its laidFor, else madeIn */
+        val planMode: String? = null,
+        /** the other mode's plan, kept for when the PC is switched back to it (1.4.1, one plan per mode) */
+        val other: Map<String, ModePlan> = emptyMap(),
     )
+
+    /** One mode's plan, kept while the PC is in the other mode ([Saved.other]). */
+    @Serializable
+    internal class ModePlan(
+        val plan: Map<String, String> = emptyMap(),
+        val planned: Boolean = false,
+        val laidFor: String? = null,
+        val madeIn: String? = null,
+        val layout: Int = 0,
+        val byButton: Boolean = false,
+    )
+
+    /** The mode ([MissionMode]) [plan] is of; null before one was laid. */
+    var planMode by mutableStateOf<String?>(null)
+
+    /** The other mode's plan, by mode, kept until the PC is switched back to it. */
+    private val stashed = HashMap<String, ModePlan>()
+
+    /**
+     * The PC is in [now]: the plan of the mode it was in is put aside and [now]'s own comes back (none yet: the window
+     * lays [now]'s default), so a WDP-mode plan of the Planner's pages never prints in EZBoards mode and comes back
+     * with WDP mode.
+     */
+    private fun planFor(now: String) {
+        val was = planMode
+        if (was == null || was == now) { planMode = now; return }
+        stashed[was] = ModePlan(plan.toMap(), planned, laidFor, madeIn, layout, byButton)
+        val back = stashed.remove(now)
+        plan.clear(); plan.putAll(back?.plan.orEmpty().filter { (k, v) -> halfKey(k) && v != KbKind.LEAVE && KneeboardPages.of(v) != null })
+        planned = back?.planned ?: false
+        laidFor = back?.laidFor
+        madeIn = back?.madeIn
+        layout = back?.layout ?: 0
+        byButton = back?.byButton ?: false
+        relaid = null
+        planMode = now
+        save()
+    }
 
     /** The plan as the device kept it; nothing (a fresh start) when there is none or it cannot be read. */
     private fun restore() {
@@ -150,6 +255,9 @@ object KneeboardPrintSession {
         laidFor = s.laidFor
         madeIn = s.madeIn
         layout = s.layout
+        byButton = s.byButton
+        planMode = s.planMode ?: s.laidFor ?: s.madeIn
+        stashed.clear(); stashed.putAll(s.other.filterKeys { it != planMode })
         KneeboardTargets.choices.clear(); KneeboardTargets.choices.putAll(s.targets.filter { (k, v) -> halfKey(k) && v.ids.isNotEmpty() })
     }
 
@@ -158,21 +266,23 @@ object KneeboardPrintSession {
     /** Keeps the plan on the device, for the next launch. Never throws. */
     private fun save() {
         runCatching {
-            Repo.putString(SAVED_KEY, Repo.json.encodeToString(Saved.serializer(), Saved(plan.toMap(), pictures.toMap(), planned, laidFor, madeIn, layout, KneeboardTargets.choices.toMap())))
+            Repo.putString(SAVED_KEY, Repo.json.encodeToString(Saved.serializer(), Saved(plan.toMap(), pictures.toMap(), planned, laidFor, madeIn, layout, KneeboardTargets.choices.toMap(), byButton, planMode, stashed.toMap())))
         }
     }
 
     /** Forgets the plan here and on the device: the next time the pages are read, the window opens on the Mission set. */
     fun forget() {
         plan.clear(); pictures.clear()
-        planned = false; laidFor = null; madeIn = null; relaid = null; browse = null; layout = 0
-        KneeboardTargets.choices.clear(); KneeboardTargets.picking = null
+        planned = false; laidFor = null; madeIn = null; relaid = null; browse = null; layout = 0; byButton = false
+        planMode = null; stashed.clear()
+        KneeboardTargets.choices.clear(); KneeboardTargets.picking = null; KneeboardNotes.editing = null
         runCatching { Repo.putString(SAVED_KEY, null) }
     }
 
     /** The plan as the device kept it, read again (what a launch finds): for the checks. */
     fun reloadSaved() {
-        plan.clear(); pictures.clear(); planned = false; laidFor = null; madeIn = null; relaid = null; layout = 0
+        plan.clear(); pictures.clear(); planned = false; laidFor = null; madeIn = null; relaid = null; layout = 0; byButton = false
+        planMode = null; stashed.clear()
         KneeboardTargets.choices.clear()
         restore()
     }
@@ -225,9 +335,22 @@ object KneeboardPrintSession {
     // after every property above: the plan kept on the device is put back into them
     init { restore() }
 
-    fun kind(n: Int, side: Char): String = plan["$n$side"] ?: KbKind.LEAVE
+    /**
+     * What half [n] [side] gets: in EZBoards mode a half EZBoards claims is always EZBoards' page ([ezClaimed]: left as
+     * it is), and a page of the Planner's left in a plan is never printed ([offered]).
+     */
+    fun kind(n: Int, side: Char): String {
+        if (ezClaimed(n, side)) return KbKind.LEAVE
+        val k = plan["$n$side"] ?: return KbKind.LEAVE
+        return if (offered(k)) k else KbKind.LEAVE
+    }
 
+    /**
+     * Plans [kind] on half [n] [side]. Refused, the plan left as it is, for a half EZBoards claims in EZBoards mode (the
+     * simpler and safe choice: EZBoards would write it again at the next PRINT) and for a kind the mode does not offer.
+     */
     fun set(n: Int, side: Char, kind: String) {
+        if (ezClaimed(n, side) || !offered(kind)) return
         if (kind == KbKind.LEAVE) plan.remove("$n$side") else plan["$n$side"] = kind
         touched()
     }
@@ -239,7 +362,9 @@ object KneeboardPrintSession {
     private fun touched() {
         planned = true
         laidFor = null
+        byButton = false
         madeIn = mode()
+        planMode = madeIn
         relaid = null
         save()
     }
@@ -267,31 +392,70 @@ object KneeboardPrintSession {
      *   Companion does not know EZBoards' configuration (its folder is not set), page 1 is left out all the same:
      *   EZBoards as it ships writes page 1 at every PRINT, so the Planner's pages are 2, 3 and 4 there.
      */
-    fun missionPages(st: KbPrintState? = state): List<Int> {
+    fun missionPages(st: KbPrintState? = state): List<Int> = freePages(st).take(MISSION_SET.size)
+
+    /** The pages the window's default plan uses ([setFor] the mode): the Mission set's in WDP mode, two in EZBoards mode. */
+    fun defaultPages(st: KbPrintState? = state): List<Int> = freePages(st).take(setFor(mode(st)).size)
+
+    /** The pages that can be printed and, in EZBoards mode, are not EZBoards' ([missionPages]), in order. */
+    private fun freePages(st: KbPrintState?): List<Int> {
         val usable = st?.pages.orEmpty().filter { printable(it) }
         val free = if (wdpMode(st)) usable else usable.filter { !it.ezLeft && !it.ezRight && !(st?.ezConfig == null && it.n == 1) }
-        return free.map { it.n }.sorted().take(MISSION_SET.size)
+        return free.map { it.n }.sorted()
     }
 
-    /** The Mission set's halves on [pages], pair by pair ([MISSION_SET]). */
-    private fun missionPlan(pages: List<Int>): Map<String, String> = buildMap {
-        pages.zip(MISSION_SET).forEach { (n, kinds) -> put("${n}L", kinds.first); put("${n}R", kinds.second) }
+    /** [set]'s halves on [pages], pair by pair. */
+    private fun planOf(pages: List<Int>, set: List<Pair<String, String>>): Map<String, String> = buildMap {
+        pages.zip(set).forEach { (n, kinds) ->
+            if (kinds.first != KbKind.LEAVE) put("${n}L", kinds.first)
+            if (kinds.second != KbKind.LEAVE) put("${n}R", kinds.second)
+        }
     }
 
-    /** The Mission set, in place of whatever was planned, laid for the mode in force. Answers the pages it used. */
+    /** The Mission set's halves on [pages] ([MISSION_SET]). */
+    private fun missionPlan(pages: List<Int>): Map<String, String> = planOf(pages, MISSION_SET)
+
+    /** The window's default plan for the mode in force ([setFor] on [defaultPages]). */
+    fun defaultPlan(): Map<String, String> = planOf(defaultPages(), setFor(mode()))
+
+    /** What the untouched plan would be laid as now: the Mission set when its button laid it (WDP mode), else the default. */
+    private fun untouchedPlan(): Map<String, String> = if (byButton && wdpMode()) missionPlan(missionPages()) else defaultPlan()
+
+    /**
+     * The **Mission set** button: in WDP mode [MISSION_SET] (Briefing + Weather, the DataCard, the Coordination Card) on
+     * pages 1, 2 and 3; in EZBoards mode the window's EZBoards-mode default ([layDefault]), never a page of the Planner's.
+     * In place of whatever was planned. Answers the pages it used.
+     */
     fun missionSet(): List<Int> {
+        if (!wdpMode()) return layDefault()
         val pages = missionPages()
+        lay(missionPlan(pages), button = true)
+        return pages
+    }
+
+    /** The window's default plan, in place of whatever was planned: the Mission set in WDP mode, [ezDefault] in EZBoards mode. */
+    fun layDefault(): List<Int> {
+        val pages = defaultPages()
+        lay(planOf(pages, setFor(mode())), button = false)
+        return pages
+    }
+
+    private fun lay(p: Map<String, String>, button: Boolean) {
         plan.clear()
-        plan.putAll(missionPlan(pages))
-        pages.firstOrNull()?.let { selN = it; selSide = 'L' }
+        plan.putAll(p)
+        p.keys.mapNotNull { it.dropLast(1).toIntOrNull() }.minOrNull()?.let { selN = it; selSide = 'L' }
         planned = true
         laidFor = mode()
         madeIn = laidFor
+        planMode = laidFor
+        byButton = button
         relaid = null
         layout = LAYOUT
         save()
-        return pages
     }
+
+    /** The untouched plan laid again as it was laid: by the button, the Mission set; else the default of the mode now. */
+    private fun layAgain() { if (byButton) missionSet() else layDefault() }
 
     fun leaveAll() { plan.clear(); touched() }
 
@@ -334,7 +498,7 @@ object KneeboardPrintSession {
     /** The chooser's Insert: the picture on page [PictureBrowse.page]'s [side] half (WDP's `<- Insert` / `Insert ->`). */
     fun insertPicture(side: Char): Boolean {
         val b = browse ?: return false
-        if (!printable(slot(b.page)) || KneeboardPictures.cached(b.path)?.image == null) return false
+        if (!printable(slot(b.page)) || ezClaimed(b.page, side) || KneeboardPictures.cached(b.path)?.image == null) return false
         pictures["${b.page}$side"] = b.path
         set(b.page, side, KbKind.PICTURE)
         selN = b.page; selSide = side
@@ -353,15 +517,16 @@ object KneeboardPrintSession {
      */
     private fun missionSetMoved(): Boolean {
         if (laidFor == null) return false
-        val pages = missionPages()
-        if (pages.isEmpty()) return false
-        return missionPlan(pages) != plan.toMap()
+        val want = untouchedPlan()
+        if (want.isEmpty()) return false
+        return want != plan.toMap()
     }
 
     /** The files a print would write: page n with its left and right kinds, for every page with anything on it. */
     fun jobs(): List<Triple<Int, String, String>> = (1..16).mapNotNull { n ->
-        val l = kind(n, 'L')
-        val r = kind(n, 'R')
+        // a kind this mode cannot fill ([unavailable]) is left as it is, never printed empty
+        val l = kind(n, 'L').let { if (unavailable(it) != null) KbKind.LEAVE else it }
+        val r = kind(n, 'R').let { if (unavailable(it) != null) KbKind.LEAVE else it }
         if (l == KbKind.LEAVE && r == KbKind.LEAVE || !printable(slot(n))) null else Triple(n, l, r)
     }
 
@@ -374,21 +539,31 @@ object KneeboardPrintSession {
         error = a.error ?: a.value?.error
         if (a.value != null && a.value.pages.isNotEmpty()) {
             val now = mode(a.value)
+            // one plan per mode (1.4.1): the other mode's put aside, this mode's own back
+            planFor(now)
+            // EZBoards mode's default holds the Target pictures only where the mission has a target the PC can draw:
+            // the list is read before the default is laid or compared (ezDefault)
+            if (now != MissionMode.WDP && (!planned || laidFor != null)) {
+                try { KneeboardTargets.load(force = true) } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) { }
+            }
+            val ezWords = "your Noteboard" + (if (ezDefault().any { it.second == KbKind.TARGET_PICTURES }) ", the target pictures" else "") +
+                ", the route map and the departure chart, on pages EZBoards leaves free."
             when {
-                !planned -> missionSet()
-                // an untouched Mission set of the other mode is laid again: page 1 is the Planner's in WDP mode
+                !planned -> layDefault()
+                // an untouched plan of the other mode is laid again: page 1 is the Planner's in WDP mode
                 laidFor != null && laidFor != now -> {
-                    missionSet()
+                    layAgain()
                     relaid = if (now == MissionMode.WDP) "Mission set laid again for WDP mode: EZBoards is paused, so the Planner's pages start at page 1."
-                    else "Mission set laid again for EZBoards mode: it leaves EZBoards the pages it writes at PRINT."
+                    else "Laid again for EZBoards mode: $ezWords"
                 }
-                // an untouched Mission set an earlier build laid in its older layout (1.3.8: the two cards alone)
+                // an untouched plan an earlier build laid in its older layout (1.3.8: the two cards alone)
                 laidFor != null && layout < LAYOUT -> {
-                    missionSet()
-                    relaid = "Mission set laid again: Briefing and Weather first, then the DataCard and the Coordination Card."
+                    layAgain()
+                    relaid = if (now == MissionMode.WDP) "Mission set laid again: Briefing and Weather first, then the DataCard and the Coordination Card."
+                    else "Laid again: $ezWords"
                 }
-                // an untouched Mission set whose pages moved (another theater, EZBoards' claims): laid on the pages now
-                missionSetMoved() -> missionSet()
+                // an untouched plan whose pages moved (another theater, EZBoards' claims): laid on the pages now
+                missionSetMoved() -> layAgain()
                 // anything else is the pilot's plan, kept as it is
                 else -> Unit
             }
@@ -559,6 +734,24 @@ fun ColumnScope.KneeboardPrintWindow(onClose: () -> Unit) {
     // read again when the Mission section's mode changes on the PC (from any device): the Mission set follows it
     val modeNow = info?.mission?.mode
     LaunchedEffect(linked, modeNow) { if (linked && !s.busy) s.load() }
+    // the Planner's pages (the DataCard, the target list, the route map, the charts…) filled from BMS's own files when
+    // the window is opened outside the Planner: in EZBoards mode, or before the Planner was first shown (1.4.1)
+    val bms by MissionLink.bmsFiles.collectAsState()
+    // (WDP mode only: in EZBoards mode the window offers no page of the Planner's and never fills its pages; the
+    // pages it offers read the Mission section's own mission and fields, KneeboardEzSource)
+    val missionNow by MissionLink.mission.collectAsState()
+    LaunchedEffect(linked, modeNow, bms, missionNow?.version) {
+        if (!linked || s.busy) return@LaunchedEffect
+        if (modeNow?.let { MissionMode.of(it) } == MissionMode.WDP) KneeboardPlannerPrep.ensure() else KneeboardEzSource.prepare()
+    }
+    // EZBoards ran (at PRINT or GENERATE NOW) while the window is open: the pages are read again, so the halves it
+    // claims show the pages it has just written, their owner read from the files
+    val ezRun = info?.ezBoards?.lastRun?.time
+    val ezRunning = info?.ezBoards?.running
+    LaunchedEffect(ezRun, ezRunning) { if (linked && !s.busy && s.state != null) { s.load(); s.stamp++ } }
+    // the window always opens on its page table: a Noteboard editor left open when it closed closes with it, and opens
+    // again only when the pilot chooses a Noteboard for a half or presses Edit notes…
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { KneeboardNotes.editing = null } }
 
     if (!linked) {
         NotLinked(link)
@@ -572,6 +765,11 @@ fun ColumnScope.KneeboardPrintWindow(onClose: () -> Unit) {
     }
     KneeboardTargets.picking?.let { p ->
         TargetPicker(p, Modifier.weight(1f).fillMaxWidth())
+        return
+    }
+    // a Noteboard half's Edit notes…: the editor and the page beside it, in place of the table (1.4.1)
+    KneeboardNotes.editing?.let { e ->
+        NoteboardEditor(e.board, Modifier.weight(1f).fillMaxWidth(), n = e.n, side = e.side, probe = "Print/Notes", onDone = { KneeboardNotes.editing = null })
         return
     }
     // the mission's target list, read once a Target pictures half is planned (the cells name what goes on each)
@@ -746,7 +944,8 @@ private fun HalfCell(slot: KbSlot, side: Char, modifier: Modifier, browse: (Int,
     val kind = s.kind(slot.n, side)
     val selected = s.selN == slot.n && s.selSide == side
     // in WDP mode EZBoards does not run at PRINT: its claim is not marked (the status line says it is paused)
-    val claimed = (if (side == 'L') slot.ezLeft else slot.ezRight) && !s.wdpMode()
+    // in EZBoards mode a half EZBoards claims is EZBoards' page: shown as the file holds it, no kind to choose (1.4.1)
+    val claimed = s.ezClaimed(slot.n, side)
     val owner = if (side == 'L') slot.left else slot.right
     val ownerKind = if (side == 'L') slot.leftKind else slot.rightKind
     var open by remember { mutableStateOf(false) }
@@ -767,37 +966,48 @@ private fun HalfCell(slot: KbSlot, side: Char, modifier: Modifier, browse: (Int,
             Row(
                 Modifier.fillMaxWidth().height(if (WdpTouch.device) 40.dp else 34.dp).clip(RoundedCornerShape(4.dp))
                     .background(if (leave) Hud.Surface3 else Hud.Amber.copy(alpha = 0.18f))
-                    .clickable(enabled = !s.busy) { s.selN = slot.n; s.selSide = side; open = true }
+                    .clickable(enabled = !s.busy) { s.selN = slot.n; s.selSide = side; open = !claimed }
                     .padding(horizontal = 6.dp)
                     .plannerProbe("Print/Pick/${slot.n}$side"),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        if (kind == KbKind.PICTURE) KneeboardPictures.nameOf(s.picture(slot.n, side)).ifEmpty { "Picture" }
+                        if (claimed) "EZBoards' page"
+                        else if (kind == KbKind.PICTURE) KneeboardPictures.nameOf(s.picture(slot.n, side)).ifEmpty { "Picture" }
                         else if (kind == KbKind.TARGET_PICTURES) targetsCell(slot.n, side)
                         else KneeboardPages.of(kind)?.short ?: kind,
                         color = if (leave) Hud.TextDim else Hud.Amber, fontSize = fingerSp(11.5f), lineHeight = 14.sp,
                         fontWeight = if (leave) FontWeight.Normal else FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        if (claimed) "EZBoards writes it at PRINT" else "now: " + ownerText(owner, ownerKind),
+                        if (claimed) "EZBoards writes it at every PRINT · now: " + ownerText(owner, ownerKind) else "now: " + ownerText(owner, ownerKind),
                         color = if (claimed) Hud.Amber else Hud.TextFaint, fontSize = fingerSp(9.5f), lineHeight = 11.sp,
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
                     )
                 }
-                Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Hud.TextDim, modifier = Modifier.size(16.dp))
+                if (!claimed) Icon(Icons.Default.ArrowDropDown, contentDescription = null, tint = Hud.TextDim, modifier = Modifier.size(16.dp))
             }
                 DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                    for (k in KneeboardPages.kinds) {
+                    // only the kinds this mode offers: in EZBoards mode none of the Planner's pages (1.4.1)
+                    for (k in KneeboardPages.kinds.filter { s.offered(it.id) }) {
+                        val why = s.unavailable(k.id)
                         DropdownMenuItem(
-                            text = { Text(k.label, fontSize = 13.sp, color = if (k.id == kind) Hud.Amber else Hud.Text) },
+                            text = {
+                                Column {
+                                    Text(k.label, fontSize = 13.sp, color = if (why != null) Hud.TextFaint else if (k.id == kind) Hud.Amber else Hud.Text)
+                                    if (why != null) Text(why, fontSize = 11.sp, color = Hud.TextFaint)
+                                }
+                            },
+                            enabled = why == null,
                             onClick = {
                                 open = false
                                 // Picture opens Browse picture… for this half: the picture goes on it with Insert;
-                                // Target pictures puts the mission's next targets on it and opens the picker
+                                // Target pictures puts the mission's next targets on it and opens the picker;
+                                // a Noteboard opens its editor, the page beside it (1.4.1)
                                 if (k.id == KbKind.PICTURE) browse(slot.n, side)
                                 else if (k.id == KbKind.TARGET_PICTURES) { s.set(slot.n, side, k.id); KneeboardTargets.pick(slot.n, side) }
+                                else if (k.id in KneeboardNotes.ids) { s.set(slot.n, side, k.id); KneeboardNotes.editing = KneeboardNotes.Editing(KneeboardNotes.boardOf(k.id), slot.n, side) }
                                 else s.set(slot.n, side, k.id)
                             },
                             modifier = Modifier.plannerProbe("Print/Kind/${k.id}"),
@@ -852,6 +1062,10 @@ private fun Preview(layer: GraphicsLayer, modifier: Modifier, across: Boolean = 
                 color = if (kind.draw == null) Hud.TextDim else Hud.Amber, fontSize = fingerSp(11f), lineHeight = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
             s.progress?.let { Text(it, color = Hud.Cyan, fontSize = 11.sp, lineHeight = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            // a Noteboard half is composed in its editor (1.4.1)
+            if (kind.id in KneeboardNotes.ids && at == null) Btn("Edit notes…", enabled = !s.busy, probe = "Print/EditNotes") {
+                KneeboardNotes.editing = KneeboardNotes.Editing(KneeboardNotes.boardOf(kind.id), n, side)
+            }
         }
     }
     val page = @Composable { m: Modifier ->
@@ -888,10 +1102,10 @@ private fun Warnings(st: KbPrintState?) {
     if (onEz.isNotEmpty()) {
         OneLine("EZBoards writes page ${onEz.joinToString(", ")} at every PRINT: PRINT in BMS after this and it replaces what you print there.", Hud.Amber, "Print/OnEz")
     }
-    if (st != null && st.error == null && st.pages.isNotEmpty() && s.missionPages(st).size < KneeboardPrintSession.MISSION_SET.size && s.jobs().isEmpty()) {
+    if (st != null && st.error == null && st.pages.isNotEmpty() && s.defaultPages(st).size < s.setFor(s.mode(st)).size && s.jobs().isEmpty()) {
         OneLine(
-            if (wdp) "Fewer than three pages here can be printed: choose the pages yourself."
-            else "Fewer than three pages here are free of EZBoards: choose the pages yourself.",
+            if (wdp) "Fewer pages here can be printed than the Mission set needs: choose the pages yourself."
+            else "Fewer pages here are free of EZBoards than the Mission set needs: choose the pages yourself.",
             Hud.TextDim, "Print/Few",
         )
     }

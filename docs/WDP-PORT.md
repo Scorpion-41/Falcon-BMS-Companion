@@ -84,7 +84,7 @@ the port.
 
 | On the pages | From | Not from |
 |---|---|---|
-| Airports: names, ICAO, TACAN, elevation, runways, ILS, frequencies | the app's airport data for the theater, keyed by BMS's own campaign IDs (`Repo.airportSet`); the elevation is the field's ATC file's, else the ground BMS puts the jet on, its height map under the runways (`elevation.mjs`, docs/DATA-SOURCES.md) | WDP's `Airports.xml` (its CampIds are stale in 4.38.1: forum topic 32399) |
+| Airports: names, ICAO, TACAN, elevation, runways, ILS, frequencies | the app's airport data for the theater, keyed by BMS's own campaign IDs (`Repo.airportSet`); the elevation is the field's ATC file's, else the ground BMS puts the jet on, its height map under the runways (`elevation.mjs`, docs/DATA-SOURCES.md); a runway's length (Performance's TODA and LDA, the DTC page's runway rows) and width are its BMS runway rectangle (1.4.1; Souda 10,990 × 148 ft, which BMS's own ground chart prints 3,350 × 45 m — WDP's Aegean table says 8,667 × 160, and the app's airport data held 8,800 between the threshold lights up to 1.4.0) | WDP's `Airports.xml` (its CampIds are stale in 4.38.1: forum topic 32399) |
 | Ground and parking charts (card **C**, Performance **Charts**, DTC **Charts**) | the app's airfield data, drawn as the Taxi page draws it; instrument charts from `data/charts.json` | WDP's chart pictures |
 | HARM codes and symbols | `curated/harm.json` (Dash-34 4.38, Training Manual 4.38.1) | WDP's `HarmList.ini` (deleted) |
 | Radio presets "Default" | the briefing's comm plan (User Manual 4.38.1 §5.1.5), the departure's TACAN and ILS | WDP's built-in list (its Blue and Red lists stay, under those names) |

@@ -60,7 +60,12 @@ const RUNWAY_HEADER = 8;
  * The asphalt itself cannot be drawn from data: a field's pavement is one custom model — Osan's is a single object
  * called "RKSO Taxiways" — so the taxiways on the chart are BMS's own ground network drawn at real width.
  */
-const CONTROL_TOWER = /control tower|ctrl tower|cntrl tower|\bATC$/i;
+// (1.4.1) and five more names in the Balkans and EF2000 theaters, each looked at as its model's size and side view:
+// Aktion's "Aktion Control Twr" (Hellas calls the same building "Control Tower_01"), "Banja LukaCtrl Towe" (cut to 19
+// characters), "Batajnica Cntl Twr1", "Cpdichino Ctrl Twr", "Sigonella Ctrl Twr". Listed by name, not as a "twr"
+// rule: "LIBG x Control Twr" is a stair piece, "LIBG m Control Twr" a mast, "LIBG Fuel Cntl Twr" a fuel farm's cab and
+// "Amend Old Cntl Twr" a disused one — none of them a control tower.
+const CONTROL_TOWER = /control tower|ctrl tower|cntrl tower|\bATC$|^(Aktion Control Twr|Banja LukaCtrl Towe|Batajnica Cntl Twr1|Cpdichino Ctrl Twr|Sigonella Ctrl Twr)$/i;
 
 /**
  * BMS's arresting gear: "Arrestor System 1", "2", "4", "5", each an object laid across a runway at the cable's own
@@ -508,6 +513,34 @@ function nearTheField(e, n, near) {
   return false;
 }
 
+/**
+ * How far a control tower may stand from the edge of a runway or of the asphalt and still be the field's (1.4.1).
+ * [nearTheField] measures to the corners of things, and a highway strip is one long rectangle with corners only at its
+ * two ends: Songwhan's tower stands 210 ft from the strip's side and 1,197 ft from its nearest corner, so it was left
+ * off its chart (and Yonghung's, Kilchu's and Okpyongni's with it, at 369-960 ft from the strip). A tower stands back
+ * to see the whole runway, so it is measured to the edges, a little further out.
+ */
+const TOWER_REACH_FT = 1500;
+
+/** Whether (e, n) is within [lim] feet of an edge of any of [rings] (each a flat list of east,north pairs, closed). */
+function nearAnEdge(e, n, rings, lim) {
+  const lim2 = lim * lim;
+  for (const r of rings) {
+    const k = Math.floor(r.length / 2);
+    for (let i = 0; i < k; i++) {
+      const ae = r[2 * i], an = r[2 * i + 1];
+      const j = (i + 1) % k;
+      const be = r[2 * j], bn = r[2 * j + 1];
+      const de = be - ae, dn = bn - an;
+      const len2 = de * de + dn * dn;
+      const t = len2 > 0 ? Math.max(0, Math.min(1, ((e - ae) * de + (n - an) * dn) / len2)) : 0;
+      const pe = ae + t * de - e, pn = an + t * dn - n;
+      if (pe * pe + pn * pn <= lim2) return true;
+    }
+  }
+  return false;
+}
+
 export async function buildAirfields(th, airports, geo, db) {
   const fields = [];
   const warnings = [];
@@ -636,7 +669,11 @@ export async function buildAirfields(th, airports, geo, db) {
     for (const r of routes) for (const q of r.nodes) near.push(q.e, q.n);
     for (const r of runways) for (const c of r.corners) near.push(c.e, c.n);
     for (const r of paved || []) for (let i = 0; i + 1 < r.length; i += 2) near.push(r[i], r[i + 1]);
-    const kept = furniture.features.filter((f) => nearTheField(f.e, f.n, near));
+    // (a control tower by the edges of the runways and the asphalt: TOWER_REACH_FT)
+    // (a runway's four corners as every pair of them: whichever order they come in, its sides are among the pairs, and
+    // a diagonal lies inside the rectangle, so it is never nearer than a side)
+    const edges = runways.flatMap((r) => r.corners.flatMap((a, i) => r.corners.slice(i + 1).map((b) => [a.e, a.n, b.e, b.n]))).concat(paved || []);
+    const kept = furniture.features.filter((f) => nearTheField(f.e, f.n, near) || (f.k === 'tower' && nearAnEdge(f.e, f.n, edges, TOWER_REACH_FT)));
     for (const f of kept) {
       if (f.k !== 'tower') continue;
       groundStats.towers++;

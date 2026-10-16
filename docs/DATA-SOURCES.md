@@ -25,7 +25,7 @@ The richest and least documented of the lot, so it gets the most space.
 | Which fields exist, their position, ICAO, elevation, runway names | `Data/Campaign/<th>/*.obd` + the objects DB — `airports.mjs` |
 | ‣ elevation | in order: **BMS's terrain levelling** of the field — `<objectdir>/TerrainRelatedData/TLD_<CampId>.TPB` (the objective's CampId in `CampObjData.XML`, five digits, not its OCD), the readable source of the `NewTerrain/HeightMaps/TerrainLevelingData.bin` the sim applies on top of the height map: protocol buffers in text form, one or more `terrain_level_data` zones, each a `terrain_level` in feet and polygons of `terrain_level_point`s (`sim_grid_pos_x` north, `sim_grid_pos_y` east, absolute theater feet), the first at `terrain_leveling_percentage` 100 and blend rings round it (66.7/33.3, 75/50/25, 80/60/40/20 or 50) — the median of the levelled ground under both ends and the middle of every runway rectangle, which for a field inside one zone is its `terrain_level` (`tld.mjs`, `levelledUnder` in `elevation.mjs`); else the field's ATC file (`TerrData/ATC/<field>.dat`, the `#INFO` line) where it has a non-zero one; else BMS's height map (`NewTerrain/HeightMaps/HeightMap.raw`, bilinear where BMS lays it — `heightmap.mjs` `sampleOf`, as `TerrainHeights.kt` reads it; up to 1.3.9 WDP's cell, which moved 55 fallback fields in Israel (36), the Falklands (15) and Hellas (4) by a median 7-12 ft, Megisti/Kastellorizo 552 → 474 ft, its published figure) at the same points, the median. A ship has none. Levelled: Korea 86 of 94 fields, Balkans 109 of 114, Israel 87 of 132, the Falklands 60 of 90, Hellas 51 of 89. Checked: the level equals the ATC figure at 14 of Korea's 21 (Osan 42, Daegu 120, Gunsan 22) and where they differ the level is the ground the sim flies (Pohang: ATC 16, level 75, height map 74); Hellas's height map carries some fields at a wrong height (Graf Ignatievo 190 ft inside the field, 650-680 ft round it, level 679); Hellas's Greek fields still land a median of 1 ft from WDP's own Aegean database (39 matched, all but one within 50 ft). The blend in the rings is not documented: the PC takes a ring of p % as p % of the level and the rest the height map (`TerrainLevelling.kt`, used by `TerrainHeights.kt` and `MapTiles.kt`). On a new BMS, re-run `node src/airportrun.mjs` then `node src/airfieldrun.mjs` (or the whole extractor) and `--tldcheck out.txt <BMS folder>` |
 | The field's own authored layout | `<objectdir>/TerrData/Objects/ObjectiveRelatedData/OCD_nnnnn/` — `airfields.mjs` |
-| ‣ runway rectangles | the OCD header records of type **8** |
+| ‣ runway rectangles | the OCD header records of type **8**: four runway-edge points (type 8), one end's pair then the other's. **They are every runway length and width in the app** (1.4.1): `airports.mjs` measures each as the ground chart does (the middle of one end's pair to the middle of the other's; the width across the first pair) and gives it to the airport record's runway (`Runway.lengthFt`/`widthFt`; `stripFor`: the rectangle of its own RunwayNumber lying along the ends' course nearest their centre line, else any such, else the field's only one — a few fields' taxi networks state course 0 or another strip's angle: Novo Mesto, Al-Muzabin, Wujah Al Hajar, Kastoria in Hellas). It is exactly what BMS's own ground charts (`_AGC.png`) print in metres: Osan 2,745 × 45 m = 9,004 × 149 ft, Gunsan 2,749 m = 9,019 ft, Souda 3,350 m = 10,990 ft, Aviano 2,606 m = 8,549 ft, Hatzor 2,417 and 2,479 m = 7,928 and 8,130 ft, Gumi 1,781 × 25 m = 5,840 × 81 ft (`--divertrender` 1b). Up to 1.4.0 the airport record held an estimate between the threshold-light features instead, short by up to 2,800 ft (Souda 8,800, Aviano 6,440, Hatzor 5,950/6,100, Gumi 5,340; in Hellas a median 1,700 ft short), and the Performance page's TODA/LDA and the VR board read it: of the five base theaters' 499 runways that had one, 242 moved by more than 100 ft (Korea 22 of 98, Balkans 39 of 105, Israel 81 of 158, the Falklands 18 of 55, Hellas 82 of 83), and 60 more gained a length they had none of. A field with no rectangle that fits would keep that estimate, marked `lenEst` and shown "≈" (none in 4.38.1); a ship (no features) has neither |
 | ‣ one taxi network per runway end | header type **1**, one per end |
 | ‣ taxi points | `PHD_nnnnn.XML` / `PDX_nnnnn.XML`. Point types: 1 runway end, 2 taxi start, 3 taxiway, 8 runway edge, 9 runway crossing, 11 parking for a small aircraft, 12 parking with no size limit, 15 runway entry/crossing lane, 21 a point on the runway centreline where an exit lane meets it (not a hold short, which no point marks; `docs/PARKING.md`) |
 | ‣ everything standing on the field | `FED_nnnnn.XML` — each record names a feature class (`FeatureCtIdx` → `ct` → `fcd`) and carries its offset and heading |
@@ -111,9 +111,65 @@ its own record size lands on unit normals, all of the first 24, and the last mus
 triangle standing off the ground is projected straight down, and the union is rasterised at 1 ft and traced. The
 part reaching 60 % of the model's height (the shaft and the cab) is kept as well. A reading is believed only when its
 extent agrees with the model's `Parent.dat` ("Dimensions = radius xmin xmax ymin ymax zmin zmax", x forward, y right,
-z down); otherwise that box is drawn — the right size and heading, a rectangle. In the stock data 1,649 of the 2,171
-towers placed across the theaters come from their model and 522 from the box (`airfieldrun.mjs` prints the split).
+z down); otherwise that box is drawn — the right size and heading, a rectangle. In the stock data 1,738 of the 2,278
+towers placed across the theaters come from their model and 540 from the box (`airfieldrun.mjs` prints the split;
+counted per theater, so a chart several theaters share counts in each).
 Watchtowers, water and radio towers and "RKSS Old ATC Part n" (pieces of a terminal) are not control towers.
+
+The names (`CONTROL_TOWER`): "Control Tower" and its numbered copies, "… Ctrl Tower", "… Cntrl Tower", "… ATC", and
+(1.4.1) five Balkans/EF2000 names found by looking at every feature name with "tower", "twr", "atc", "ctrl" or
+"control" in it across the theaters and at each candidate's model: "Aktion Control Twr", "Banja LukaCtrl Towe",
+"Batajnica Cntl Twr1", "Cpdichino Ctrl Twr", "Sigonella Ctrl Twr". Listed by name: "LIBG x Control Twr" (a stair
+piece), "LIBG m Control Twr" (a mast), "LIBG Fuel Cntl Twr" (a fuel farm's cab), "Amend Old Cntl Twr" (disused) and
+"Control Center" (a flat operations building) are not towers.
+
+**Which towers are the field's**: everything else on a chart is kept within 900 ft of a point of the taxi network, a
+runway corner or the asphalt's outline (`NEAR_FIELD_FT`); a control tower is also kept within 1,500 ft of the **edge**
+of a runway or of the asphalt (`TOWER_REACH_FT`, 1.4.1). A highway strip is one long rectangle with corners only at
+its ends, so measured to corners its tower fell off the chart — Songwhan Highway Strip's stands 210 ft beside the
+strip and 1,197 ft from its nearest corner (a pilot's report); Yonghung, Kilchu and Okpyongni likewise. The rule added
+27 placements on 26 charts (all four highway strips, Larissa, Andravida, Agrinio, Aktion, Istrana, Kalamata,
+Sigonella … and a second tower at As Salihiya/Wadi Abu Rish and a fourth at Seoul).
+
+**A highway strip's tower frequency** is its `Stations+Ils.dat` line, as every field's (`airports.mjs`): the only
+source BMS has (ATC files and RadioMap carry none). Checked against the file for all 399 airstrip and highway records
+of the 19 theaters: ours matches it everywhere. Korea's 13 highway strips (BMS types them "Airstrip"; some are called
+highway strips only in the station file's comments, which `airportKind` now reads too) all have a line **except
+Songwhan Highway Strip (925)**, which has none in any Korea-family theater — the line commented "# Songwhan Highway
+Strip" is CampId 947's, Sangwon Highwaystrip. Up to 1.4.0 that comment became 947's full name, so the app showed a
+northern "Songwhan" with radios beside the real one without; a comment naming another field's objective is no longer
+taken as a full name or ICAO source (`namesAnother`). Israel's Al Bir and H3 have theirs (UHF only and VHF only).
+Whether the sim answers a tower call at a field with no line is NOT TESTED.
+
+**Which runway end an ILS frequency serves** (`ilsEnds` in `airports.mjs`, 1.4.1). A station line gives four ILS
+frequencies and no runway. The sim's own rule, read out of `Falcon BMS.exe` with its pdb: `ATCBrain::ATCBrain` takes
+the field's number of runways from its objective class (OCD `DataRate`, held to 2) and files its type 1 point headers,
+walked in PHD order, under their `RunwayNumber` — the first as that runway's header 0, a later one as header 1;
+`TacanList::TuneILS` takes frequency slot s as runway s / 2's header s % 2; `NavigationSystem::SetIlsData` flies that
+header's first point to its next (in 1,475 of BMS's 1,514 type 1 headers that course is the reciprocal of the header's
+heading) with the localizer at the **other** header's first point, and names the runway from the other header
+(`GetOppositeRunway`). `ATCBrain::FindBestLandingRunway` agrees: landing on runway q's header j asks for slot
+2q + (1 − j). So slot 2q is the end of runway q's second header and slot 2q + 1 its first's — the PHD order swapped
+within each RunwayNumber, as a pilot reported from Mission Commander's code (Cheongju's one ILS, slot 4, is 24L, not
+06R). A runway past `DataRate` serves no slot (Ataturk's 18/36 loses 111.1 and 111.3, Punta Raisi's 02/20 its 110.55: the
+sim never tunes them), nor does a runway with one header. Up to 1.4.0 the slots went in PHD order; Daegu, where that was
+checked, is right either way (13R and 31L share 108.7).
+
+**Which name an end carries** comes from the field's threshold signs, else the ATC file's QFU for that end. The ATC
+entry is the one on the end's runway (`Database Runway "Number"`) whose axis lies along the end's heading
+(`atcRunwayFor`); up to 1.4.0 it was the entry at the header's place in PHD order, which the ATC files do not keep, so
+121 Balkans ends, 17 Falklands ends and Skopje and Tanagra in Hellas carried their runway's two names the wrong way
+round (Aviano's 050° end was "23"), with the other end's ATC pattern and, from 1.4.1's ILS rule, the ILS figure
+printed against the wrong number. The ground charts' `fixEndNames` had been repairing the names on the charts only;
+`airfieldrun.mjs`'s "disagree with their airport record" list went from 306 fields to 38 (cables and taxi gaps).
+
+**Checked** by `node src/ilscheck.mjs` against every frequency-and-runway pair four theater documents print: the KTO
+AIP's ILS table (1.2.3), the Hellas and Israel navaid lists (whose ILS 1-4 columns label every slot with its runway) and
+the Balkans navaid list. 226 pairs agree (per theater set: KTO 56, Hellas and LHTO 24 each, Israel 24, Balkans and
+EF2000 49 each); the 11 that do not are listed as the documents' own slips (`KNOWN_SLIPS`: the AIP's three at Sunan
+and a Wonju frequency BMS does not have; Israel's Nevatim, Ramon and Ovda; the Balkans list's Forli, Miramare, Palese
+and a Nis ILS BMS does not have). The 1.4.0 sets fail 164 pairs. A live check in the sim (tune the frequency, read the
+course and the runway on the HSI) is NOT TESTED.
 
 **Arresting cables** are BMS's "Arrestor System" objects (variants 1, 2, 4 and 5; "Arrestor Cable Sign" is the
 marker beside one). Each is laid across a runway, its heading across the strip, and goes to the runway it lies
@@ -157,7 +213,7 @@ chart after any change to `pavement.mjs`.** A number cannot tell you the field l
 
 | Feature | BMS source | Code | Check |
 |---|---|---|---|
-| Airfields, navaids, ILS, ATC, radio | `Data/Campaign/<th>/*.obd`, `Stations+Ils`, ATC tables, RadioMap | `airports.mjs`; one set per distinct content (`ap-*`, `rm-*`), **written for every theater**, add-ons included | `node src/geocheck.mjs` (median error under ~1 nm against OurAirports); `node src/plannercheck.mjs` (every set a theater names is shipped) |
+| Airfields, navaids, ILS, ATC, radio | `Data/Campaign/<th>/*.obd`, `Stations+Ils`, ATC tables, RadioMap | `airports.mjs`; one set per distinct content (`ap-*`, `rm-*`), **written for every theater**, add-ons included; an ILS frequency's runway end by the sim's own rule (`ilsEnds`, "Which runway end an ILS frequency serves" above) | `node src/geocheck.mjs` (median error under ~1 nm against OurAirports); `node src/plannercheck.mjs` (every set a theater names is shipped); `node src/ilscheck.mjs` (each ILS's runway against the KTO AIP and the Hellas, Israel and Balkans navaid lists) |
 | Aircraft, weapons, loadouts | the objects DB, `catalog.mjs` inputs | `db.mjs`, `catalog.mjs` | counts in `index.json` |
 | Reference pictures (Encyclopedia, Arsenal, Threats) | the theater's TacRef (`TacRefDB.xml` beside its terrain, else `Data/TerrData`'s): each entry's `PicName`, the file `<artdir>\Art\TacRData\<PicName>.tga`, else `Data\Art\TacRData`'s. An aircraft or store has the picture of the entry whose `ClassTable` is its own class-table row, and nothing else (no family or sibling picture). A theater that borrows another's TacRef (Hellas, LHTO, Hellas WCP, EF2000 BTO, the Korea 2012 six, LKTO, OFMKTO, TvT, KTO 80s) keeps a link only when that row is the same object in the TacRef's own `Objects` (same name), or the object's name is the entry's word for word, or for a store the same designation. A theater's own art that differs from the base theater's under the same name ships as `<name>__<add-on folder>`; a flat-colour placeholder is no picture. BMS's own slips, reviewed by eye, are listed in `reference.mjs` (an entry's `PicName` of another type, a row linked to another type's entry, a type's photo showing another air arm), keyed by name and picture so each lapses when BMS changes it. An aircraft still without a picture may take one of the same type family whose markings were identified as its own nation's (`NATION_PICTURES`, matched on the air arm its name names, `NATION_WORDS`; never across nations); three borrowed store links that differ only in name are explicit (`SAME_STORE` in `catalog.mjs`). The threat guide names its entry in `tools/curated/threat_pictures.json` (reviewed: same type and variant, no other nation's markings), shipped as each threat's `tacref` | `reference.mjs`, `catalog.mjs` (`tacrefFor`), `images.mjs`; `node src/referencerun.mjs` rebuilds only these | the run's counts (aircraft, weapons and entries pictured); `img/tacref` names nothing stale; on a new BMS, look at every picture two aircraft share and at every name `withThreatPictures` warns about |
 | Theater maps, tiles | `NewTerrain/HeightMaps/HeightMap.raw` (int16 feet, row 0 = north), `NewTerrain/Photoreal/GlobalColorMap.dds` | `maps.mjs`, `heightmap.mjs` | `--maprender <theater> <folder>`; `MAX_Z` must match `MapBase.kt`. Water is **flat areas**, not "height ≤ 0" — land lies below sea level in several theaters. Every pixel samples the terrain where BMS lays it (`heightmap.mjs` `sampleOf`/`textureOf`: metres of 3.28084 ft from the south-west sample's centre, while the map's square counts 3.27998 — the PC's `MapTiles.TerrainFrame`), with the airbases' levelling (`tld.mjs`), so the bundled z4 meets the PC's z5 within a fraction of a pixel (up to 1.3.9 two z4 pixels off at the north-east); compare a bundled z4 tile with `--maptiles <BMS folder> <scratch folder> <id> relief 5` |

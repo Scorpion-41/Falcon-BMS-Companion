@@ -79,6 +79,9 @@ import javax.imageio.ImageIO
  * 3. **Target pictures** (1.4.0, [targetPictures]): two halves of the mission's targets, a choice made in the picker and
  *    kept across a launch, every picture inked, and a half the PC cannot draw refused. The copy's mission must name
  *    targets that have models (its `Data\TerrData\Objects\Models`), or only the refusal is checked.
+ * 3b. **Target pictures from the Planner's flight** (1.4.1, [plannerTargets]): WDP mode, nothing populated, no Briefing
+ *    card — the picker lists the flight's targets, Add… adds one, a print draws them (a copy with models, as 3; run a
+ *    copy whose briefing is another theater's with `BMSC_DEV_THEATER` set, and its KoreaObj pages in that theater).
  *
  * Pictures go to `<outDir>/printpages/`. The copy's page files are written (that is the point); nothing else is.
  */
@@ -278,7 +281,8 @@ object PrintPagesOutcome {
             // ---------------------------------------------------------------- 2. each kind printed
             line("== 2. Each kind printed through the Print window (This PC, the bridge on the copy)")
             val ez = File(root, "Tools/EZBoards")
-            Bridge.update { it.copy(BmsDirOverride = root.path, AutoEzBoardsOnPrint = false, EzBoardsDir = ez.takeIf { d -> d.isDirectory }?.path) }
+            // in WDP mode: the Planner's pages are printed there only (1.4.1: EZBoards mode offers none of them)
+            Bridge.update { it.copy(BmsDirOverride = root.path, AutoEzBoardsOnPrint = false, EzBoardsDir = ez.takeIf { d -> d.isDirectory }?.path, MissionSource = com.bmscompanion.app.data.mission.MissionMode.WDP) }
             Bridge.startForCheck()
             MissionLink.useThisPc()
             MissionLink.acquire(); acquired++
@@ -353,9 +357,17 @@ object PrintPagesOutcome {
                 stage.shot(File(pics, "window-printed.png"))
             } finally {
                 stage.close()
+                // the parts after this one read the printed briefing's mission, in EZBoards mode
+                Bridge.update(reapply = false) { it.copy(MissionSource = com.bmscompanion.app.data.mission.MissionMode.EZBOARDS) }
             }
             line("")
             fails += targetPictures(root, outDir, pics, captures, ::line)
+            line("")
+            fails += plannerTargets(outDir, pics, captures, ::line)
+            line("")
+            // 4. the Noteboard and Upd Kneeboard from the Kneeboards page (1.4.1; alone: --planneroutcome notes), last:
+            // it fills the Planner's pages from the printed briefing as the window does outside the Planner
+            fails += NoteboardOutcome.checks(root, outDir, File(pics, "notes").apply { mkdirs() }, ::line)
         } catch (e: Throwable) {
             fails++
             line("FAIL: threw ${e::class.java.simpleName}: ${e.message}")
@@ -499,6 +511,143 @@ object PrintPagesOutcome {
             line("FAIL: target pictures threw ${e::class.java.simpleName}: ${e.message}")
             e.stackTrace.take(10).forEach { line("    at $it") }
         } finally {
+            stage.close()
+            TargetPictures.cacheOverride = oldCache
+        }
+        return fails
+    }
+
+    /**
+     * 3b. **Target pictures from the Planner's own flight** (1.4.1, a pilot's report: "you must first add target pictures
+     * from the main Briefing"): WDP mode, nothing populated, the Briefing card never opened, and the flight of the save
+     * that holds the printed one open in the Planner (as Open mission… → Pick a flight leaves it). The PC's old answer
+     * for the Mission section ("Populate from Planner first.") is shown, then the picker lists the Planner flight's
+     * targets, its **Add…** opens the Add list and a target added there lands on the list and on the half, and a print
+     * draws the half with every picture. Answers how many checks failed.
+     */
+    private fun plannerTargets(outDir: File, pics: File, captures: CopyOnWriteArrayList<Triple<Int, Int, ByteArray>>, line: (String) -> Unit): Int {
+        var fails = 0
+        fun check(ok: Boolean, what: String, detail: String = "") {
+            if (!ok) fails++
+            line((if (ok) "PASS " else "FAIL ") + what + if (!ok && detail.isNotEmpty()) " — $detail" else if (detail.isNotEmpty()) " ($detail)" else "")
+        }
+        line("== 3b. Target pictures from the flight open in the Planner (WDP mode, not populated, no Briefing card)")
+        val s = KneeboardPrintSession
+        val t = KneeboardTargets
+        val p = com.bmscompanion.app.ui.screens.wdp.PlannerMissionState
+        val oldCache = TargetPictures.cacheOverride
+        TargetPictures.cacheOverride = File(outDir, "target-cache")
+        val oldMode = MissionSource.mode()
+        val old = listOf(p.source, p.theater, p.ref, p.kind, p.flight)
+        val stage = Stage(SCENE_W, SCENE_H)
+        try {
+            // the flight: the save that provably holds the printed one (EZBoards mode's own proof), as the Planner opens it
+            val set = Theaters.of(Bridge.install)
+            val v = MissionDtcFile.verdict()
+            val th = v.theater?.let { set?.byName(it) } ?: set?.current(Bridge.install.theater)
+            val saveFile = v.save
+            val b = Bridge.currentBriefing()
+            val fid = if (set != null && th != null && saveFile != null && b != null)
+                MissionDtcFile.briefedFlight(CampaignArchive.cached(saveFile, CampaignArchive.names(set, th)), b)?.id?.toString() else null
+            if (th == null || saveFile == null || fid == null) {
+                line("  (the copy's briefing is not provably a flight of one of its saves: nothing to plan from — use a copy whose save holds the printed flight)")
+                return 0
+            }
+            val ref = com.bmscompanion.app.data.mission.CampRef(th.name, saveFile.name, fid)
+            val flight = (CampaignFiles.flight(CampaignFiles.context(), th.name, saveFile.name, fid) as? CampaignFiles.Answer.Ok)?.value
+            check(flight != null, "the Planner's flight is read: ${th.name} › ${saveFile.name} › ${flight?.row?.callsign ?: fid}")
+            // WDP mode, nothing populated, nothing added or removed on any Briefing card of this device
+            Bridge.update(reapply = false) { it.copy(MissionSource = com.bmscompanion.app.data.mission.MissionMode.WDP) }
+            MissionSource.discardSnapshot()
+            TargetPics.saveAdded("none", emptyList()); TargetPics.saveRemoved("none", emptyList())
+            stage.onUi {
+                Snapshot.withMutableSnapshot {
+                    p.theater = th.name; p.ref = ref; p.flight = flight; p.kind = null
+                    p.source = com.bmscompanion.app.ui.screens.wdp.PlannerMissionState.SAVE
+                }
+                t.choices.clear(); s.leaveAll()
+            }
+            check(MissionSource.wdp && MissionSource.populated() == null, "WDP mode, not populated")
+            // the Print window up (a part before this one may have closed it)
+            stage.onUi { if (PlannerWindows.open != PlannerWindow.PRINT) PlannerWindows.show(PlannerWindow.PRINT) }
+            check(stage.until(30_000) { MissionLink.state.value is LinkState.Online && s.state != null && !s.loading }, "the Print window is up with the link")
+            // the pages read again in WDP mode (the window holds one plan per mode and asks for the Planner's flight's
+            // targets in WDP mode only, 1.4.1): the state it had was read in EZBoards mode
+            stage.onUi { runBlocking { s.load() } }
+            check(s.wdpMode(), "the window has the pages of WDP mode", "${s.state?.mode}")
+            val section = TargetPictures.missionSet()
+            line("  the Mission section's answer (the Briefing card's): ${section.groups.size} groups" + (section.error?.let { " — $it" } ?: ""))
+            check(section.error != null && section.groups.isEmpty(), "the Mission section has no targets before a Populate (what the pilot ran into)", "${section.groups.size} groups")
+            check(t.query().contains("save=") && t.query().contains("flight="), "the picker asks for the Planner's flight", t.query())
+            runBlocking { t.load(force = true) }
+            val ts = t.set
+            val all = t.entries()
+            line("  the Planner flight's list: ${ts?.groups?.size ?: 0} groups, ${all.size} entries, mission ${ts?.mission}" + (ts?.error?.let { " — $it" } ?: t.error?.let { " — $it" } ?: ""))
+            ts?.groups?.forEach { g -> line("    ${g.kind.uppercase()} ${g.title}${g.note?.let { " · $it" } ?: ""}: " + g.items.joinToString(", ") { it.name }) }
+            if (ts != null && ts.error == null && ts.mission.startsWith("plan-") && all.isEmpty()) {
+                line("PASS the picker asks the PC for the Planner flight's list, which answers with no error (${ts.mission})")
+                line("  (the copy holds none of the flight's targets' models: the rest is checked on a copy that does, as part 3)")
+                return fails
+            }
+            check(ts != null && ts.error == null && ts.mission.startsWith("plan-") && all.isNotEmpty(), "the picker's list is the Planner flight's, with no Populate and no Briefing card", "${ts?.mission}: ${ts?.error}")
+            val n = (10..16).firstOrNull { s.printable(s.slot(it)) } ?: 10
+            stage.onUi { s.set(n, 'L', KbKind.TARGET_PICTURES); t.pick(n, 'L') }
+            stage.frames(10, 30)
+            check(t.picking?.n == n && t.picking?.draft?.isNotEmpty() == true, "the picker opens on page $n left with the flight's first targets", "${t.picking?.draft?.toList()}")
+            // Add…: the button opens the Add list; a target picked there joins the list and the half
+            check(stage.click("Print/Tgt/Add") && t.adding, "Add… opens the Add list")
+            stage.onUi { t.adding = false }
+            stage.frames(6, 30)
+            val catalog = runBlocking { TargetPics.json("/api/targets/catalog?theater=${TargetPics.enc(ts?.theater.orEmpty())}", com.bmscompanion.app.data.mission.TargetCatalog.serializer()) }
+            val have = all.map { it.item.key }.toSet()
+            val extra = catalog?.categories?.flatMap { it.items }?.firstOrNull { it.key !in have }
+            line("  the Add list: ${catalog?.categories?.size ?: 0} categories, ${catalog?.categories?.sumOf { it.items.size } ?: 0} targets; adding ${extra?.name}")
+            check(extra != null, "the Add list offers the theater's ground targets")
+            if (extra != null) {
+                stage.onUi { t.picking?.draft?.let { d -> while (d.size > 3) d.removeAt(d.size - 1) } }
+                val id = stage.onUi { t.add(extra) }
+                stage.frames(6, 30)
+                check(id != null && t.entries().any { it.id == id } && t.picking?.draft?.lastOrNull() == id,
+                    "${extra.name} is on the list and ticked on the half", "$id; draft ${t.picking?.draft?.toList()}")
+                check(TargetPics.added(ts!!.mission).any { it.key == extra.key }, "the addition is kept on this device for the Planner flight's mission")
+                stage.shot(File(pics, "targets-planner-picker.png"))
+                check(stage.click("Print/Tgt/Done") && t.picking == null, "Done closes the picker")
+                // printed
+                stage.onUi { s.results = emptyList(); s.selN = n; s.selSide = 'L' }
+                captures.clear()
+                check(stage.click("Print/Print"), "the Print button is pressed")
+                val done = stage.until(240_000) { !s.busy && s.results.isNotEmpty() && s.progress == null }
+                s.results.forEach { line("  ${it.file}: ${it.status}${it.reason?.let { r -> " — $r" } ?: ""}") }
+                check(done && s.results.size == 1 && s.results[0].status == KbFileResult.WRITTEN, "page $n written with the Planner flight's targets")
+                val want = t.itemsFor(n, 'L')
+                val said = t.drawn["${n}L"].orEmpty()
+                line("    ${n}L: $said")
+                check(want.any { it.item.key == extra.key } && said.startsWith("${want.size} targets, ${want.size * 2} of ${want.size * 2} pictures:") && said.contains(extra.name),
+                    "page $n left: ${want.size} targets × 2 views drawn, the added one among them", said)
+                val cap = captures.firstOrNull()?.third
+                if (cap != null) File(pics, "targets-planner-page-${n}L.png").writeBytes(cap)
+                val img = cap?.let { ImageIO.read(ByteArrayInputStream(it)) }
+                val dark = img?.let { count(it) { r, g, b -> maxOf(r, g, b) < 90 } } ?: 0
+                check(img != null && dark > want.size * 2 * 8_000, "page $n left: the pictures are inked ($dark dark pixels in a quarter sample)", "$dark")
+                stage.onUi { t.unadd(extra.key) }
+                check(TargetPics.added(ts.mission).none { it.key == extra.key }, "the ✕ takes the added target off again")
+            }
+        } catch (e: Throwable) {
+            fails++
+            line("FAIL: target pictures from the Planner threw ${e::class.java.simpleName}: ${e.message}")
+            e.stackTrace.take(10).forEach { line("    at $it") }
+        } finally {
+            runCatching {
+                stage.onUi {
+                    t.choices.clear(); s.leaveAll(); t.picking = null; t.adding = false
+                    Snapshot.withMutableSnapshot {
+                        p.source = old[0] as String; p.theater = old[1] as String?; p.ref = old[2] as com.bmscompanion.app.data.mission.CampRef?
+                        p.kind = old[3] as String?; p.flight = old[4] as com.bmscompanion.app.data.mission.CampFlight?
+                    }
+                }
+            }
+            runCatching { Bridge.update(reapply = false) { it.copy(MissionSource = oldMode) } }
+            TargetPics.saveAdded("none", emptyList())
             stage.close()
             TargetPictures.cacheOverride = oldCache
         }

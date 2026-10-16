@@ -208,6 +208,11 @@ class CartridgeStore(
     private fun rowId(file: String, section: String, key: String) = file.trim().uppercase() + "\u0001" + section.trim().uppercase() + "\u0000" + key.trim().uppercase()
     private fun diskId(section: String, key: String) = section.trim().uppercase() + "\u0000" + key.trim().uppercase()
 
+    /** A line point, a PPT or an Open 1/Open 2 steerpoint (STPT 81-99): what the pilot may carry from mission to mission (`keepCarried`). */
+    internal fun carried(section: String, key: String): Boolean = Leftovers.kindOf(section, key)?.let { (kind, n) ->
+        kind == Leftovers.LINE || kind == Leftovers.PPT || (kind == Leftovers.STEERPOINT && n in 81..99)
+    } == true
+
     /** A ledger row as a [Leftover], for the summary ([file] "" = the cartridge). */
     private fun itemOf(w: LedgerWrite): Leftover? {
         val (kind, slot) = Leftovers.kindOf(w.section, w.key) ?: return null
@@ -301,9 +306,15 @@ class CartridgeStore(
      * exactly against the live rows only, and a line only whole (its six points), when every point it places is such a
      * value. No log of past values is kept (the rest is "Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints",
      * [cleanForOpen]). A value the Planner never wrote — the pilot's own work in BMS — is never one of them.
+     *
+     * [keepCarried] (1.4.1, the pilot chose **Keep them** for the opened mission's leftovers, `BridgeSettings.OpenedLeftovers`
+     * `keep`): the lines, PPTs and Open 1/Open 2 steerpoints (STPT 81-99) — the Planner's own and BMS's copies of them —
+     * are never cleared here; the pilot carries them from mission to mission. Targets, weapon targets and the delivery
+     * data still go as above.
      */
     fun resetForSwitch(
         callsign: String?, keep: LedgerMission?, switchAt: Long, teSave: String? = null, teTheater: String? = null, loadIni: File? = null,
+        keepCarried: Boolean = false,
     ): SwitchCleared =
         attempt({ SwitchCleared(null, emptyList(), listOf("The cartridge could not be looked at: $it")) }) {
             val f = fileFor(callsign)?.takeIf { it.isFile } ?: return@attempt SwitchCleared(null, emptyList(), emptyList())
@@ -312,6 +323,7 @@ class CartridgeStore(
             fun leftover(w: LedgerWrite): Boolean {
                 val (kind, _) = Leftovers.kindOf(w.section, w.key) ?: return false
                 if (Leftovers.isEmpty(kind, w.value)) return false
+                if (keepCarried && carried(w.section, w.key)) return false
                 if (keep == null) return true
                 val m = w.mission ?: return false
                 return !m.sameFlight(keep)
@@ -377,7 +389,7 @@ class CartridgeStore(
             }
 
             // BMS's copies of the Planner's items (1.3.9): in the files as they are after the clearing above
-            if (anyCopy) copies(callsign, f, ledger, keep, switchAt, teSave, teTheater, loadIni, cleared, left)
+            if (anyCopy) copies(callsign, f, ledger, keep, switchAt, teSave, teTheater, loadIni, cleared, left, keepCarried)
 
             if (cleared.isNotEmpty()) {
                 noteCleared(name, cleared)
@@ -439,9 +451,12 @@ class CartridgeStore(
     private fun copies(
         callsign: String?, cart: File, ledger: CartridgeLedger, keep: LedgerMission?, switchAt: Long,
         teSave: String?, teTheater: String?, loadIni: File?, cleared: MutableList<LedgerCleared>, left: MutableList<String>,
+        keepCarried: Boolean = false,
     ) {
         try {
-            fun placed(w: LedgerWrite) = Leftovers.kindOf(w.section, w.key)?.first.let { k -> k != null && k != Leftovers.NAV && !Leftovers.isEmpty(k, w.value) }
+            // with keepCarried no line, PPT or Open 1/2 steerpoint is a copy to clear: only targets and weapon targets are
+            fun placed(w: LedgerWrite) = !(keepCarried && carried(w.section, w.key)) &&
+                Leftovers.kindOf(w.section, w.key)?.first.let { k -> k != null && k != Leftovers.NAV && !Leftovers.isEmpty(k, w.value) }
             // every value the ledger names that places something, by key: the live rows and (not for lines) what the last
             // few resets cleared — a cleared row under no flight is a line the pilot or BMS drew, never the Planner's
             val values = (ledger.writes + ledger.cleared.map { it.write }.filter { it.mission != null && Leftovers.kindOf(it.section, it.key)?.first != Leftovers.LINE })

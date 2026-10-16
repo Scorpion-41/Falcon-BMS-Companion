@@ -342,7 +342,8 @@ fun airportKind(a: Airport): String = when {
     // gives a field its ATC elevation or the ground under its runways, and a ship neither — nothing stands on its deck
     // and no ATC record has it (`--divertcheck` holds this against every ground chart's `ship`)
     a.elevationFt == null && a.atc == null -> "Carrier"
-    a.name.contains("highway", true) -> "Highway strip"
+    // (BMS's station list calls some airstrips highway strips by another name: Kilchu, Tanchon, Hyangsan … 1.4.1)
+    a.name.contains("highway", true) || a.fullName.contains("highway", true) -> "Highway strip"
     else -> a.type
 }
 
@@ -624,6 +625,10 @@ fun AirportDetail(nav: NavHostController, theaterId: String, id: Int, onBack: ((
             }, right = {
                 if (a.runways.isNotEmpty()) {
                     SectionCard("Runways", accent = Hud.Cyan) {
+                        // the arresting cables come with the ground chart (BMS's "Arrestor System" objects)
+                        val chart by produceState<com.bmscompanion.app.data.airfield.Airfield?>(null, th?.airfieldSet, a.id) {
+                            value = th?.airfieldSet?.let { Repo.airfield(it, a.id) }
+                        }
                         Row(verticalAlignment = Alignment.Top) {
                             RunwayDiagram(a, Modifier.width(130.dp).aspectRatio(1f))
                             Spacer(Modifier.width(14.dp))
@@ -631,16 +636,17 @@ fun AirportDetail(nav: NavHostController, theaterId: String, id: Int, onBack: ((
                                 a.runways.forEach { r ->
                                     Column {
                                         Text("RWY ${r.name}", style = LocalExtra.current.mono, color = Hud.Cyan, fontWeight = FontWeight.Bold)
-                                        Text(listOfNotNull(r.lengthFt?.let { "≈ ${Fmt.num(it)} ft" }, r.ends.firstOrNull()?.let { "${Fmt.hdg(it.headingTrue)}T" }).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = Hud.TextDim)
+                                        // BMS's runway rectangle ("9,004 × 149 ft"), or where a field has none the estimate
+                                        val len = r.lengthFt?.takeIf { it > 0 }?.let { l ->
+                                            if (r.lenEst) "≈ ${Fmt.num(l)} ft"
+                                            else "${Fmt.num(l)}" + (r.widthFt?.let { " × $it" } ?: "") + " ft (" + Fmt.num(runwayMetres(l)) + (r.widthFt?.let { " × ${runwayMetres(it)}" } ?: "") + " m)"
+                                        }
+                                        Text(listOfNotNull(len, r.ends.firstOrNull()?.let { "${Fmt.hdg(it.headingTrue)}T" }).joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = Hud.TextDim)
                                     }
                                 }
                             }
                         }
                         Spacer(Modifier.height(10.dp))
-                        // the arresting cables come with the ground chart (BMS's own "Arrestor System" objects)
-                        val chart by produceState<com.bmscompanion.app.data.airfield.Airfield?>(null, th?.airfieldSet, a.id) {
-                            value = th?.airfieldSet?.let { Repo.airfield(it, a.id) }
-                        }
                         a.runways.flatMap { it.ends }.forEach { e ->
                             val cables = chart?.takeIf { it.ship == null }?.runways?.firstOrNull { r -> r.ends.any { it.designator == e.designator } }
                                 ?.takeIf { it.cables.isNotEmpty() }?.cablesFrom(e.designator)

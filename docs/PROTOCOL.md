@@ -72,6 +72,8 @@ The app sends the UDP datagram `BMSC_DISCOVER` to the broadcast address(es) on p
 | GET | `/api/kbprint/thumb?n=&side=L\|R&w=` | per page half shown | JPEG of what that half holds now |
 | POST | `/api/kbprint/file` | on user tap (Print), one call per page file | body: `KbFileSend` → `KbFileResult` |
 | POST | `/api/kbprint/shipped?n=<n\|all>` | on user tap | `KbFileResult[]` — puts Falcon BMS's own shipped page back |
+| GET | `/api/notes` | when the Noteboard editor or a Kneeboards page opens, every 5 s while the editor is open, every 4 s on a VR Notes board (1.4.1) | `NotesState` (see *The Noteboard*) |
+| POST | `/api/notes` | a moment after the last change in the Noteboard editor, and before a print draws a Noteboard (1.4.1) | body: `NotesDoc` → `NotesState` |
 | GET | `/api/files/places` | when a file window opens (not on the BMS PC's own window) | `PcPlaces` (see *Files on the BMS PC*) |
 | GET | `/api/files/list?path=&ext=` | on each folder the window shows | `PcFolder` |
 | GET | `/api/files/stat?path=` | on Save, before the overwrite question | `PcFileEntry` (`exists` false for a new name) |
@@ -111,6 +113,9 @@ When the PC is a **client** of another BMS PC, `/api/...` calls it receives are 
 }
 ```
 `media` summarises the screenshot folder (`User\Pictures`, `g_sPicturesDirectory`, the folder BMS reports in shared memory, or the `PicturesDirOverride` setting).
+`bms.install` and `bms.installs` (1.4.1, additive): the active Falcon BMS install's name and how many installs the PC
+lists (*Falcon BMS installs*, below); the Mission section's source line and the server page name the install only when
+there are two or more. An older PC leaves them out (`installs` 0).
 `briefing.planModified` changes whenever what `/api/mission` carries as `plan` may have — since the two modes (1.3.8)
 a switch of mode and a Populate from Planner — and `briefing.routeModified` whenever the `route` does (BMS's mission-file route, or the save's flight plan standing in for it);
 both are 0 when there is none, and both are part of the key a client refetches `/api/mission` on (1.3.8, additive),
@@ -224,7 +229,11 @@ to DTC wrote to every key, and the mission it was for. All additive:
   reads and `Auto Save.ini`; a line only whole. No log of past values is kept (a 1.3.9 test build's `history[]` in the
   ledger file is passed over when read and dropped at the next write).
 - **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (1.3.9, `GET /api/planner/settings` → `PlannerPcSettings
-  { cleanOpened }`, `POST /api/planner/settings?cleanOpened=1|0`, the same answer; `BridgeSettings.CleanOpenedMission`,
+  { cleanOpened, openedLeftovers }`, `POST /api/planner/settings?openedLeftovers=ask|clean|keep` (1.4.1) or
+  `?cleanOpened=1|0` (= clean/keep), the same answer; since 1.4.1 `BridgeSettings.OpenedLeftovers` decides — `ask`
+  until the pilot answers the Planner's one-time question, which a new device puts up before it sends `clean=1`;
+  `cleanOpened` is true only for `clean`, so an older device cleans nothing while it is `ask`; `keep` also keeps every
+  line, PPT and Open 1/2 steerpoint at a new mission and a switch of mode; before 1.4.1 `BridgeSettings.CleanOpenedMission`,
   on by default and set on once by settings layout 4; an older PC answers 404): `POST /api/mission/opened` takes
   `clean=1` (in either mode) when the Planner planned **another flight** than it had (Open mission… or Pick a flight),
   and with the setting on the PC then cleans every line, every PPT and every Open 1/Open 2 steerpoint (STPT 81-99,
@@ -317,6 +326,10 @@ Added in 1.3.8, all additive:
   save's clock and every later one up to six hours past the landing, at most 36 (`kind` "update", `minute` from the
   `DHHMM` name). `places[]` `{label, name?, x, y, ms}`: the flight's Take Off, Target Area and Landing (theater feet, x
   north; campaign ms). `ok` false: `why` says why in a sentence (no save, no `.twx`, another save's `.twx`).
+  Added in 1.4.1: `sky?` `{timeZone, lat, lon}` (`BmsSky`, the theater's `<terraindir>\Weather\weather.ini`: BMS's
+  local zone, hours east of zulu, and the whole-degree point its briefing's sunrise and sunset are worked out for; absent
+  when the file is not there), and in `twx` (also `/api/files/weather`) `year`, `month`, `day` (version 4 and later: the
+  zulu date BMS's sky is at, at the file's `clock`; 0 unknown). The page's Sun & Moon is worked out on the device from these.
   `GET /api/weather/mission/map?frame=<id>` → `MissionWxMap` `{id, file, version, cols, rows, moveHeading, moveKt,
   stratusFt[], contrailFt[], type[], pressureMb[], tempC[], cloudBaseFt[], cover[], towering[], shower[], visKm[],
   windKt[], windDeg[]}`: one value per cell row-major from the north-west, the wind ten levels per cell
@@ -933,8 +946,42 @@ in its own size. `size` is the file's width in pixels (the files are square). `l
 `datacard-l`, `datacard-r`, `coordination-l`, `coordination-r`, `briefing`, `weather`, `targets-l`, `targets-r`,
 `routemap`, `attack`, `departure`, `arrival`, `alternate`, `picture` (1.3.8: a picture file on the PC, Browse picture…,
 stretched over the half as WDP does and drawn by the PC from the file; the device shows a preview read through
-`/api/files/picture`).
-The header tag names each half's kind by its place in that list as one base-36 digit (`picture` is `g`).
+`/api/files/picture`), then (1.4.0) `schedule`, `routemap-dark`, `targetpics`, then (1.4.1) `notes` and `notes-2`
+(Noteboard 1 and 2, *The Noteboard* below).
+The header tag names each half's kind by its place in that list as one base-36 digit (`picture` is `g`, `notes` `k`,
+`notes-2` `l`).
+
+**Where the window opens** (1.4.1): from the Planner's toolbar in WDP mode, and from **Mission → Kneeboards → Upd
+Kneeboard** in either mode. In EZBoards mode that button waits until EZBoards has made its pages for the briefing
+printed now (`EzStatus.lastRun` started at or after `BriefingStatus.modified` and `ok`; at once when EZBoards is not
+`configured`, nothing to wait for), and the window's default plan there (Noteboard 1 beside the Target pictures — the
+Briefing page where `/api/targets/mission` has no target with a model — then the route map beside the departure chart)
+and its Mission set both leave EZBoards the halves it claims (page 1 also when EZBoards is not set up). Outside the Planner the device fills the Planner's pages from `/api/mission?source=bms` as
+the Planner would; nothing new is asked of the PC.
+
+### The Noteboard (`/api/notes`, 1.4.1)
+The pilot's own pages: **Noteboard 1** and **Noteboard 2**, each a list of blocks — free notes, laser codes, figures,
+and the briefing's comm ladder and steerpoints (drawn from the mission on the device when the page is drawn; the PC
+keeps only the block). Kept on the PC so every device, Upd Kneeboard's `notes`/`notes-2` pages and the VR `notes` board
+show the same, in `%APPDATA%\BMS Companion\notes.json` (never in the BMS folder; a temporary file and an atomic move;
+the last 12 missions).
+
+- `GET /api/notes` → `NotesState`: `key` names the mission now — the theater, the flight's callsign and its package, of
+  the printed briefing in EZBoards mode and of the populated flight in WDP mode (`""` with neither), so a PRINT of the
+  same flight again keeps its notes; `mission` the same in words; `doc` the notes kept for it, else the newest notes
+  kept with `keep` (then `carried` is true and `doc.key` is the mission now), else null (the device lays out its
+  default boards: laser codes from the cartridge's `[Laser]` LaserTGP/LaserLST, and a block of notes).
+- `POST /api/notes` with a `NotesDoc` → `NotesState`: kept for the mission its own `key` names (a change finished after
+  the mission changed lands on the mission it was written for); the answer is the mission now's. 400 for a body that is
+  not one or over 256 KB. A write that fails is held in memory and `error` says so.
+
+```
+NotesState   {key, mission?, doc?: NotesDoc, carried, error?}
+NotesDoc     {key, boards[Noteboard], keep, modified}               boards: Noteboard 1, Noteboard 2
+Noteboard    {title, blocks[NoteBlock]}
+NoteBlock    {id, type: text|laser|figures|comms|steerpoints, title, text, rows[NoteRow], max}   max: rows a comms/steerpoints block shows, 0 = all
+NoteRow      {label, value}
+```
 
 ### Files on the BMS PC (`/api/files`, 1.3.8)
 Weapon Delivery Planner opens and saves its files through Windows' file dialogs (Reload WX's `.fmap`/`.twx`, Load and
@@ -1041,7 +1088,7 @@ guards as above; only `txt log ini cfg md csv json xml lst tdf b` (text), `html 
 |---|---|---|
 | POST | `/api/ezboards/auto?on=1\|0` | turns EZBoards on PRINT on or off from any device → `EzStatus` (in WDP mode it stays suspended whatever it is set to) |
 | POST | `/api/contacts/hostiles?on=1\|0` | **Show hostile contacts (live)** on or off from any device's Setup page (1.3.8) → `TacviewStatus`, whose `hostiles` (also `info.tacview.hostiles`, additive; absent from an older PC = off) says which it is. Kept on the PC (`BridgeSettings.ShowHostiles`, off by default, set off once by settings layout 3), so every device and VR board follows it; while off `/api/contacts` carries no hostile contact (see the table above), and each device strips the same again and says so on its map, Picture card, AWACS page and Picture board |
-| GET / POST | `/api/planner/settings[?cleanOpened=1\|0]` | the Planner's settings the PC keeps because it acts on them (1.3.9) → `PlannerPcSettings {cleanOpened}`: **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (`BridgeSettings.CleanOpenedMission`, on by default, set on once by settings layout 4; acted on at `POST /api/mission/opened?clean=1`), shown and set in the Planner's Settings window on every device; an older PC answers 404 and the window greys the switch. See *The cartridge ledger* |
+| GET / POST | `/api/planner/settings[?openedLeftovers=ask\|clean\|keep][?cleanOpened=1\|0]` | the Planner's settings the PC keeps because it acts on them (1.3.9) → `PlannerPcSettings {cleanOpened, openedLeftovers}`. **1.4.1**: `openedLeftovers` is the pilot's choice — `ask` (not chosen: the Planner asks once at the next Open mission… of another campaign flight, Clear them / Keep them, and posts the answer; a new install and settings layout 5), `clean`, `keep` (`BridgeSettings.OpenedLeftovers`); `cleanOpened=1\|0` sets clean/keep; `cleanOpened` answers true only for `clean`; an older PC sends no `openedLeftovers` (empty) and never asks. Before 1.4.1: **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (`BridgeSettings.CleanOpenedMission`, on by default, set on once by settings layout 4; acted on at `POST /api/mission/opened?clean=1`), shown and set in the Planner's Settings window on every device; an older PC answers 404 and the window greys the switch. See *The cartridge ledger* |
 | GET / POST | `/api/taxi` | what the Taxi page is showing (`TaxiSelection {airportId, runway, outbound, spot?, at, radio?}`), so a VR board can follow it. `radio` (1.3.8, additive, GET only): the last controller's call to the pilot's own flight from BMS's debug log (`RadioTaxi`, see *The radio*), served only when the PC heard it after the last POST; the live taxi board applies it over the selection. A POSTed `radio` is ignored. `runway` is the runway taxied to, or for the way in (`outbound` false) the runway landed on; `spot` is BMS Ground's number in the network drawn for that trip — the runway's own, or for the way in the reciprocal end's taxi-in network (`routeShown` in `TaxiRouting.kt`); POST sets it (400 for anything else). In memory only, and **per mission**: a GET answers an empty selection once the mission it was made for is no longer the one `/api/mission` serves (a new PRINT in EZBoards mode, a Populate or a switch of mode — `MissionData.missionKey`), so the last mission's runway and spot never stand for the next |
 | GET / POST | `/api/boards` | the VR boards' configuration (`BoardConfig`), set by the PC's VR boards page and kept in `bridge-settings.json` as `Boards` |
 | GET | `/api/kneeboard/page?i=<n>&max=<px>` | page `n` of the kneeboard UOAF's HTML Briefing tool exported, as `image/jpeg` (`max` 320-3000, default 1400); 404 when there is none |
@@ -1056,6 +1103,45 @@ guards as above; only `txt log ini cfg md csv json xml lst tdf b` (text), `html 
 | POST | `/api/wdp/open[?hidden=0]`, `/api/wdp/show?on=0\|1`, `/api/wdp/close` | starts WDP (its window parked off the PC's screen unless `hidden=0`), shows or parks it, closes it → `{message}` |
 | GET | `/api/wdp/frame?w=&q=` | one frame of WDP's window as `image/jpeg` (`w` 320-3000 px, default 1200; `q` 0.3-0.95, default 0.72), no caching; 404 when it is not running |
 | POST | `/api/wdp/input?kind=&x=&y=&w=&d=` | a tap, drag, wheel turn or key in the coordinates of the frame shown → `{message}`. Capture works; posted input does not reach WinForms controls reliably, which is why the Planner was ported instead |
+
+### Falcon BMS installs (1.4.1)
+
+A PC may have several Falcon BMS installs (4.38.1 and 4.37 side by side); one is **active**, and everything the PC
+reads and writes is that install's. `Installs.kt` on the PC.
+
+| Method | Path | Answer |
+|---|---|---|
+| GET | `/api/bms/installs[?refresh=1]` | `BmsInstallList {installs[], active, followsRegistry, message?, error?}`; `refresh=1` reads the registry again (it is otherwise read at most every 5 s) |
+| POST | `/api/bms/installs/active?id=<id>` | makes that install the active one → the list with `message`; 404 for an id not in the list, 409 for a folder that is gone |
+| POST | `/api/bms/installs/add?path=<folder>[&label=<name>][&activate=1]` | adds a folder of the PC (the only route that takes a path; held to `/api/files`' path rules: own drives, no network path) → the list; 400 for a path refused, 404 for a folder that is not there. A folder that does not look like Falcon BMS is still added, and `message` says so |
+| POST | `/api/bms/installs/remove?id=<id>` | takes a folder the pilot added out of the list (never anything on disk); 409 for a registry install. Taking out the active one makes the registry's newest active |
+| POST | `/api/bms/installs/label?id=<id>&label=<name>` | names an install (blank = its own name again) |
+
+`BmsInstallEntry {id, name, path, registryKey?, label?, added, registryDefault, exists, looksLikeBms, active, theater?}`:
+`id` is `r:<registry key>` for an install the registry names (every `Falcon BMS 4.x` key under
+`HKLM\SOFTWARE\Benchmark Sims`, 32-bit `WOW6432Node` and 64-bit views, newest version first) and `a:<hex>` for a folder
+the pilot added; a device names an install by its `id`, never by a path. `name` is the label, else the key's version,
+else the folder's name; `looksLikeBms` = `Falcon BMS.exe` (top, `Bin\x64`, `Bin\x86`) or `Data\TerrData` in it.
+
+Kept in `bridge-settings.json`: `BmsDirOverride` is the active folder (null = the registry's newest install, followed
+rather than pinned, as before 1.4.1 — choosing that install sets it back to null), and `BmsInstalls [{path, label}]`
+the pilot's folders and the labels given to any install (settings layout 6 puts a `BmsDirOverride` of an earlier
+version into the list once). A registry install that is active brings its own key's `PilotCallsign` and `curTheater`;
+any other folder takes them from the newest key.
+
+**A switch** is a change of folder like any other: the briefing, cartridge and mission file are read again, and what the
+PC held of the last install is dropped (map tiles drawn from its terrain, target pictures, the mission's ground picture
+and weather, the radio log's calls, WDP mode's snapshot when its save is not in the new folder). The EZBoards,
+html_brief, screenshots and DataCards folders that were inside the last install go back to their defaults, so the next
+PRINT never runs the other install's EZBoards. A device seeing another `bms.baseDir` puts its Planner back on the
+printed briefing, starts its mission view afresh and drops the DTC page's unsaved edits and the DataCard's entries
+without a question (they were made on the other install's cartridge), reading the new install's cartridge
+(`BmsInstallSeen` → `WdpSession.dropForInstall`). The cartridge ledger follows the folder by itself (it lives in the
+install's `User\BMS Companion Planner\Ledger`). The noteboards are the install's own: `/api/notes`' key gains
+`|@<hex of the folder>` when another install than the registry's newest is read (the default install's key is
+unchanged, so notes kept before 1.4.1 stay its own), and notes kept for the next mission carry over within one install. Nothing is adapted to an older Falcon BMS:
+what does not work with another version's folder answers as it would for a wrong folder. Check `--installstest out.txt`
+(scratch APPDATA), pictures `--installsrender <out folder>`.
 
 ### The radio (BMS's debug log, 1.3.8)
 
@@ -1114,7 +1200,7 @@ else BMS's current one).
 
 | Method | Path | Answer |
 |---|---|---|
-| GET | `/api/targets/mission` | `TargetSet {theater, mission, groups[{title, kind, note?, items[{key, name, role?, count?, category?}]}], error?}`: the flight's own targets (`kind` "target": each waypoint's target and each seat's designated one in the save that holds the flight — a unit's vehicles, an objective's buildings, the one building a waypoint names — **only those an enemy team holds** (hostile or at war in the stances of the flight's team or of the team controlling it; an objective's owner from the save's `.obd`), never a take-off or landing waypoint's; `TargetPictures.flightTargetsOf`), then the mission's threats (`MissionData.ground`'s air defences and the printed Threat Analysis rows, each system once as its battalion from `Falcon4_UCD.xml`: launcher, fire-control radar, other radars, other air defences, support, trucks last; `note` the briefing's place words), then the spotted ships ("ship"). `mission` is the mission it is of (`MissionData.missionKey`). Asking starts drawing the front-right and rear-left plain pictures in the background |
+| GET | `/api/targets/mission` | `TargetSet {theater, mission, groups[{title, kind, note?, items[{key, name, role?, count?, category?}]}], error?}`: the flight's own targets (`kind` "target": each waypoint's target and each seat's designated one in the save that holds the flight — a unit's vehicles, an objective's buildings, the one building a waypoint names — **only those an enemy team holds** (hostile or at war in the stances of the flight's team or of the team controlling it; an objective's owner from the save's `.obd`), never a take-off or landing waypoint's; `TargetPictures.flightTargetsOf`), then the mission's threats (`MissionData.ground`'s air defences and the printed Threat Analysis rows, each system once as its battalion from `Falcon4_UCD.xml`: launcher, fire-control radar, other radars, other air defences, support, trucks last; `note` the briefing's place words), then the spotted ships ("ship"). `mission` is the mission it is of (`MissionData.missionKey`). Asking starts drawing the front-right and rear-left plain pictures in the background. **The Planner's flight** (1.4.1, additive; Upd Kneeboard's Target pictures, `KneeboardTargets.query`): `?theater=<theater name>&save=<save file>&flight=<num/creator>` answers that save's flight whether or not it was populated — its targets, the threat picture Populate would make for it (`MissionGrounds.forFlight`, with the printed briefing's Threat Analysis when the print is this flight's) and its ships, `mission` = `plan-<theater>\|<save>\|<flight>\|<save's file time>` — unless WDP mode's snapshot is that same flight (then the snapshot's answer, `wdp-<at>`); `?printed=1` answers the printed briefing's flight (EZBoards mode's answer, `ez-<time>`, unless the snapshot was populated from that print). Without either, the Mission section's mode decides; in WDP mode before a Populate that is `error` "Populate from Planner first." |
 | GET | `/api/targets/system?name=<names>` | `TargetGroup`: one system's battalion; `name` may hold several names separated by `\|` (the threat guide's TacRef name, its name, its aliases), tried in order: the exact vehicle name, then its system ("SA-6"), then any other telling word of it ("MIM-104 Patriot" → "Patriot"). `items` empty and `note` the reason when none is found |
 | GET | `/api/targets/catalog[?theater=]` | `TargetCatalog {theater, categories[{name, items[]}], error?}`: every land and sea vehicle and every building of the theater with a model, each name once, by category (SAM launchers, Radars, Air-defence support, Anti-aircraft guns, Tanks, APCs and IFVs, Artillery and rockets, Surface-to-surface missiles, Trucks, Infantry, Other vehicles, Ships, Buildings and structures) |
 | GET | `/api/targets/picture?key=ct<n>&view=fr\|rl&look=plain\|intel&w=<px>[&theater=]` | `image/jpeg`, `w` × `w·5/8` (`w` 160-1600, default 640): the model from the front right or the rear left, 30° from above, orthographic; `plain` a grey model on a sand ground with its shadow and a scale bar, `intel` a black-and-white targeting-pod picture (contrast, blur, noise, reticle, the name). 400 for a key that is not `ct<n>`, 404 for a class with no model in this install, 422 when the model cannot be read, 503 when Falcon BMS's folder is unknown — each with `{error}` |

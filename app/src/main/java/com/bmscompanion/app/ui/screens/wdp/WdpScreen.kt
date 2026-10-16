@@ -274,6 +274,21 @@ object WdpSession {
         // the cartridge's delivery data ([NAV OFFSETS]) leaves the DTC page too, as the PC clears it from the file
         if (dtcMade.isInitialized()) runCatching { dtc.clearDeliveryForMission() }
     }
+
+    /**
+     * Another Falcon BMS install is read on the PC (1.4.1, `BmsInstallSeen`, after [resetAttack]): the DTC page's edits
+     * and the DataCard's entries were made on the other install's cartridge and are dropped without a question, and
+     * the new install's cartridge is read (the card takes it as its own once it is in). Pages not made yet start from
+     * the new install when they are.
+     */
+    fun dropForInstall() {
+        if (dataCardMade.isInitialized()) runCatching { dataCard.dropForInstall() }
+        if (dtcMade.isInitialized()) runCatching {
+            dtc.dropForInstall { text -> if (dataCardMade.isInitialized()) runCatching { dataCard.takeCartridge(text) } }
+        }
+        appliedMission = null
+        appliedAttackMission = null
+    }
     // made with the Planner, not with its tab: the attack pages' Save to DTC and the toolbar's reach the cartridge
     // through it (WdpCartridge) before the DTC tab has ever been opened
     private val dtcMade = lazy { DtcWiring(dtcSource) }

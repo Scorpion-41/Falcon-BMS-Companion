@@ -15,7 +15,17 @@ import java.time.format.DateTimeFormatter
 @Serializable
 data class BridgeSettings(
     val Port: Int = 47474,
+    /**
+     * The **active** Falcon BMS folder (1.4.1: the install chosen in the list, [Installs]); null = the registry's newest
+     * install, as it always was. A folder that is gone is not used (the registry's then is).
+     */
     val BmsDirOverride: String? = null,
+    /**
+     * The Falcon BMS folders the pilot added to the list of installs (1.4.1, Setup → Falcon BMS installs, [Installs]),
+     * and the labels given to any install, the registry's too (a row whose path is a registry install only names it).
+     * The registry's installs are found by themselves and are not kept here.
+     */
+    val BmsInstalls: List<BmsInstallSetting> = emptyList(),
     val EzBoardsDir: String? = null,
     /** UOAF's kneeboard exporter, a separate download (looked for in Tools\\html_brief_win). Null means "the default place". */
     val KneeboardExporterDir: String? = null,
@@ -77,9 +87,18 @@ data class BridgeSettings(
      * **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (1.3.9, the Planner's Settings window; `GET`/`POST /api/planner/settings`):
      * when the Planner plans another flight (Open mission… or Pick a flight), every HSD line and PPT goes from the
      * cartridge and from the campaign mission file BMS's LOAD reads for that flight, whoever made them
-     * ([ModeSwitchReset.cleanOpened]; never in a TE or a training). **On**, and set on once by step 4 of [migrate].
+     * ([ModeSwitchReset.cleanOpened]; never in a TE or a training). Since 1.4.1 only a mirror of [OpenedLeftovers]
+     * (true exactly when it is `clean`), kept for an older build that reads this file; [OpenedLeftovers] decides.
      */
-    val CleanOpenedMission: Boolean = true,
+    val CleanOpenedMission: Boolean = false,
+    /**
+     * The opened mission's leftovers (1.4.1): `"ask"` (not chosen yet — the Planner asks the first time it would clean,
+     * and the answer is written here; a new install, and everyone once by step 5 of [migrate]), `"clean"` (the clean
+     * start above) or `"keep"` (nothing cleaned at Open mission…, and the lines, PPTs and Open 1/2 steerpoints the
+     * Planner saved are kept at a new mission and a switch of mode too: [CartridgeStore.resetForSwitch]'s `keepCarried`).
+     * `PlannerPcSettings.ASK`/`CLEAN`/`KEEP`; set with [withOpenedLeftovers], which keeps the mirror right.
+     */
+    val OpenedLeftovers: String = com.bmscompanion.app.data.mission.PlannerPcSettings.ASK,
     /**
      * How far the stored file has been brought forward. See [migrate].
      *
@@ -93,7 +112,7 @@ data class BridgeSettings(
         private val json = Json { ignoreUnknownKeys = true; prettyPrint = true; encodeDefaults = true; explicitNulls = true }
 
         /** The settings layout this build writes. Bump it when a default changes and add the step to [migrate]. */
-        const val CURRENT = 4
+        const val CURRENT = 6
 
         fun load(): BridgeSettings = runCatching {
             val text = file.readText()
@@ -119,6 +138,11 @@ data class BridgeSettings(
          *    [ShowHostiles] on; set off once whatever the file holds, and a pilot who turns it on afterwards keeps it on.
          * 4: **start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (1.3.9). [CleanOpenedMission] set on once whatever the file
          *    holds; a pilot who turns it off afterwards (the Planner's Settings) keeps it off.
+         * 5: **ask once about the opened mission's leftovers** (1.4.1). The silent clean start of layout 4 surprised a
+         *    pilot whose campaign PPTs went at every Open mission…, so [OpenedLeftovers] is set to `"ask"` once whatever
+         *    the file holds: the Planner asks the next time it would clean, and the answer is the setting from then on.
+         * 6: **the list of installs** (1.4.1). A BMS folder set by hand before ([BmsDirOverride]) is put in [BmsInstalls]
+         *    once, so it stays in the list after the pilot switches to another install; it stays the active one.
          */
         internal fun migrate(s: BridgeSettings): BridgeSettings = migrate(s, save = true)
 
@@ -142,11 +166,39 @@ data class BridgeSettings(
                 next = next.copy(CleanOpenedMission = true, SettingsVersion = 4)
                 BridgeLog.info("Settings brought forward to 4: each opened mission starts with clean lines, PPTs and Open 1/2 steerpoints (the Planner's Settings turn it off)")
             }
+            if (next.SettingsVersion < 5) {
+                next = next.withOpenedLeftovers(com.bmscompanion.app.data.mission.PlannerPcSettings.ASK).copy(SettingsVersion = 5)
+                BridgeLog.info("Settings brought forward to 5: the Planner asks once whether an opened mission starts with clean lines, PPTs and Open 1/2 steerpoints")
+            }
+            if (next.SettingsVersion < 6) {
+                next = next.withOverrideListed().copy(SettingsVersion = 6)
+                BridgeLog.info("Settings brought forward to 6: the BMS folder set by hand is in the list of installs")
+            }
             next = next.copy(SettingsVersion = CURRENT)
             if (save) next.save()
             return next
         }
     }
+
+    /** The opened mission's leftovers as `PlannerPcSettings.ASK`/`CLEAN`/`KEEP` (anything else is read as ask). */
+    val leftoversChoice: String get() = choiceOf(OpenedLeftovers)
+
+    /** Sets [OpenedLeftovers] to [choice] (ask, clean or keep) and [CleanOpenedMission], its mirror for an older build. */
+    fun withOpenedLeftovers(choice: String): BridgeSettings {
+        val c = choiceOf(choice)
+        return copy(OpenedLeftovers = c, CleanOpenedMission = c == com.bmscompanion.app.data.mission.PlannerPcSettings.CLEAN)
+    }
+
+    /** [BmsDirOverride] put in [BmsInstalls] when it names a folder the list does not have yet (step 6 of [migrate]). */
+    fun withOverrideListed(): BridgeSettings {
+        val p = BmsDirOverride?.trim()?.trimEnd('\\', '/')?.takeIf { it.isNotEmpty() } ?: return this
+        if (BmsInstalls.any { it.path.trim().trimEnd('\\', '/').equals(p, ignoreCase = true) }) return this
+        return copy(BmsInstalls = BmsInstalls + BmsInstallSetting(path = p))
+    }
+
+    private fun choiceOf(s: String): String = s.trim().lowercase().takeIf {
+        it == com.bmscompanion.app.data.mission.PlannerPcSettings.CLEAN || it == com.bmscompanion.app.data.mission.PlannerPcSettings.KEEP
+    } ?: com.bmscompanion.app.data.mission.PlannerPcSettings.ASK
 
     fun save() {
         runCatching {
@@ -157,6 +209,10 @@ data class BridgeSettings(
         }.onFailure { BridgeLog.warn("Settings save failed: ${it.message}") }
     }
 }
+
+/** A Falcon BMS folder in the pilot's list of installs ([BridgeSettings.BmsInstalls]), with the name given to it. */
+@Serializable
+data class BmsInstallSetting(val path: String = "", val label: String? = null)
 
 /** Recent activity shown in the server page (last 300 lines). */
 object BridgeLog {

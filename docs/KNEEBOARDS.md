@@ -8,7 +8,10 @@ Which of the three you use depends on the Mission section's mode — the **EZBoa
 Mission section (and in Setup):
 
 - **EZBoards mode** (the default): the Mission section follows BMS's printed briefing, and EZBoards makes the cockpit
-  kneeboard.
+  kneeboard. Since 1.4.1 **Upd Kneeboard** (Mission → Kneeboards) adds pages of the app's own beside EZBoards' — your
+  **Noteboard** (notes and laser codes), target pictures, the route maps and the ground charts, never a page of the
+  Planner's — once EZBoards has made its pages for the PRINT. The halves EZBoards writes (page 1 on a stock setup) are
+  always EZBoards' there.
 - **WDP mode**: the Mission section follows the Planner (Weapon Delivery Planner), and the Planner's **Upd
   Kneeboard** makes it. EZBoards is paused: GENERATE NOW is greyed out ("WDP mode: EZBoards is paused so it cannot
   overwrite the Planner's pages. Make the cockpit boards with Planner → Upd Kneeboard.", with **Open the Planner**
@@ -26,7 +29,7 @@ the cockpit pages differs.
 |---|---|---|---|
 | **The cockpit kneeboard** | in the pit, on your knee | **three tools**, below | — |
 | ‣ EZBoards | the pages its `CONFIG_USER.BAT` claims (`SET KNEEBOARD[F16_<n><L\|R>]`), page 1 on a stock setup | EZBoards (by Logic, a separate download from the Falcon BMS forum), at PRINT or with **GENERATE NOW**, **in EZBoards mode** | the **printed briefing** and your **cartridge** (`xbrief.exe` is handed both, `BRIEFING_TXT` and `CALLSIGN_INI`, in EZBoards' own `CONFIG.BAT`) |
-| ‣ Upd Kneeboard | the pages you choose; by default the **Mission set**, Briefing and Weather on page 1, your DataCard on page 2 and Coordination Card on page 3 (EZBoards is paused in WDP mode, so its pages are the Planner's); **Browse picture…** puts a picture of your own on any half | the Planner, **in WDP mode** | what the Planner has open: the save's flight, the DTC page as it is (saved or not), the attack page; a picture is a `.jpg`, `.png`, `.bmp` or `.dds` on the BMS PC, read again at each print and drawn by the PC from the file |
+| ‣ Upd Kneeboard | the pages you choose; by default the **Mission set**, Briefing and Weather on page 1, your DataCard on page 2 and Coordination Card on page 3 (EZBoards is paused in WDP mode, so its pages are the Planner's); **Browse picture…** puts a picture of your own on any half | the Planner's toolbar **in WDP mode**, and **Mission → Kneeboards → Upd Kneeboard in either mode** (1.4.1; in EZBoards mode once EZBoards has made its pages for the PRINT, or at once when EZBoards is not set up) | in WDP mode what the Planner has open (before the Planner was first shown its pages are filled from BMS's own files, as the Planner fills them); in EZBoards mode the Mission section's own mission, never the Planner's pages; your **Noteboard** as kept on the PC; the save's flight, the DTC page as it is (saved or not), the attack page; a picture is a `.jpg`, `.png`, `.bmp` or `.dds` on the BMS PC, read again at each print and drawn by the PC from the file |
 | ‣ HTML Briefing | pages 1-3, when it exports | UOAF's HTML Briefing tool (a separate download; BMS Companion looks for it in `Tools\html_brief_win`), **in EZBoards mode** (BMS Companion does not start it in WDP mode) | the **campaign save** (`.cam`) and your **cartridge** — *not* the printed briefing |
 | **HTML Briefing pages** | BMS Companion → Kneeboards, the chart viewer, and the `EXPORTED` VR board | the same tool's export | as above |
 | **BMS Companion VR boards** | OpenKneeboard, in the headset | this app, as web pages | live data, and the Mission section's mission (so they follow the mode) |
@@ -46,11 +49,29 @@ as it was. It never creates a page file that does not exist.
 **Which pages Upd Kneeboard uses.** Its window opens on the **Mission set**, laid for the mode the Mission section is
 in. In **WDP mode** — where the Planner is used — EZBoards does not run at PRINT, so the Mission set takes the first
 pages: the Briefing (left knee) and the Weather (right knee) on page 1, the DataCard on page 2 (both knees) and the
-Coordination Card on page 3. (In EZBoards mode it would leave EZBoards the pages its `CONFIG_USER.BAT` claims and take
-the first three it does not, pages 2, 3 and 4 on a stock setup; a theater with fewer free pages gets the first pairs
-that fit.) A Mission set you have not changed is laid again when the mode changes, and when an earlier version laid it
-in its older two-page layout, and the window says so; a plan you changed by hand is kept. **The plan is kept on the device between launches**, as WDP keeps its kneeboard choices: a picture page
-you set once is still planned the next evening.
+Coordination Card on page 3. In **EZBoards mode** (1.4.1) it leaves EZBoards the pages its `CONFIG_USER.BAT` claims
+(page 1 on a stock setup, and page 1 all the same when EZBoards is not set up in BMS Companion) and takes the first two
+it does not, and opens not on the Mission set but on its EZBoards-mode default: your **Noteboard** beside the **Target
+pictures** (that half left as it is where the PC can draw none of the mission's targets, so the default never holds a
+half it would refuse), then the **Route map** beside the **departure ground chart** — EZBoards' page already carries
+the briefing, comm ladder, steerpoints and weather, so the default brings what EZBoards cannot make rather than the same
+briefing twice. In EZBoards mode the **Mission set** button lays this default. A theater with fewer free pages gets
+the first pairs that fit.
+
+**In EZBoards mode the window offers no page of the Planner's** — not the DataCard, the Coordination Card, the
+Planner's Briefing and Weather pages, the target list, the Airport Schedule or the attack profile; they are not in the
+menu at all, and the Planner is not touched. What it offers is drawn from the Mission section's own mission (the
+printed briefing, the cartridge, BMS's route, the flight's fields): the Noteboards, Target pictures, the two route maps,
+the departure, arrival and alternate ground charts, a picture of your own, Blank and Test. **Every half EZBoards
+writes is EZBoards' page**: it shows the page EZBoards wrote (its picture, "now: EZBoards" read from the file), opens
+no menu and is never printed by this window, whatever a plan says; the window reads the pages again when EZBoards runs
+while it is open. **Each mode keeps its own plan**: a WDP-mode plan (the Planner's pages on pages 1-3) is put aside in
+EZBoards mode and comes back as it was when you switch back to WDP mode.
+
+The window always opens on its page table; a Noteboard's editor opens only when you choose a Noteboard for a half or
+press **Edit notes…**. A plan you have not changed is laid again when an earlier version laid it in its older layout
+or when its pages move, and the window says so; a plan you changed by hand is kept. **The plan is kept on the device
+between launches**, as WDP keeps its kneeboard choices: a picture page you set once is still planned the next evening.
 
 **The other pages a half can be** (each half's own menu): the Briefing page and its Weather list, the Target list
 (left: the steerpoints and target points; right: the threats, lines and weapon target points), the **Route map** and
@@ -66,6 +87,18 @@ chosen for takes the next four in the list's order (the flight's targets, then e
 radar), so a second Target pictures half carries on where the first stops, and follows the next mission's list. Your
 choice is kept with the plan for the mission it was made for. A half is printed only when the PC has drawn every one
 of its pictures; otherwise it is left as it is and the window says why.
+
+**The Noteboard** (1.4.1): **Noteboard 1** and **Noteboard 2**, a page each, put together like a small Dashboard of
+your own — blocks added, moved up and down and taken out: **Notes** (free text; a board with only an empty block of
+notes is a blank page with its title), **Laser codes** (rows of a label and a four-digit code: your TGP and LST codes
+filled in from the cartridge's `[Laser]` section where it has them, then #2, a buddy, any row you add), **Figures**
+(joker, bingo, push time…), and the briefing's **Comm ladder** and **Steerpoints**, drawn from the mission when the
+page is drawn. Choosing a Noteboard for a half opens its editor in place of the page table, with the page beside it as
+it will print (on a phone, Edit and Preview take turns); **Edit notes…** under a Noteboard half's preview opens it
+again, and **Mission → Kneeboards → Edit notes** opens it on its own, with nothing printed. The notes are kept on the
+BMS PC (`%APPDATA%\BMS Companion\notes.json`, never in the BMS folder) for the flight they were written for, so every
+device, the print and the VR **Notes** board show the same; **Keep for the next mission** carries them to the next
+flight.
 
 **Pictures of your own** (WDP's Browse Picture): **Browse picture…** opens the Open picture window on the BMS PC
 (Windows' own on the PC, the PC's folders in a window on a phone or in a browser), then shows the picture as it will
@@ -111,8 +144,11 @@ either mode:
    EZBoards. Do this after steps 1 and 2, or the boards carry the old weather or the old cartridge.
 4. **GENERATE NOW** on Mission → Kneeboards if you saved the DTC again after PRINT, so the kneeboard carries the
    cartridge as it now is.
+5. **Upd Kneeboard** on Mission → Kneeboards (optional, 1.4.1): your Noteboard, target pictures, the route map and the
+   ground chart on the pages EZBoards leaves free. It opens once EZBoards has made its pages for this PRINT, so its
+   pages land after EZBoards' and only EZBoards' own pages are written again at the next PRINT.
 5. **Export in html_brief**, if you use it — it reads the save and the DTC, so it comes after every save.
-6. **Commit and enter the cockpit.** BMS Companion's own pages and VR boards follow the jet from here and need nothing
+6. **Press TAKEOFF in BMS.** BMS Companion's own pages and VR boards follow the jet from here and need nothing
    pressed.
 
 If you change the weather after PRINT, save it in BMS and PRINT again (and GENERATE NOW): until then the briefing,
@@ -136,11 +172,12 @@ meanwhile, **LOAD** it before you SAVE it again, and GENERATE NOW after, so the 
    where its weather comes from and as of when. Whatever the Planner saved into the cartridge for an earlier flight
    is taken out by itself when you open this one.
 5. **In BMS**: open the DTC window again, press **LOAD**, then **SAVE**, so BMS's copy of your cartridge is the
-   Planner's (without LOAD, FLY saves BMS's old copy over the Planner's).
+   Planner's (without LOAD, TAKEOFF saves BMS's old copy over the Planner's).
 6. **Populate from Planner** — the Mission section, and every device and VR board, shows your flight, with the save's
    weather.
 7. **Upd Kneeboard** — your cards on the cockpit kneeboard.
-8. **Commit and enter the cockpit**, and **LOAD** on the DTE page.
+8. **Press TAKEOFF in BMS** (the button at the bottom right of the mission screen; its tooltip says Fly), and **LOAD**
+   on the DTE page.
 
 The Planner's **Steps** (on its toolbar) keeps these steps beside the page, with the one you are on lit.
 

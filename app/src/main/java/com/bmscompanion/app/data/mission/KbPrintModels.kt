@@ -167,4 +167,11 @@ object KbKind {
      * chosen per half in the Print window (1.4.0)
      */
     const val TARGET_PICTURES = "targetpics"
+    /**
+     * the pilot's Noteboard 1 (1.4.1, [NotesDoc]): free notes, laser codes, figures and a few of the mission's tables,
+     * composed in the Print window or on the Kneeboards page and kept on the PC (`/api/notes`)
+     */
+    const val NOTES = "notes"
+    /** Noteboard 2, so both knees can carry a page of notes */
+    const val NOTES_2 = "notes-2"
 }

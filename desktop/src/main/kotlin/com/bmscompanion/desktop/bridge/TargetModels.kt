@@ -174,12 +174,17 @@ object TargetModels {
         "guns", "tel", "telar", "tracked", "wheeled", "towed", "self", "propelled", "air", "defense", "defence", "the", "and",
     )
 
+    /** Towed and self-propelled field guns BMS's class table files with the air defences. */
+    private val ARTY_NAMES = Regex("""\b(2A18|D-30|D-20|M-?46|M-?101|M-?102|M-?114|M-?198|M-?777|howitzer)\b""", RegexOption.IGNORE_CASE)
     private val MISSILE_WORDS =Regex("""\b(frog|scud|ss-\d+|hwasong|nodong|lance|atacms|iskander|tochka)\b""", RegexOption.IGNORE_CASE)
 
     /** The list's category of a vehicle from the class table's domain, type and sub-type. */
     private fun category(domain: Int, type: Int, sub: Int, name: String, radar: Boolean, armed: Boolean): String = when {
         domain == 4 || domain == 7 -> SHIP
         type == 1 -> INFANTRY
+        // BMS's class table files a few towed guns with the air defences (sub 2): the 2A18 (D-30) howitzer was
+        // listed as a SAM launcher
+        sub == 2 && ARTY_NAMES.containsMatchIn(name) -> ARTY
         sub == 2 && armed -> SAM
         sub == 2 && radar -> RADAR
         sub == 2 -> AD_SUPPORT

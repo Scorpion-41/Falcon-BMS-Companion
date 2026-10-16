@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.toSize
 import com.bmscompanion.app.data.Airport
 import com.bmscompanion.app.data.Platform
 import com.bmscompanion.app.data.Theater
+import com.bmscompanion.app.data.airfield.Airfield
 import com.bmscompanion.app.data.wdp.PopupCoords
 import com.bmscompanion.app.data.wdp.WdpCoords
 import com.bmscompanion.app.ui.components.Fmt
@@ -93,12 +94,15 @@ fun divertIsShip(a: Airport) = airportKind(a) == "Carrier" || a.type.equals("Car
 
 /** A radio table column: label, figure and the short note after it on one line. */
 private val RADIO_COL = 200.dp
+/** A runway's line at its shortest: its name, "9,004 ft", "2,745 m" (the width is left out where it does not fit) */
+private val RUNWAY_COL = 190.dp
 private val RADIO_GAP = 10.dp
 private val PAD_H = 12.dp
 
 /**
  * Under an airfield's ground chart: what a pilot diverting there needs, in one compact card, **Info** — first
- * the coordinates as one tight block (LAT and LNG as BMS shows them — the DED's own format — and ELEV), a hairline,
+ * the coordinates as one tight block (LAT and LNG as BMS shows them — the DED's own format — and ELEV), right under
+ * them the runways, length × width in feet from BMS's own runway rectangles ([runwayFigures]), a hairline,
  * then the radios as a dense table of label, figure and band: every frequency the field has, in the order a divert
  * uses them (Approach, the TACAN, Tower, Ground, the ILS, ATIS, then Base Ops and LSO). Both tables sit on the same
  * columns (as many as the chart's column has room for, at most three, each read downwards), so every label and
@@ -126,10 +130,15 @@ internal fun DivertBlock(
         copied = key
     }
     val radios = radioCells(a, ship)  // not remembered: its inks are the skin's live colours
+    // the runways' length and width: BMS's own runway rectangles, which the airport record carries
+    val runways = if (ship) emptyList() else runwayCells(runwayFigures(a))
     // The width is worked out here, once: both tables lay their columns on it, so the coordinates' labels and
     // figures stand exactly over the radios'. As many columns as fit (at most three), each read downwards.
     BoxWithConstraints(modifier.fillMaxWidth()) {
         val cols = ((maxWidth - (if (framed) PAD_H * 2 else 0.dp) + RADIO_GAP) / (colWidth + RADIO_GAP)).toInt().coerceIn(1, 3)
+        // a runway's line is longer (feet, then metres), so its columns may be fewer than the others' (the Mission map
+        // card's narrow ones)
+        val rwCols = ((maxWidth - (if (framed) PAD_H * 2 else 0.dp) + RADIO_GAP) / (RUNWAY_COL + RADIO_GAP)).toInt().coerceIn(1, cols)
         val body: @Composable ColumnScope.() -> Unit = {
             when {
                 ship -> {
@@ -148,6 +157,12 @@ internal fun DivertBlock(
             // the coordinates, one tight block (LAT and LNG as BMS shows them, then ELEV), then a hairline, the radios
             val position = coordCells(a, coords)
             if (position.isNotEmpty()) FieldTable(position, cols, copied, copy, labelWidth)
+            // the runways, length × width in feet, on the same columns right under the position, at the tables' own
+            // spacing (no rule: both are the field itself)
+            if (runways.isNotEmpty()) {
+                if (position.isNotEmpty()) Spacer(Modifier.height(2.dp))
+                FieldTable(runways, rwCols, copied, copy, labelWidth)
+            }
             Box(Modifier.fillMaxWidth().padding(vertical = 6.dp).height(1.dp).background(Hud.Outline.copy(alpha = 0.55f)))
             FieldTable(radios, cols, copied, copy, labelWidth)
         }
@@ -199,12 +214,68 @@ private fun coordCells(a: Airport, c: DedCoords?): List<InfoCell> = buildList {
     a.elevationFt?.let { e -> add(InfoCell("elev", "ELEV", "${Fmt.num(e)} ft", null, Hud.Green, copyText = e.toString())) }
 }
 
+/**
+ * A runway as the Info box gives it: [name] as the airport record writes it ("09L/27R"), [lengthFt] and [widthFt] the
+ * runway rectangle BMS authors in the field's own data (header type 8) — the figure its ground charts print in metres
+ * ("2745 X 45 M" at Osan is this 9,004 × 149 ft), which the airport record carries since 1.4.1. [exact] false: the field
+ * has no rectangle, and [lengthFt] is the extractor's estimate (between the threshold lights), with no width.
+ */
+internal data class RunwayFigure(val name: String, val lengthFt: Int, val widthFt: Int?, val exact: Boolean)
+
+/**
+ * Every runway of [a] in feet, from the airport record (BMS's runway rectangles, [Runway.lenEst] where a field has
+ * none). Two single ends the record lists apart but which are one strip's two ends (the same rectangle, reciprocal
+ * numbers: Capodichino's "06" and "24") are one line, "06/24". Nothing for a ship ([chart] only tells one).
+ */
+internal fun runwayFigures(a: Airport, chart: Airfield? = null): List<RunwayFigure> {
+    if (chart?.ship != null || divertIsShip(a)) return emptyList()
+    val figs = a.runways.mapNotNull { r ->
+        r.lengthFt?.takeIf { it > 0 }?.let { RunwayFigure(r.name, it, r.widthFt?.takeIf { w -> w > 0 }, exact = !r.lenEst) }
+    }
+    fun num(name: String) = name.takeWhile { it.isDigit() }.toIntOrNull()
+    val out = mutableListOf<RunwayFigure>()
+    for (f in figs) {
+        val n = num(f.name)
+        val i = out.indexOfFirst { o ->
+            val m = num(o.name)
+            !o.name.contains('/') && !f.name.contains('/') && n != null && m != null && o.exact && f.exact &&
+                o.lengthFt == f.lengthFt && o.widthFt == f.widthFt && kotlin.math.abs(kotlin.math.abs(n - m) - 18) <= 2
+        }
+        if (i < 0) out += f
+        else out[i] = out[i].copy(name = listOf(out[i].name, f.name).sortedBy { num(it) }.joinToString("/"))
+    }
+    return out
+}
+
+/** The runways as lines of the Info box: the runway, its length, its width; a tap copies the length. */
+private fun runwayCells(figs: List<RunwayFigure>): List<InfoCell> = figs.mapIndexed { i, r ->
+    // the length is the figure: "9,004 ft" in the table's bold, then "2,745 m" (what BMS's ground charts print, so the
+    // two can be matched), then small "· 149 ft wide", which a line too narrow for it leaves out
+    val approx = if (r.exact) "" else "≈ "
+    val metres = approx + Fmt.num(runwayMetres(r.lengthFt)) + " m"
+    InfoCell(
+        "rwy$i", r.name, approx + "${Fmt.num(r.lengthFt)} ft",
+        metres + (r.widthFt?.let { " · $it ft wide" } ?: ""), Hud.Cyan, copyText = r.lengthFt.toString(),
+        subShort = metres,
+    )
+}
+
+/**
+ * A runway figure in feet as the metres BMS's ground charts print: the theater's own metre (its grid counts 3.27998 ft
+ * a metre, `MapProjection`), rounded to the metre. On seven charted runways (`--divertrender` 1b) it gives the chart's
+ * figure on four and is 1 m off on three (Gunsan 2,750 for 2,749, Gumi 1,780 for 1,781, Souda 3,351 for 3,350) — the
+ * charts' own rounding; 0.3048 m a foot gives it on three and is 1 m off on four.
+ */
+internal fun runwayMetres(ft: Int): Int = kotlin.math.round(ft / 3.27998).toInt()
+
 /** A navaid's ident in its station name: "Songtan VORTAC (SOT) 116X" → SOT. */
 private val IDENT = Regex("""\(([A-Z0-9]{2,4})\)""")
 
 /** One line of the Info box: label, figure, a short note after it (band, ident, runway), and what a tap copies. */
 private data class InfoCell(
     val key: String, val label: String, val value: String?, val sub: String?, val color: Color, val copyText: String? = null,
+    /** what the note becomes where [sub] does not fit the line (a runway drops its width) */
+    val subShort: String? = null,
 )
 
 /** The field's frequencies in divert order: Approach, TACAN, Tower, Ground, ILS, ATIS, Base Ops, LSO. */
@@ -276,10 +347,13 @@ private fun InfoRow(c: InfoCell, copied: Boolean, labelWidth: Dp, onCopy: (Strin
         )
         Spacer(Modifier.width(6.dp))
         // a figure the field does not have says "none", without its band
-        val sub = if (copied) "copied" else c.sub.takeIf { value != null }
+        // a note too long for the line takes its short form where it has one (kept per note and width)
+        var short by remember(c.sub, c.subShort) { mutableStateOf(false) }
+        val sub = if (copied) "copied" else (if (short && c.subShort != null) c.subShort else c.sub).takeIf { value != null }
         Text(
             sub.orEmpty(), fontSize = 10.sp, lineHeight = 12.sp, color = if (copied) Hud.Green else Hud.TextDim,
             maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            onTextLayout = { if (!copied && !short && c.subShort != null && it.hasVisualOverflow) short = true },
         )
     }
 }

@@ -1,5 +1,86 @@
 # Changelog
 
+## 1.4.1 (BMS 4.38) — October 2026
+
+**Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install**; existing settings are kept.
+
+This release adds a Noteboard for the cockpit kneeboard and Upd Kneeboard in both mission modes, quick switching
+between several Falcon BMS installs, runway lengths in the airfield Info box, Mission weather colour scales and a
+Sun & Moon block, and asks before Open mission… clears lines and PPTs.
+
+### Kneeboards
+
+- **Upd Kneeboard in both modes.** Mission → Kneeboards has **Upd Kneeboard** and **Edit notes** in EZBoards mode as
+  well as WDP mode. In EZBoards mode it becomes available once EZBoards has made its pages for the printed briefing
+  (straight away when EZBoards is not set up). The halves EZBoards writes (page 1 on a stock setup) show as EZBoards'
+  own pages and are never printed over; the default set adds a Noteboard, Target pictures, the route map and the
+  departure chart on the next free pages, drawn from the printed briefing. The Planner's pages (DataCard, Coordination
+  Card, its Briefing and Weather, target list, schedule, attack profile) are offered in WDP mode only, and each mode
+  keeps its own page plan.
+- **Noteboard.** A kneeboard page composed from blocks: free notes (a blank page when it is the only block), laser
+  codes (TGP and LST from the callsign file, wingman and buddy codes typed), figures such as joker, bingo and push time,
+  the comm ladder and the steerpoints. Blocks are added, ordered and removed in the Upd Kneeboard window beside the
+  printed page; two Noteboards can share one page. The notes are kept on the PC per flight, shared by every device,
+  and **Keep for the next mission** carries them on.
+- **Notes VR board.** A VR kneeboard tab shows Noteboard 1, Noteboard 2 or both, updated as they are edited.
+
+### Setup
+
+- **Several Falcon BMS installs.** Every Falcon BMS version in the Windows registry is listed by itself, other folders
+  can be added, and one tap switches the install in use, from the server page or any device's Setup page. A switch
+  reads everything again from the new folder; unsaved Planner edits are dropped so nothing is saved into the other
+  install, and notes are kept per install. The install in use is named in the Mission section's source line when more
+  than one is listed. Older BMS versions are not specially supported.
+
+### Airfields
+
+- **Runway lengths in the Info box.** Each runway's length in feet and metres, with its width, under the coordinates
+  on the airfield page and in the Mission map's airfield card. The figures are BMS's own runway outlines and match
+  BMS's ground charts to within 3 ft.
+
+### Mission weather
+
+- **Colour scales.** Clouds, Precipitation, Pressure, Wind speed, Temperature and Visibility each fill the map with
+  their own colour scale and a labelled scale bar. Cloud cover runs from a pale veil to dark slate; rain, showers and
+  snow are told apart by colour and pattern; pressure and wind speed are colour fields with isobars and wind barbs
+  over them. The legend explains the cloud symbols: the share of the circle filled is the sky covered (FEW, SCT, BKN,
+  OVC), the number the cloud base in hundreds of feet, ▲ towering cumulus. **Smooth** blends the fills between cells.
+- **Sun & Moon.** Sunrise, sunset, civil twilight, moonrise, moonset and the moon's phase for the mission's date at
+  the take-off field, in local and Zulu time, with BMS's own printed sunrise and sunset beside them; one line of it on
+  the Briefing's and Dashboard's Weather card. BMS draws the moon from the same date, so the phase shown is the
+  one in the sim.
+
+### Planner
+
+- **Open mission… asks before it clears.** The first time it would clear lines, PPTs and Open 1/Open 2 steerpoints
+  left from earlier missions, the Planner asks **Clear them** or **Keep them**; the answer becomes the default for
+  every device and can be changed, or asked again, under Options → Settings…. With Keep, they also stay when a new
+  mission is printed or the mission mode is switched.
+
+### Fixed
+
+- Upd Kneeboard's Target pictures page listed nothing in WDP mode until **Populate from Planner** had been pressed,
+  and targets could only be added on the Briefing page. It now takes the flight open in the Planner and has its own
+  **Add…**.
+- The control tower was missing from the ground charts of Songwhan, Yonghung, Kilchu and Okpyongni highway strips and
+  of Larissa, Andravida, Agrinio, Aktion, Istrana, Kalamata and Sigonella, among 26 fields; 27 towers added.
+- Sangwon highway strip was shown as a second "Songwhan" (a comment in BMS's station file); Kilchu, Tanchon and
+  Hyangsan are now listed as highway strips.
+- The Planner's steps, guide and tooltips told the pilot to press FLY or COMMIT in BMS; the button that enters the
+  cockpit is **TAKEOFF**.
+- The 2A18 (D-30) howitzer was listed under SAM launchers in the target pictures' Add list.
+- ILS frequencies were assigned to the wrong runway ends at many fields: Cheongju's single ILS showed on 06R instead
+  of 24L, and Gimpo's and Incheon's four were each on another end. BMS groups a field's runway ends by runway number
+  and swaps the two ends within each group; the airfield pages, the DataCard and the DTC's ILS now follow it (checked
+  against BMS's own code and its theater documents, 226 runway/frequency pairs). Credit to **Havhingstor**, who found
+  the rule by decompiling Mission Commander and documented it in a GitHub issue; this fix is built on that work.
+- At 121 Balkans runway ends, some in the Falklands, and Skopje and Tanagra in Hellas, a runway end carried its
+  opposite end's name (Aviano's 050° end was called 23) and its ATC pattern; each end now takes its own.
+- Runway lengths came from an estimate that was often far short of BMS's runways (Souda 8,800 ft against 10,990,
+  Hatzor 5,950 against 7,928; Hellas a median 1,700 ft short). Every runway now takes BMS's own length and width, so
+  the Planner's Performance page (take-off and landing distance available), the airfield pages and the VR runway
+  table are corrected.
+
 ## 1.4.0 (BMS 4.38) — October 2026
 
 **Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install**; existing settings are kept.

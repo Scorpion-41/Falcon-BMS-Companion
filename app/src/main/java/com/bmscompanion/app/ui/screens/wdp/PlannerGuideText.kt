@@ -57,7 +57,8 @@ internal object PlannerGuideText {
                     "Switching is instant, asks nothing and shows nothing. It **clears every leftover of the Planner's** " +
                         "— the lines, PPTs, steerpoints and nav offsets it saved in your cartridge, whatever flight they " +
                         "were for — and the other mode's cockpit kneeboard pages from an earlier flight (BMS's own page " +
-                        "goes back). Anything BMS or you changed since the Planner saved it stays. LOAD the DTC in BMS " +
+                        "goes back). Anything BMS or you changed since the Planner saved it stays, and so do the lines, PPTs " +
+                        "and Open 1/2 steerpoints if you chose **Keep them** for opened missions. LOAD the DTC in BMS " +
                         "afterwards. Switching to EZBoards mode opens the Mission section on its Briefing.",
                 ),
                 p(
@@ -97,12 +98,12 @@ internal object PlannerGuideText {
                     i("**Planner:** **Save to DTC**."),
                     i(
                         "**In BMS:** open the DTC again → **LOAD** → **SAVE**. Check that your threats and lines appear on BMS's map.",
-                        why = "without LOAD, FLY saves BMS's old copy of the cartridge over the Planner's.",
+                        why = "without LOAD, TAKEOFF saves BMS's old copy of the cartridge over the Planner's.",
                     ),
                     i("**Planner:** **Populate from Planner**: the app's Mission section and the VR boards show your flight on every device."),
                     i("**Planner:** **Upd Kneeboard**: the Briefing and Weather on page 1, your DataCard on page 2 and the Coordination Card on page 3 of the cockpit kneeboard (EZBoards is paused in WDP mode)."),
                     i(
-                        "**In BMS:** **FLY**. In the jet, from a cold ramp start, load the cartridge on the MFD **DTE** page " +
+                        "**In BMS:** **TAKEOFF** (the button at the bottom right; its tooltip says Fly). In the jet, from a cold ramp start, load the cartridge on the MFD **DTE** page " +
                             "with **LOAD**; from a taxi or runway start BMS has already loaded it.",
                     ),
                 ),
@@ -150,9 +151,11 @@ internal object PlannerGuideText {
                         "Settings…",
                         "WDP's Settings, as the Planner has them. **Show tooltips** explains a control when the mouse rests " +
                             "on it, or on a long press by finger; **Auto load last mission on startup** opens the flight you " +
-                            "planned last when the Planner first opens; **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (on by default) " +
+                            "planned last when the Planner first opens; **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** " +
                             "takes every HSD line, PPT and Open 1/Open 2 steerpoint (STPT 81-99) out of your cartridge and the campaign's mission file when **Open " +
-                            "mission…** or **Pick a flight** plans another flight (a TE keeps its own); the maps still suggest " +
+                            "mission…** or **Pick a flight** plans another campaign flight (a TE keeps its own). The first time that would " +
+                            "happen the Planner asks — **Clear them** or **Keep them** — and your answer is this switch; **Ask me again** " +
+                            "brings the question back. Kept, they stay from mission to mission until you clear them yourself; the maps still suggest " +
                             "the mission's threats and tracks to add; **Reload from BMS** reads the save and your cartridge " +
                             "again. It also shows the Planner's own folder, User\\BMS Companion Planner inside Falcon BMS, and " +
                             "its DataCards folder, which **Browse…** changes.",
@@ -352,6 +355,13 @@ internal object PlannerGuideText {
                         "shows what each answer gives before you press, the strip under the buttons says which you " +
                         "chose, and on each attack page the tip of **TGT STPT** and **IP STPT** says where that steerpoint came from.",
                 ),
+                p(
+                    "**Lines and PPTs from earlier missions: asked once.** The first time you plan another campaign flight, the " +
+                        "Planner asks whether the HSD lines, PPTs (preplanned threat steerpoints) and Open 1/2 steerpoints left " +
+                        "from earlier missions go: **Clear them** takes them out of your cartridge and the campaign's mission file " +
+                        "at every Open mission… (never the route, a target, or what you saved for this flight), **Keep them** leaves " +
+                        "them for you to manage. Your answer becomes the default; change it in **Options → Settings…**.",
+                ),
                 p("**Back to BMS briefing** (in **Open mission…** and **Pick a flight**, beside what is planned) puts the Planner back on the printed briefing."),
                 go(GuideGo.OpenMission, "Open mission…"),
             ),
@@ -521,7 +531,7 @@ internal object PlannerGuideText {
                             "**after a new cartridge, generate again**, or its pages show " +
                             "the old cartridge.",
                     ),
-                    i("**Upd Kneeboard** in the Planner puts your DataCard, and any other pages you choose, on the kneeboard, and **Browse picture…** a picture of your own."),
+                    i("**Upd Kneeboard** in the Planner puts your DataCard, and any other pages you choose, on the kneeboard, and **Browse picture…** a picture of your own. The same window opens from **Mission → Kneeboards** in either mode; in EZBoards mode once EZBoards has made its pages for your PRINT."),
                     i(
                         "The **HTML briefing** (html_brief, Mission → Kneeboards) writes pages 1 to 3 when it exports. " +
                             "**In WDP mode** its **Run HTML Briefing** button is greyed out too, for the same reason; " +
@@ -532,8 +542,10 @@ internal object PlannerGuideText {
                     "**In WDP mode Upd Kneeboard starts at page 1** (**Mission set**): the Briefing on the left and the " +
                         "Weather on the right of page 1, the DataCard on page 2 and the Coordination Card on page 3. EZBoards " +
                         "is paused in WDP mode, so the pages it writes in EZBoards mode are yours. (In EZBoards mode the " +
-                        "Mission set leaves EZBoards its pages and takes the first three it does not use, pages 2, 3 and 4 " +
-                        "on a stock install.) Whichever wrote " +
+                        "window leaves EZBoards its pages and opens on the first two it does not use, pages 2 and 3 on a " +
+                        "stock install: your **Noteboard** and the target pictures, then the route map and the departure " +
+                        "chart; there it offers no page of the Planner's, and the halves EZBoards writes stay EZBoards'.) " +
+                        "Whichever wrote " +
                         "a page last is what you see, so print after html_brief if you use it. The window shows who wrote " +
                         "each page last.",
                 ),
@@ -544,6 +556,15 @@ internal object PlannerGuideText {
                         "file itself at the page's full size. A half's own menu has **Picture…** for the same. The " +
                         "picture is read again when you print, so a file you have since moved leaves that half as it " +
                         "is, and the window says so. What you choose, pictures included, is remembered between launches.",
+                ),
+                p(
+                    "**Your Noteboard** (Noteboard 1 and 2 in a half's menu): a page of your own, put together from blocks " +
+                        "— notes, **laser codes** (your TGP and LST codes filled in from the cartridge, then your wingman's " +
+                        "and a buddy's), figures such as joker and bingo, and the briefing's comm ladder and steerpoints. " +
+                        "Choosing it opens its editor with the page beside it; **Edit notes…** opens it again. The notes " +
+                        "are kept on the BMS PC for this flight, so every device and the VR **Notes** board show them, and " +
+                        "**Keep for the next mission** carries them on. **Mission → Kneeboards → Edit notes** opens the " +
+                        "editor without printing anything.",
                 ),
                 p("Make kneeboards **before you press TAKEOFF**: BMS picks them up as you enter the 3D world."),
                 p(
@@ -1234,9 +1255,10 @@ internal object PlannerGuideText {
                         "A line or threat from an earlier mission comes back",
                         "BMS's DTC window keeps what you last loaded until you LOAD again, and writes it into the next " +
                             "save. The Planner clears what it saved for an earlier mission when a new one begins, and with " +
-                            "**Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (Settings, on by default) **Open mission…** " +
-                            "takes every line, threat and STPT 81-99 out, whoever made it: press **LOAD** in BMS's DTC window after " +
-                            "opening the new mission, then **SAVE**.",
+                            "**Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (Settings; you chose it with " +
+                            "**Clear them**) **Open mission…** takes every line, threat and STPT 81-99 out, whoever made it: press **LOAD** in BMS's " +
+                            "DTC window after opening the new mission, then **SAVE**. If you chose **Keep them**, they stay on purpose: clear " +
+                            "them on the DTC page, or change the choice in Settings.",
                         "step6",
                     ),
                     row(

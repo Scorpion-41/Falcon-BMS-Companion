@@ -107,6 +107,19 @@ object MapTiles {
     private var cached = 0L
     private val gate = Semaphore(3)
 
+    /**
+     * Drops the tiles drawn so far and the terrains read (another Falcon BMS install is read now, [Installs.switched]):
+     * a tile is kept by theater, style and place, not by the folder it was drawn from.
+     */
+    fun forget() {
+        synchronized(cache) { cache.clear(); cached = 0L }
+        terrains.clear()
+    }
+
+    /** How many tiles are held, and one put in by hand (`--installstest`, which checks [forget] at a switch). */
+    internal fun heldForCheck(): Int = synchronized(cache) { cache.size }
+    internal fun holdForCheck(key: String) = synchronized(cache) { cache.put(key, ByteArray(1)); cached += 1 }
+
     /** One tile, from memory when it was drawn before. */
     fun tile(id: String, style: String, z: Int, r: Int, c: Int): Answer {
         val key = "$id/$style/$z/$r/$c"

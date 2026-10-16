@@ -17,6 +17,8 @@ import com.bmscompanion.app.data.mission.MissionWeather
 import com.bmscompanion.app.data.mission.MissionWxMap
 import com.bmscompanion.app.data.weather.CampaignTime
 import com.bmscompanion.app.data.weather.WxGenParams
+import com.bmscompanion.app.data.weather.Astro
+import com.bmscompanion.app.ui.screens.editor.MissionSkies
 import com.bmscompanion.app.ui.screens.editor.MissionWeatherPage
 import com.bmscompanion.app.ui.screens.editor.MissionWxLook
 import com.bmscompanion.app.ui.screens.editor.WxFill
@@ -161,6 +163,49 @@ object MissionWeatherRender {
             appendLine(shot("mapmodel-pc-precip-isobars-fl300", 1600, 1000, 1f, minOf(3, w.frames.size - 1)))
             setLook(WxFill.VISIBILITY, wind = false, level = 0, isobars = true)
             appendLine(shot("mapmodel-tablet-visibility", 1280, 800, 1.5f, minOf(5, w.frames.size - 1)))
+            // 1.4.1: every fill's colour ramp (smooth), the blocks for comparison, and the phone and tablet with a ramp
+            val sm = MissionWxLook.smooth
+            for (fill in WxFill.SHOWN) {
+                setLook(fill, wind = fill == WxFill.WIND, level = if (fill == WxFill.WIND) 7 else 0, isobars = fill == WxFill.PRESSURE, smooth = true)
+                appendLine(shot("ramp-${fill.name.lowercase()}-pc", 1600, 1000, 1f, 0))
+            }
+            setLook(WxFill.CLOUDS, wind = false, level = 0, isobars = false, smooth = false)
+            appendLine(shot("ramp-clouds-blocks-pc", 1600, 1000, 1f, 0))
+            setLook(WxFill.WIND, wind = false, level = 5, isobars = false, smooth = false)
+            appendLine(shot("ramp-wind-blocks-pc", 1600, 1000, 1f, 0))
+            setLook(WxFill.PRESSURE, wind = true, level = 0, isobars = true, smooth = true)
+            appendLine(shot("ramp-pressure-phone", 400, 860, 2f, 0))
+            setLook(WxFill.PRECIP, wind = false, level = 0, isobars = false, smooth = true)
+            appendLine(shot("ramp-precip-tablet", 1280, 800, 1.5f, 0))
+            // the three kinds side by side on a made-up copy of the first map (the copy's maps hold rain only): showers
+            // over the west, rain in the middle, snow (inclement at or below 0 °C) in the east
+            w.frames.firstOrNull()?.let { fr -> maps[fr.id]?.let { mm ->
+                val inc = com.bmscompanion.app.data.weather.WxType.INCLEMENT.code
+                val type = mm.type.toMutableList(); val temp = mm.tempC.toMutableList(); val shower = MutableList(mm.cells) { 0 }
+                for (r in 18 until 34) for (c in 0 until mm.cols) {
+                    val i = r * mm.cols + c
+                    when (c) {
+                        in 6 until 20 -> shower[i] = 1
+                        in 22 until 34 -> { type[i] = inc; temp[i] = 6f }
+                        in 36 until 50 -> { type[i] = inc; temp[i] = -4f }
+                    }
+                }
+                val demo = mm.copy(type = type, tempC = temp, shower = shower)
+                appendLine(picture(out, "ramp-precip-kinds-pc", 1600, 1000, 1f) {
+                    MissionWeatherPage(w, null, th, maps + (fr.id to demo), emptyMap(), 0, {}, pic, bm, {})
+                })
+            } }
+            // the image is built once per map, fill and level, not per frame
+            val ramp = java.util.IdentityHashMap<Any, Int>()
+            maps.values.firstOrNull()?.let { mm ->
+                for (f in WxFill.SHOWN) {
+                    val c = runCatching { com.bmscompanion.app.ui.screens.editor.WxRamps.ink(mm, mm.cells / 2, f, 0, com.bmscompanion.app.ui.screens.editor.WxRamps.pressureRange(mm)) }.getOrNull()
+                    ramp[f] = if (c == null) -1 else 1
+                }
+            }
+            check(ramp.values.all { it == 1 }, "every fill colours a cell (${ramp.size} fills)")
+            skyLines(w, th)
+            MissionWxLook.smooth(sm)
             setLook(keep.first, keep.second, keep.third, iso)
         }
 
@@ -187,6 +232,7 @@ object MissionWeatherRender {
             appendLine(shot("deterministic-phone", 400, 860, 2f))
             appendLine(shot("deterministic-tablet", 1280, 800, 1.5f))
             appendLine(shot("deterministic-pc", 1600, 1000, 1f))
+            skyLines(w, th)
         }
 
         // ---- 3. the routes, in-process, and nothing written by reading
@@ -207,13 +253,75 @@ object MissionWeatherRender {
         val after = hashes(dir)
         val changed = (before.keys + after.keys).filter { before[it] != after[it] && it !in written }
         check(changed.isEmpty(), "reading wrote nothing in the campaign folder" + if (changed.isEmpty()) "" else ": $changed")
+
+        // ---- 4. Sun & Moon of the printed mission, against what BMS printed (when it printed figures, not 00:00:00)
+        appendLine()
+        appendLine("4. Sun & Moon of the mission the route serves")
+        if (ans == null || !ans.ok) appendLine("note no mission weather to work the sky out for")
+        else {
+            val tha = runBlocking { Repo.index().theaters.firstOrNull { it.id == ans.appTheater } }
+            check(ans.twx?.year?.let { it > 0 } == true, "the .twx's date: ${ans.twx?.year}-${ans.twx?.month}-${ans.twx?.day}")
+            val o = Bridge.currentBriefing()?.overview
+            val printed = o?.sunrise?.trim()?.takeIf { it.isNotEmpty() }
+            val printedZone = MissionSkies.printedZone(printed)
+            // the theater's weather.ini where the copy has it (BMS's zone and point); a copy without its terrain folder
+            // has none, and the page then falls back on the printed briefing's zone, else the longitude
+            val iniThere = tha?.let { t ->
+                Theaters.at(root).let { s -> s.byName(ans.theater) ?: s.all.firstOrNull { it.appId == t.id } }?.let { MissionWeatherRoute.sky(it) != null }
+            } ?: (ans.sky != null)
+            if (iniThere) check(ans.sky != null, "weather.ini read: ${ans.sky}")
+            else {
+                appendLine("note weather.ini not in this copy: the fallback (the printed briefing's zone, else the longitude) is used")
+                check(ans.sky == null, "no weather.ini served (${ans.sky})")
+            }
+            skyLines(ans, tha, printedZone)
+            val sky = MissionSkies.of(ans, tha, printedZone)
+            check(sky != null, "Sun & Moon worked out" + if (ans.sky == null) " without weather.ini" else "")
+            sky?.sm?.let { s ->
+                val wantZone = ans.sky?.timeZone?.toDouble() ?: printedZone
+                check(s.tz in -12.0..14.0 && (wantZone == null || s.tz == wantZone),
+                    "the zone ${MissionSkies.zoneText(s.tz)}" + when {
+                        ans.sky != null -> " is weather.ini's"
+                        printedZone != null -> " is the printed briefing's (${MissionSkies.zoneText(printedZone)})"
+                        else -> " is the longitude's (${"%.1f".format(s.lon)}°)"
+                    })
+                check(s.midnightSun != null || (s.sunrise != null && s.sunset != null && s.sunrise < s.sunset),
+                    "times shown: sunrise ${MissionSkies.both(s, s.sunrise)}, sunset ${MissionSkies.both(s, s.sunset)}")
+            }
+            if (printed == null || printed.startsWith("00:00:00z")) appendLine("note the printed briefing's sunrise is ${printed ?: "missing"}: BMS printed no figure to compare")
+            else if (sky?.bms == null && ans.sky == null) appendLine("note the printed briefing's $printed is not compared: BMS's figure needs weather.ini's point, not in this copy")
+            else if (sky?.bms == null) appendLine("FAIL no BMS figure worked out to compare with the printed $printed")
+            else {
+                fun hms(h: Double): String { val s = kotlin.math.floor(h * 3600 + 1e-6).toInt(); return listOf(s / 3600, s % 3600 / 60, s % 60).joinToString(":") { it.toString().padStart(2, '0') } }
+                val want = printed.substringBefore('z') + " / " + (o.sunset?.trim()?.substringBefore('z') ?: "?")
+                val got = hms(sky.bms.first) + " / " + hms(sky.bms.second)
+                check(got == want, "BMS's own figures for ${ans.save}: $got (printed $want)")
+            }
+        }
+    }
+
+    /** The Sun & Moon block's figures, and how far the almanac at the take-off is from BMS's own briefing figure. */
+    private fun StringBuilder.skyLines(w: MissionWeather, th: com.bmscompanion.app.data.Theater?, printedZone: Double? = null) {
+        val sky = runCatching { MissionSkies.of(w, th, printedZone) }.getOrNull()
+        if (sky == null) { appendLine("note no Sun & Moon for ${w.save} (twx date ${w.twx?.year}-${w.twx?.month}-${w.twx?.day})"); return }
+        val s = sky.sm
+        appendLine(
+            "ok   Sun & Moon for ${w.save}: ${s.date} ${MissionSkies.zoneText(s.tz)} at ${sky.where} (${"%.3f".format(s.lat)}, ${"%.3f".format(s.lon)}): " +
+                "sunrise ${MissionSkies.both(s, s.sunrise)}, sunset ${MissionSkies.both(s, s.sunset)}, twilight ${MissionSkies.short(s.dawn)}-${MissionSkies.short(s.dusk)}L, " +
+                "moon ${MissionSkies.short(s.moonrise)}/${MissionSkies.short(s.moonset)}L ${s.moon.phase.label} ${(s.moon.illumination * 100).toInt()}%",
+        )
+        sky.bms?.let { (r, st) ->
+            val dr = s.sunrise?.let { (it - s.tz - r).let { d -> ((d % 24) + 36) % 24 - 12 } * 60 }
+            val ds = s.sunset?.let { (it - s.tz - st).let { d -> ((d % 24) + 36) % 24 - 12 } * 60 }
+            appendLine("     BMS's own figure at ${sky.bmsPoint}: ${Astro.hm(r)}z / ${Astro.hm(st)}z; the almanac at the field is ${dr?.let { "%+.1f".format(it) }} / ${ds?.let { "%+.1f".format(it) }} min from it")
+        }
     }
 
     private fun StringBuilder.check(ok: Boolean, what: String) = appendLine((if (ok) "ok   " else "FAIL ") + what)
 
-    private fun setLook(fill: WxFill, wind: Boolean, level: Int, isobars: Boolean) {
+    private fun setLook(fill: WxFill, wind: Boolean, level: Int, isobars: Boolean, smooth: Boolean = MissionWxLook.smooth) {
         if (MissionWxLook.fill != fill) { MissionWxLook.fill(fill); if (MissionWxLook.fill != fill) MissionWxLook.fill(fill) }
-        MissionWxLook.wind(wind); MissionWxLook.level(level); MissionWxLook.isobars(isobars)
+        MissionWxLook.wind(wind); MissionWxLook.level(level); MissionWxLook.isobars(isobars); MissionWxLook.smooth(smooth)
     }
 
     /** The briefing's weather block as WDP mode's Populate would make it from the save (the page's "briefing says"). */

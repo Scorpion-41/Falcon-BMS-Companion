@@ -309,6 +309,55 @@ and flight — through the same reading of its `.twx` as the Planner's card and 
 
 Weather pictures a pilot keeps on the PC (PNG, JPG) open in the Mission section's **Files** tab; the page says so.
 
+### Colour scales and Smooth (1.4.1)
+
+After pilots' feedback ("I don't see any difference on the map"; "rain and showers are both blue"), each colouring is
+one ramp over a value with a labelled scale bar in the legend, as Weather Commander and Windy draw them, and the
+station circles, barbs, isobars and figures are overlays on top (`MissionWxRamps.kt`):
+
+| Fill | Ramp |
+|---|---|
+| Clouds | cover as a fraction (FEW ¼ … OVC 1): nothing → a pale veil → grey → a dark slate; the legend explains the circles (¼ FEW, ½ SCT, ¾ BKN, full OVC, the number is the base in hundreds of feet, ▲ towering cumulus) |
+| Precipitation | rain a radar green, showers teal and hatched, snow white-lilac with an outline; BMS gives no intensity |
+| Pressure | blue (low) → pale → orange-red (high) over the map's own range, at least 12 mb wide; isobars a separate overlay |
+| Wind speed | 0-140 kt at the chosen level, fixed: blue, green, yellow, orange, red, magenta, violet; barbs on top in white |
+| Temperature | −30 to 40 °C, fixed: violet, blue, cyan, green, yellow, orange, red |
+| Visibility | red under 1.6 km, orange, amber under 5, yellow under 8, green fading out past 20 km |
+
+**Smooth** (on by default): the fill is blended between the cell centres rather than drawn a block a cell. The 59 x 59
+image is scaled once, when the map, fill or level changes, onto 4 pixels a cell with the platform's best filter (a
+cubic on the PC and in the browser, bilinear on Android), and each frame draws that with a plain bilinear filter. A cubic
+filter applied every frame tripled the headless render's time, so it is not. Animated wind particles were left out.
+
+### Sun & Moon (1.4.1)
+
+The panel's **Sun & Moon** gives sunrise, sunset, civil twilight, moonrise, moonset, the moon's phase and how much of it
+is lit (with a drawn moon), and the Briefing's Weather card one line of it. They are worked out on the device
+(`data/weather/Astro.kt`: Meeus's low-accuracy sun, his lunar series' larger terms with the parallax, the altitude over
+the local day bisected) for:
+
+- **the date BMS's sky is at.** A version 4+ `.twx` holds year, month and day at bytes 4, 8 and 12. BMS's `Weather`
+  moves them on when its clock passes midnight **zulu** (`Weather::SetUniversalTime`, read out of `Falcon BMS.exe` with
+  its pdb), so they are the zulu date at the file's clock, and the page moves them on to the take-off's day. Campaigns
+  carry the date the campaign was started on the PC (real dates such as 2026-09-20); BMS's TEs and trainings carry
+  their authors' (2024-01-29 …).
+- **the take-off field**, in BMS's own latitude and longitude (the Planner's conversion), else the middle of the theater.
+- **local time in BMS's zone**: `<terraindir>\Weather\weather.ini` (`TimeZone`, `Latitude`, `Longitude`, whole numbers:
+  Korea 9/37/126, Balkans 1/45/15, Hellas 3/38/25, Israel 2/31/34, Falklands −6/−56/−81), served as
+  `MissionWeather.sky`; else the zone a printed briefing's "z(…l)" shows; else the longitude's.
+
+**What BMS prints.** The briefing's "Sunrise: …z(…l)" is usually 00:00:00z. When it is not, it is
+`Weather::ComputeSunMoonTime`: the sun's declination for the date's 00:00 zulu, the hour angle for −0.833° at
+`weather.ini`'s whole-degree latitude, and 12 h ∓ that ∓ longitude/15 — one point for the whole theater and no equation
+of time. `Astro.bmsSun` reproduces both printed briefings at hand to the second (Korea 2026-09-20: 21:28:18z / 09:43:41z;
+Israel 2026-09-16: 03:33:34z / 15:54:25z), which is also what proves the date reading. The almanac at the take-off field
+differs from BMS's figure by up to about a quarter of an hour; the page says so. BMS draws the moon from the same date
+(`Weather::GetMoonRaDec`, `ComputeMoonPhase`, `g_bUseMoonPhases`), so its phase is the real one for that date.
+
+Accuracy (`--astrotest`): 48 place-days (six places from 52° S to 70° N, eight dates, midnight sun and polar night
+included) against Astronomy Engine 2.1.19: sun events within 0.11 min, moon events within 0.14 min, lit fraction within
+0.02 points, elongation within 0.02°; the moon's quarters of April 2024 within 0.01°.
+
 ## Make weather (the generator)
 
 Above the generator is one row, the **theater** selector: every theater BMS

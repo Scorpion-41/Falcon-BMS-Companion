@@ -44,7 +44,7 @@ import java.io.File
  * - `--tesavetest <copy of a Data/Campaign> out.txt` (TeSaveTest);
  * - `--ddstest out.txt [<fixture>]` (DdsTest), `--kbprinttest <copy> out.txt [page.png…]` (KbPrintTest);
  * - `--planmergetest out.txt [<picture folder>]` (PlanMergeTest), `--planviewsrender <folder>` (PlanViewsRender);
- * - `--planneroutcome <shell|browser|print|printpages|guide|tanker|all> <outDir> [more…]` (PlannerOutcome);
+ * - `--planneroutcome <shell|browser|print|printpages|guide|tanker|notes|all> <outDir> [more…]` (PlannerOutcome);
  * - `--mapinteltest out.txt <a copy of a BMS folder> [--theater=<name>] [<save> [<flight>]]` (MapIntelTest: the Map
  *   page's units, search radars, airfield owners, JSTARS and magnetic variation).
  * Every one may take more arguments after those, which are handed to it as they are.
@@ -74,7 +74,7 @@ object SelfTest {
         "--kbprinttest" to "--kbprinttest <copy> out.txt [page.png…]",
         "--planmergetest" to "--planmergetest out.txt [<picture folder>]",
         "--planviewsrender" to "--planviewsrender <folder>",
-        "--planneroutcome" to "--planneroutcome <shell|browser|print|printpages|guide|tanker|all> <outDir> [more…]",
+        "--planneroutcome" to "--planneroutcome <shell|browser|print|printpages|guide|tanker|notes|all> <outDir> [more…]",
         "--filestest" to "--filestest out.txt <scratch folder> [<picture folder>]",
         "--wdpfilestest" to "--wdpfilestest out.txt <scratch folder>",
         "--zoomtest" to "--zoomtest out.txt",
@@ -82,11 +82,14 @@ object SelfTest {
         "--attackmaptest" to "--attackmaptest <a copy of the BMS folder> out.txt",
         "--radiotest" to "--radiotest out.txt <a copy of the BMS folder>",
         "--hostiletest" to "--hostiletest out.txt",
+        "--installstest" to "--installstest out.txt",
+        "--installsrender" to "--installsrender <out folder>",
         "--wxbrieftest" to "--wxbrieftest out.txt",
         "--targetrender" to "--targetrender <a copy of the BMS folder> <out folder>",
         "--targetcards" to "--targetcards <out folder>",
         "--targetsidetest" to "--targetsidetest out.txt <a BMS folder>",
         "--wxviewrender" to "--wxviewrender <a copy of the BMS folder> <out folder>",
+        "--astrotest" to "--astrotest out.txt",
     )
 
     /** Writes a check's report, and marks the run failed when a line of it starts with FAIL. */
@@ -106,6 +109,9 @@ object SelfTest {
         // A developer check from here on: nothing it does may write the real install (DevGuard). Cleared again below
         // when the arguments turn out not to be a check, so the program a pilot runs never has it.
         System.setProperty(DevGuard.PROPERTY, "1")
+        // no check stops on the Planner's one-time question about an opened mission's leftovers: Clear them, as before
+        // 1.4.1 (a check of the question sets its own answer; PlannerLeftovers.testAnswer)
+        com.bmscompanion.app.ui.screens.wdp.PlannerLeftovers.testAnswer = com.bmscompanion.app.data.mission.PlannerPcSettings.CLEAN
         val json = Bridge.json
         when {
             args.size == 2 && args[0] == "--selftest" -> {
@@ -586,9 +592,17 @@ object SelfTest {
             args.size == 3 && args[0] == "--attackmaptest" -> report(File(args[2]), AttackMapTest.run(File(args[1])))
             // --zoomtest out.txt : wheel, keys, double click and pinch zoom on every map, headless (ZoomTest.kt)
             args.size == 2 && args[0] == "--zoomtest" -> report(File(args[1]), ZoomTest.run())
+            // --astrotest out.txt : the Mission weather page's Sun & Moon against an almanac and BMS's printed briefings (AstroTest.kt)
+            args.size == 2 && args[0] == "--astrotest" -> report(File(args[1]), AstroTest.run())
             // --hostiletest out.txt : hostile contacts off by default and kept back at the source; the setting, its route and
             // its migration (HostileTest.kt; run it with a scratch APPDATA, whose settings it changes and puts back)
             args.size == 2 && args[0] == "--hostiletest" -> report(File(args[1]), HostileTest.run())
+            // --installstest out.txt : the list of Falcon BMS installs, the quick switch, its routes, the migration and DevGuard
+            // over every registry install (InstallsTest.kt; run it with a scratch APPDATA, whose settings it changes and puts back)
+            args.size == 2 && args[0] == "--installstest" -> report(File(args[1]), InstallsTest.run())
+            // --installsrender <out folder> : the Falcon BMS installs card at phone, tablet, PC and server-page widths, from a
+            // made-up list (InstallsRender.kt; reads nothing of this PC)
+            args.size == 2 && args[0] == "--installsrender" -> report(File(args[1], "installsrender.txt"), InstallsRender.run(File(args[1])))
             // --airfieldcardrender <out folder> : the Mission map's airfield card at phone, tablet and PC sizes — a tap on the
             // symbol and on the diagram, a tap elsewhere closing it (AirfieldCardRender.kt; read only, the settings' BMS copy)
             args.size == 2 && args[0] == "--airfieldcardrender" -> report(File(args[1], "airfieldcard.txt"), AirfieldCardRender.run(File(args[1])))
@@ -721,6 +735,7 @@ object SelfTest {
             }
             else -> {
                 System.clearProperty(DevGuard.PROPERTY)
+                com.bmscompanion.app.ui.screens.wdp.PlannerLeftovers.testAnswer = null
                 return false
             }
         }

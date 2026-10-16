@@ -74,6 +74,7 @@ fun MissionSetupPane(onConnected: () -> Unit) {
             DataSourceCard(onSwitchToServer = actions.switchToServer)
             PcStatusCard(status)
             MissionSourceCard()
+            BmsInstallsCard()
             HostilesCard()
             if (!PcConfig.bmsOnThisPc) RemoteConnectionCard(onConnected)
             if (PcConfig.bmsOnThisPc) SetupChecklistCard(status)

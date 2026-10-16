@@ -270,6 +270,17 @@ object MissionSource {
     }
 
     /**
+     * Another Falcon BMS install is read now ([Installs.switched]): WDP mode's snapshot is discarded ([discardSnapshot])
+     * when its save is not in [baseDir], so a flight of the other install never shows. A snapshot of this install stays.
+     */
+    internal fun discardIfNotIn(baseDir: String?) {
+        val save = snapshot()?.savePath ?: return
+        val base = baseDir?.trimEnd('\\', '/')?.lowercase()
+        if (base != null && save.lowercase().startsWith("$base\\")) return
+        if (discardSnapshot()) BridgeLog.info("WDP mode's snapshot was of another Falcon BMS install, and was put aside")
+    }
+
+    /**
      * `POST /api/mission/populate`: the Planner's flight, the cartridge as saved, the attack — kept as WDP mode's
      * snapshot. One at a time: a second press waits for the first (a Populate reads for a tenth of a second or so).
      */

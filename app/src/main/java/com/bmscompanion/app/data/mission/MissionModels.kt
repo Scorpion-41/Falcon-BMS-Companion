@@ -239,6 +239,10 @@ data class BmsStatus(
     val theater: String? = null,
     val callsign: String? = null,
     val aircraft: String? = null,
+    /** the active install's name ([BmsInstallList], 1.4.1): "Falcon BMS 4.38", the pilot's label, or the folder's name */
+    val install: String? = null,
+    /** how many Falcon BMS installs the PC lists (1.4.1); the Mission section names the active one when there are two or more */
+    val installs: Int = 0,
 )
 
 @Serializable

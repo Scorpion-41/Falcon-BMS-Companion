@@ -90,10 +90,10 @@ object PlannerSteps {
         Step(4, Where.PLANNER, "Open mission… → pick the save, your flight and seat.", toolbar = "Shell/OpenMission", run = { PlannerShell.openMission() }),
         Step(5, Where.PLANNER, "Plan: DataCard, DTC, attack pages, Map."),
         Step(6, Where.PLANNER, "Save to DTC.", toolbar = "Shell/SaveToDtc", run = { PlannerShell.save() }),
-        Step(7, Where.BMS, "Open the DTC again → LOAD → SAVE.", note = "Without LOAD, FLY saves BMS's old copy over the Planner's."),
+        Step(7, Where.BMS, "Open the DTC again → LOAD → SAVE.", note = "Without LOAD, TAKEOFF saves BMS's old copy over the Planner's."),
         Step(8, Where.PLANNER, "Populate from Planner (Mission section, VR boards).", toolbar = "Shell/Populate", run = { PlannerShell.populate() }),
         Step(9, Where.PLANNER, "Upd Kneeboard (cockpit pages).", toolbar = "Shell/Print", run = { PlannerShell.print() }),
-        Step(10, Where.BMS, "FLY. In the cockpit: DTE page → LOAD."),
+        Step(10, Where.BMS, "TAKEOFF. In the cockpit: DTE page → LOAD."),
     )
 
     /** the line before step 1 */

@@ -62,7 +62,9 @@ import kotlinx.coroutines.launch
  *   flight picker opens on the save planned last with that flight and seat picked ([startup]), as WDP opened its last
  *   file and its flight selection. Off by default, as in WDP.
  * - Not WDP's: **Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** ([cleanOpened], 1.3.9) — the PC's own setting, read and set over
- *   `/api/planner/settings`, because the PC does the cleaning when the Planner plans another flight; on by default.
+ *   `/api/planner/settings`, because the PC does the cleaning when the Planner plans another flight. Since 1.4.1 it is
+ *   not chosen until the Planner has asked once ([PlannerLeftovers.choose]: Clear them / Keep them); the switch shows
+ *   and changes the choice, and **Ask me again** puts it back to not chosen ([leftovers], [askAgain]).
  * - **Reload WDP database** — **Reload from BMS** ([reload]): WDP read its own database folder again; here the data
  *   is the app's and BMS's, so it reads the open save's flight and the cartridge from BMS again.
  * - Left out, each for a reason the window gives at its foot: Screen size (the Planner fits any window), Use large
@@ -108,21 +110,46 @@ object PlannerSettings {
     var cleanOpenedNote: String? by mutableStateOf(null)
         private set
 
+    /**
+     * The PC's choice in three states (1.4.1, `PlannerPcSettings.openedLeftovers`): ask (not chosen yet — the Planner
+     * asks the first time it would clean, [PlannerLeftovers.choose]), clean or keep; empty from an older PC, which
+     * knows only [cleanOpened]; null until the PC has said.
+     */
+    var leftovers: String? by mutableStateOf(null)
+        private set
+
+    /** Takes the PC's answer [s] as the settings now (also after the question was answered). */
+    fun took(s: com.bmscompanion.app.data.mission.PlannerPcSettings) {
+        cleanOpened = s.cleanOpened
+        leftovers = s.openedLeftovers
+        cleanOpenedNote = null
+    }
+
     /** Asks the PC for [cleanOpened]. */
     suspend fun readCleanOpened() {
         val a = runCatching { MissionLink.plannerSettings() }.getOrNull()
-        a?.value?.let { cleanOpened = it.cleanOpened; cleanOpenedNote = null; return }
+        a?.value?.let { took(it); return }
         cleanOpenedNote = a?.error ?: "The PC could not be reached."
     }
 
-    /** Turns it on or off on the PC; the switch moves at once and goes back when the PC refuses. */
+    /** Turns it on or off on the PC (clean or keep); the switch moves at once and goes back when the PC refuses. */
     suspend fun chooseCleanOpened(on: Boolean) {
         val was = cleanOpened
         cleanOpened = on
-        val a = runCatching { MissionLink.setCleanOpened(on) }.getOrNull()
+        val a = runCatching {
+            if (leftovers.isNullOrEmpty()) MissionLink.setCleanOpened(on)
+            else MissionLink.setOpenedLeftovers(if (on) com.bmscompanion.app.data.mission.PlannerPcSettings.CLEAN else com.bmscompanion.app.data.mission.PlannerPcSettings.KEEP)
+        }.getOrNull()
         val v = a?.value
-        if (v != null) { cleanOpened = v.cleanOpened; cleanOpenedNote = null }
+        if (v != null) took(v)
         else { cleanOpened = was; cleanOpenedNote = "Not changed: ${a?.error ?: "the PC could not be reached."}" }
+    }
+
+    /** **Ask me again**: back to not chosen, so the next Open mission… of another flight asks (1.4.1). */
+    suspend fun askAgain() {
+        val a = runCatching { MissionLink.setOpenedLeftovers(com.bmscompanion.app.data.mission.PlannerPcSettings.ASK) }.getOrNull()
+        val v = a?.value
+        if (v != null) took(v) else cleanOpenedNote = "Not changed: ${a?.error ?: "the PC could not be reached."}"
     }
 
     /** Opens the window (the toolbar's Options menu, the ⋮ menu's Options; anything else may call it). */
@@ -303,13 +330,26 @@ internal fun ColumnScope.PlannerSettingsWindow(onClose: () -> Unit) {
         ) { PlannerSettings.chooseAutoLoad(it) }
         // the PC's setting (it clears the lines): on every device, read from and written to the PC
         val clear = PlannerSettings.cleanOpened
+        val choice = PlannerSettings.leftovers
+        val P = com.bmscompanion.app.data.mission.PlannerPcSettings
         Toggle(
             "Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints",
-            "When Open mission… or Pick a flight plans another flight, every HSD line, PPT and Open 1/Open 2 steerpoint " +
+            "On: when Open mission… or Pick a flight plans another campaign flight, every HSD line, PPT and Open 1/Open 2 steerpoint " +
                 "(STPT 81-99) leaves your cartridge and the campaign's mission file, whoever made it; the route and the targets stay. " +
-                "The maps then suggest the mission's threats and tanker and AWACS tracks. A TE keeps its own.",
+                "Off: they are kept from mission to mission until you clear them. A TE keeps its own. " +
+                when (choice) {
+                    P.ASK -> "Not chosen yet: the Planner asks the next time it would clean."
+                    P.CLEAN -> "You chose: clear them."
+                    P.KEEP -> "You chose: keep them."
+                    else -> ""
+                },
             clear == true, "Settings/CleanOpened", enabled = clear != null,
         ) { on -> scope.launch { PlannerSettings.chooseCleanOpened(on) } }
+        // back to not chosen (an older PC has no such state)
+        if (choice == P.CLEAN || choice == P.KEEP) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            PlannerButton("Ask me again", probe = "Settings/AskAgain", small = true) { scope.launch { PlannerSettings.askAgain() } }
+            Note("The next mission opened asks Clear them or Keep them again.")
+        }
         PlannerSettings.cleanOpenedNote?.let { Note(it) }
 
         Heading("Reload")

@@ -186,7 +186,7 @@ fun MissionSourceBar(onOpenTab: (MissionTab) -> Unit, modifier: Modifier = Modif
             ModeSwitch(src, enabled = true)
             Spacer(Modifier.width(10.dp))
             Text(
-                sourceLine(i), Modifier.weight(1f, fill = false), color = if (src.wdp && src.populated == null) Hud.Amber else Hud.TextDim,
+                sourceLine(i) + installSuffix(i), Modifier.weight(1f, fill = false), color = if (src.wdp && src.populated == null) Hud.Amber else Hud.TextDim,
                 fontSize = 12.sp, lineHeight = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
         }

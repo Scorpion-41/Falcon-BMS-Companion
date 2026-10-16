@@ -41,7 +41,8 @@ class ApiResponse(val status: Int, val contentType: String, val body: ByteArray)
  * mission API documented in docs/PROTOCOL.md. Runs inside BMS Companion whenever Falcon BMS is on this PC.
  */
 object Bridge {
-    val install = BmsInstall()
+    /** The Falcon BMS folder read (the active install, [Installs]); its change of folder is a switch ([Installs.switched]). */
+    val install = BmsInstall().also { BmsInstall.primary = it }
 
     /**
      * The planned tanker and AWACS tracks of the mission being flown, or nothing when they cannot be had.
@@ -471,7 +472,9 @@ object Bridge {
     }
 
     /** `GET /api/planner/settings`: the Planner's settings the PC keeps because it acts on them. */
-    private fun plannerSettings() = com.bmscompanion.app.data.mission.PlannerPcSettings(cleanOpened = _settings.value.CleanOpenedMission)
+    private fun plannerSettings() = _settings.value.leftoversChoice.let { c ->
+        com.bmscompanion.app.data.mission.PlannerPcSettings(cleanOpened = c == com.bmscompanion.app.data.mission.PlannerPcSettings.CLEAN, openedLeftovers = c)
+    }
 
     /**
      * What `/api/contacts` serves of one snapshot of the feed: a hostile air defence only at a site the mission knows
@@ -501,7 +504,7 @@ object Bridge {
                 theater = sm.strings[StringId.ThrName] ?: install.theater,
                 callsign = install.callsign,
                 aircraft = sm.strings[StringId.AcName],
-            ),
+            ).let { b -> Installs.status().let { (name, n) -> b.copy(install = name, installs = n) } },
             tacview = TacviewStatus(
                 enabled = s.TacviewEnabled,
                 connected = tacview.connected,
@@ -599,6 +602,10 @@ object Bridge {
             path == "/api/maptile" -> return MapTiles.handle(req)
             // pictures of the mission's targets drawn from BMS's own 3-D models (TargetPictures; read only)
             path.startsWith("/api/targets/") -> return TargetPictures.handle(req)
+            // the pilot's noteboards, kept per mission in the settings folder, never in BMS's (NotesStore, 1.4.1)
+            path == "/api/notes" -> return NotesStore.handle(req)
+            // the Falcon BMS installs on this PC and which one is read (Installs, 1.4.1); writes only the settings
+            path == "/api/bms/installs" || path.startsWith("/api/bms/installs/") -> return Installs.handle(req)
         }
         return when (req.method to path) {
             "GET" to "/api/info" -> encode(BridgeInfo.serializer(), info())
@@ -625,10 +632,17 @@ object Bridge {
             // Planner's Settings window on any device
             "GET" to "/api/planner/settings" -> encode(com.bmscompanion.app.data.mission.PlannerPcSettings.serializer(), plannerSettings())
             "POST" to "/api/planner/settings" -> {
-                val on = req.query["cleanOpened"]?.let { it == "1" || it.equals("true", true) }
-                if (on != null) {
-                    update(reapply = false) { it.copy(CleanOpenedMission = on) }
-                    BridgeLog.info(if (on) "Each opened mission starts with clean lines, PPTs and Open 1/2 steerpoints" else "Lines and PPTs are kept when the Planner opens a mission")
+                // openedLeftovers=ask|clean|keep (1.4.1); cleanOpened=1|0 (1.3.9, an older device) is clean or keep
+                val P = com.bmscompanion.app.data.mission.PlannerPcSettings
+                val choice = req.query["openedLeftovers"]?.trim()?.lowercase()?.takeIf { it == P.ASK || it == P.CLEAN || it == P.KEEP }
+                    ?: req.query["cleanOpened"]?.let { if (it == "1" || it.equals("true", true)) P.CLEAN else P.KEEP }
+                if (choice != null) {
+                    update(reapply = false) { it.withOpenedLeftovers(choice) }
+                    BridgeLog.info(when (choice) {
+                        P.CLEAN -> "Each opened mission starts with clean lines, PPTs and Open 1/2 steerpoints"
+                        P.KEEP -> "Lines, PPTs and Open 1/2 steerpoints are kept when the Planner opens a mission"
+                        else -> "The Planner asks again whether an opened mission starts with clean lines, PPTs and Open 1/2 steerpoints"
+                    })
                 }
                 encode(com.bmscompanion.app.data.mission.PlannerPcSettings.serializer(), plannerSettings())
             }

@@ -50,7 +50,7 @@ object TargetPictures {
         val path = req.path.trimEnd('/')
         return try {
             when (path) {
-                "/api/targets/mission" -> json(TargetSet.serializer(), missionSet())
+                "/api/targets/mission" -> json(TargetSet.serializer(), missionSet(req.query["theater"], req.query["save"], req.query["flight"], req.query["printed"] == "1"))
                 "/api/targets/catalog" -> json(TargetCatalog.serializer(), catalog(req.query["theater"]))
                 "/api/targets/system" -> json(TargetGroup.serializer(), system(req.query["theater"], req.query["name"].orEmpty()))
                 "/api/targets/picture" -> {
@@ -125,21 +125,81 @@ object TargetPictures {
         return TargetGroup(title = k.name, kind = "threat", items = TargetModels.battalion(tables, k).map { item(it.kind, it.role, it.count) })
     }
 
-    /** The mission's targets and threats, in either mode; the pictures of the first views are drawn in the background. */
-    fun missionSet(): TargetSet {
+    /**
+     * The mission's targets and threats, in either mode; the pictures of the first views are drawn in the background.
+     *
+     * The Planner asks for **its own flight** (1.4.1, so Upd Kneeboard's Target pictures need neither a visit to the
+     * Briefing card nor a Populate): [save] and [flight] (with its [theater]) name a save's flight opened with Open
+     * mission… or Pick a flight — read from that save as WDP mode's snapshot would read it, keyed `plan-…`, unless WDP
+     * mode's snapshot is that very flight (then the snapshot's answer, so the Briefing card's additions are the same);
+     * [printed] asks for the printed briefing's flight (the Planner planning from the briefing), which is EZBoards
+     * mode's answer unless WDP mode's snapshot was populated from that same print. Without either, the Mission
+     * section's own mode decides, as before.
+     */
+    fun missionSet(theater: String? = null, save: String? = null, flight: String? = null, printed: Boolean = false): TargetSet {
         val set = theaterSet() ?: return TargetSet(error = "Falcon BMS's folder is not known on this PC.")
-        val t = missionTheater(set)
+        val pop = if (MissionSource.wdp) MissionSource.populated() else null
+        if (!save.isNullOrBlank() && !flight.isNullOrBlank()) {
+            val same = pop != null && pop.save.equals(save.trim(), ignoreCase = true) && pop.flight.trim() == flight.trim() &&
+                (theater.isNullOrBlank() || pop.theater.equals(theater.trim(), ignoreCase = true))
+            if (!same) return plannerSet(set, theater, save.trim(), flight.trim())
+        }
+        val wdp = if (printed) pop != null && pop.briefingFrom == com.bmscompanion.app.data.mission.PlanMerge.ORIGIN_PRINTED && pop.briefingPrinted == Bridge.printedAt()
+            else MissionSource.wdp
+        val t = if (wdp) missionTheater(set)
+            else runCatching { MissionDtcFile.verdict().theater }.getOrNull()?.let { set.byName(it) } ?: set.current(Bridge.install.theater)
         val tables = TargetModels.tables(set, t) ?: return TargetSet(error = "No class table was found for ${t?.name ?: "this theater"}.")
-        val wdp = MissionSource.wdp
         val data = if (wdp) MissionSource.mission() else null
         val briefing: Briefing? = if (wdp) data?.briefing else Bridge.currentBriefing()
         val ground = if (wdp) data?.ground else MissionGrounds.forBriefing()
         val missionKey = if (wdp) "wdp-${MissionSource.populated()?.at ?: 0}" else "ez-${Bridge.briefingModified}"
         if (wdp && MissionSource.populated() == null) return TargetSet(theater = t?.name.orEmpty(), mission = missionKey, error = "Populate from Planner first.")
         if (!wdp && briefing == null) return TargetSet(theater = t?.name.orEmpty(), mission = missionKey, error = "Print the briefing in Falcon BMS first.")
+        return assemble(t, tables, missionKey, flightTargets(set, t, tables, wdp, briefing), briefing, ground)
+    }
 
+    /**
+     * The targets of [flightId] in the save [saveName] of [theaterName] — the Planner's flight, whether or not it was
+     * populated: its own enemy targets ([flightTargetsOf]), the threat picture WDP mode's snapshot would carry for it
+     * ([MissionGrounds.forFlight], with the printed briefing when it is this flight's) and its spotted ships.
+     */
+    private fun plannerSet(set: Theaters.TheaterSet, theaterName: String?, saveName: String, flightId: String): TargetSet {
+        val t = theaterName?.trim()?.takeIf { it.isNotEmpty() }?.let { n -> set.all.firstOrNull { it.name.equals(n, ignoreCase = true) } ?: set.byName(n) }
+            ?: missionTheater(set)
+            ?: return TargetSet(error = "There is no theater \"${theaterName.orEmpty()}\" in this Falcon BMS.")
+        val tables = TargetModels.tables(set, t) ?: return TargetSet(theater = t.name, error = "No class table was found for ${t.name}.")
+        val saveFile = runCatching { set.saves(t).firstOrNull { it.name.equals(saveName, ignoreCase = true) } }.getOrNull()
+            ?: return TargetSet(theater = t.name, error = "$saveName is no longer in the campaign folder of ${t.name}. Open the mission again in the Planner.")
+        val key = "plan-${t.name}|${saveFile.name}|$flightId|${saveFile.lastModified()}"
+        val names = CampaignArchive.names(set, t)
+        val save = CampaignArchive.cached(saveFile, names)
+        val f = runCatching { save.flight(CampaignArchive.VuId.parse(flightId)) }.getOrNull()
+            ?: return TargetSet(theater = t.name, mission = key, error = "The flight is no longer in $saveName. Pick the flight again in the Planner.")
+        val targets = runCatching { flightTargetsOf(save, f, tables).filter { it.kept }.map { it.group }.take(6) }.getOrElse {
+            BridgeLog.info("The Planner flight's targets could not be read for the target pictures: ${it.message}")
+            emptyList()
+        }
+        // the threat picture as Populate would make it (the printed briefing's Threat Analysis when the print is this flight's)
+        val camp = (CampaignFiles.flight(CampaignFiles.context(), t.name, saveFile.name, flightId) as? CampaignFiles.Answer.Ok)?.value
+        val printed = camp?.takeIf { it.row.briefed }?.let { c ->
+            val bms = runCatching { set.current(Bridge.install.theater) }.getOrNull()
+            Bridge.currentBriefing()?.takeIf { b ->
+                b.origin == null && (bms == null || bms.name.equals(t.name, ignoreCase = true)) &&
+                    b.overview.flight?.trim().equals(c.row.callsign.trim(), ignoreCase = true)
+            }
+        }
+        // (MissionGrounds' own lock: forBriefing reads what forFlight leaves behind; wdp = false leaves WDP mode's live filter alone)
+        val ground = camp?.let { c -> synchronized(MissionGrounds) { MissionGrounds.forFlight(set, t, saveFile, flightId, c, printed, save, names, wdp = false) } }
+        return assemble(t, tables, key, targets, printed, ground)
+    }
+
+    /** The set: [targets] first, then the threat systems of [briefing]/[ground] as battalions, then the ships. */
+    private fun assemble(
+        t: Theaters.Theater?, tables: TargetModels.Tables, missionKey: String, targets: List<TargetGroup>,
+        briefing: Briefing?, ground: com.bmscompanion.app.data.mission.MissionGround?,
+    ): TargetSet {
         val groups = ArrayList<TargetGroup>()
-        groups += flightTargets(set, t, tables, wdp, briefing)
+        groups += targets
 
         // the threats: each system once, in the briefing's order, as its battalion
         val rows = MissionPicture.briefedThreats(briefing)

@@ -64,7 +64,7 @@ class PerformanceWiring(
     private var racks: PerformanceLoadout.Racks? = null
     private var theater: Theater? = null
     private var airports: AirportSet? = null
-    /** BMS's own airfield data for the fields looked at so far: the runway widths and the charts come from it */
+    /** BMS's own airfield data for the fields looked at so far: whether the field has a ground chart */
     private var fields: Map<Int, Airfield> = emptyMap()
     /** the theater's instrument charts by airport id, as the Airfields section lists them, and the set they are of */
     private var charts: Map<String, List<ChartRef>> = emptyMap()
@@ -241,11 +241,11 @@ class PerformanceWiring(
 
     /** One of the app's airfields as WDP's airport table holds it: each runway end a row, with its length and width. */
     private fun apt(a: Airport): PerformancePlan.Apt {
-        // each end's designator and its strip's width, from BMS's own runway rectangles
-        val w = fields[a.id]?.runways.orEmpty().flatMap { r -> r.ends.map { it.designator to r.widthFt } }.toMap()
+        // each end's TODA and LDA the whole strip, and its width: BMS's own runway rectangle, which the airport record
+        // carries (1.4.1; it held an estimate between the threshold lights before — Souda 8,800 ft for 10,990)
         val rows = a.runways.flatMap { r ->
             r.ends.map { e ->
-                PerformancePlan.Rwy(e.designator, r.lengthFt ?: 0, r.lengthFt ?: 0, w[e.designator] ?: 0, e.ils?.toDoubleOrNull() ?: 0.0)
+                PerformancePlan.Rwy(e.designator, r.lengthFt ?: 0, r.lengthFt ?: 0, r.widthFt ?: 0, e.ils?.toDoubleOrNull() ?: 0.0)
             }
         }.take(4)
         return PerformancePlan.Apt(

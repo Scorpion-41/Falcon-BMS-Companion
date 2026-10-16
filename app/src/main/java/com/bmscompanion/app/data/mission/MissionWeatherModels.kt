@@ -44,6 +44,8 @@ data class MissionWeather(
     val places: List<MissionWxPlace> = emptyList(),
     /** what the page should say beside the weather, each a sentence */
     val notes: List<String> = emptyList(),
+    /** 1.4.1: the theater's sky as BMS sets it up (`weather.ini`), for the page's Sun & Moon; null when not read */
+    val sky: BmsSky? = null,
 ) {
     companion object {
         const val PROBABILISTIC = 1
@@ -116,6 +118,14 @@ data class MissionWxMap(
         const val LEVELS = 10
     }
 }
+
+/**
+ * A theater's `<terraindir>\Weather\weather.ini` (1.4.1): the zone BMS prints local times in ([timeZone] hours east of
+ * zulu) and the one point, in whole degrees, its briefing's sunrise and sunset are worked out for ([lat], [lon], east
+ * positive). Korea: 9, 37, 126.
+ */
+@Serializable
+data class BmsSky(val timeZone: Int = 0, val lat: Int = 0, val lon: Int = 0)
 
 /** One change of the Deterministic model's schedule: at campaign time [ms] the theater turns [type] (1 Sunny to 4 Inclement). */
 @Serializable

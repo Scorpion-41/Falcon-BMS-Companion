@@ -178,6 +178,8 @@ object KneeboardExtraPages {
      * change of the card's airfields). Cheap to call again and again: the Print window reads [kinds] as it draws.
      */
     fun warm() {
+        // EZBoards mode (1.4.1): the Planner's pages are not offered, and nothing of the Planner is touched here
+        if (KneeboardEzSource.active) return
         val key = try {
             listOf(WdpSession.appliedMission, WdpSession.dataCard.plan.tblApt.take(3).map { it.name })
         } catch (e: Exception) { return }
@@ -265,16 +267,21 @@ object KneeboardExtraPages {
 
     internal fun fieldKey(i: Int): Triple<String, String, Airport>? {
         val apt = cardAirport(i) ?: return null
-        val set = (WdpSession.dataCard.sources.theater ?: mission().theater)?.airfieldSet ?: return null
+        val theater = if (KneeboardEzSource.active) mission().theater else WdpSession.dataCard.sources.theater ?: mission().theater
+        val set = theater?.airfieldSet ?: return null
         return Triple("$set:${apt.id}", set, apt)
     }
 
     // ---------------------------------------------------------------- the Planner's state, as the pages read it
 
-    internal fun mission(): WdpMission = WdpSession.appliedMission ?: WdpMission()
+    /** The Planner's mission; in EZBoards mode the Mission section's own ([KneeboardEzSource], never the Planner's). */
+    internal fun mission(): WdpMission =
+        if (KneeboardEzSource.active) KneeboardEzSource.mission ?: WdpMission() else WdpSession.appliedMission ?: WdpMission()
 
     /** The airport in row [i] of the card: the one its name box shows (the pilot may have picked another), else the briefing's. */
     internal fun cardAirport(i: Int): Airport? {
+        // EZBoards mode: the flight's fields as the Mission section finds them, not the DataCard's
+        if (KneeboardEzSource.active) return KneeboardEzSource.airports.getOrNull(i)
         val card = WdpSession.dataCard
         val name = card.plan.tblApt.getOrNull(i)?.name?.trim()?.takeIf { it.isNotEmpty() }
         val all = card.sources.airports?.airports.orEmpty()
@@ -349,7 +356,8 @@ internal class KbPlanData(
 internal fun planData(): KbPlanData {
     val m0 = KneeboardExtraPages.mission()
     val coords = m0.coords
-    val text = try { WdpSession.dtc.cartridgeText() } catch (e: Exception) { null }
+    // (EZBoards mode: the cartridge as BMS has it, never the Planner's DTC page)
+    val text = if (KneeboardEzSource.active) null else try { WdpSession.dtc.cartridgeText() } catch (e: Exception) { null }
     val types = m0.theater?.pptSet?.let { KneeboardExtraPages.ppt[it] }.orEmpty()
     val fromPage = text?.let { dtcOfText(it, coords, types) }
     val dtc = fromPage ?: m0.dtc
@@ -889,7 +897,8 @@ internal fun routeFrame(d: KbPlanData, w: Int, h: Int, style: String = MAP_STYLE
  */
 @Composable
 private fun RouteMapPage(scope: KbPageScope, inks: RouteInks) {
-    val d = remember { planData() }
+    // (drawn again when EZBoards mode's mission arrives, KneeboardEzSource)
+    val d = remember(KneeboardEzSource.mission) { planData() }
     val flight = d.mission.briefing?.overview?.flight ?: d.mission.flight?.row?.callsign
     val kind = if (inks === RouteInks.NIGHT) KbKind.ROUTE_MAP_DARK else KbKind.ROUTE_MAP
     Sheet(scope, "ROUTE MAP", listOfNotNull(flight, d.mission.briefing?.overview?.mission, d.mission.theater?.name).joinToString(" · "), inks) {
@@ -1285,7 +1294,8 @@ internal fun figureRows(form: WdpForm, values: WdpValues): List<Pair<Boolean, St
 private fun GroundChartPage(scope: KbPageScope, i: Int) {
     val kind = listOf(KbKind.DEPARTURE, KbKind.ARRIVAL, KbKind.ALTERNATE)[i]
     val word = listOf("DEPARTURE", "ARRIVAL", "ALTERNATE")[i]
-    val row = WdpSession.dataCard.plan.tblApt.getOrNull(i)
+    // EZBoards mode: no DataCard row (the runway in use is the field's first network; the figures are the airport's own)
+    val row = if (KneeboardEzSource.active) null else WdpSession.dataCard.plan.tblApt.getOrNull(i)
     val fk = KneeboardExtraPages.fieldKey(i)
     val apt = fk?.third
     if (fk != null) LaunchedEffect(fk.first) { KneeboardExtraPages.field(i) }

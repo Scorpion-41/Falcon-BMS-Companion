@@ -75,7 +75,7 @@ import com.bmscompanion.app.data.mission.MissionWxMap
 import com.bmscompanion.app.data.mission.MissionWxPlace
 import com.bmscompanion.app.data.mission.PcTwxType
 import com.bmscompanion.app.data.weather.CampaignTime
-import com.bmscompanion.app.data.weather.WxColors
+
 import com.bmscompanion.app.data.weather.WxCover
 import com.bmscompanion.app.data.weather.WxDefaults
 import com.bmscompanion.app.data.weather.WxModel
@@ -141,8 +141,19 @@ fun MissionWeatherMapButton() {
     )
 }
 
-/** What the map is coloured by (one at a time); wind barbs and isobars are drawn over any of them. */
-internal enum class WxFill(val label: String) { CLOUDS("Clouds"), PRECIP("Precipitation"), VISIBILITY("Visibility"), TEMPERATURE("Temperature"), NONE("None") }
+/**
+ * What the map is coloured by (one at a time, each a colour ramp, `MissionWxRamps.kt`); wind barbs, isobars and the
+ * station circles are drawn over any of them. New fills go at the end (the device keeps the ordinal).
+ */
+internal enum class WxFill(val label: String) {
+    CLOUDS("Clouds"), PRECIP("Precipitation"), VISIBILITY("Visibility"), TEMPERATURE("Temperature"), NONE("None"),
+    PRESSURE("Pressure"), WIND("Wind speed");
+
+    companion object {
+        /** The chips' order. */
+        val SHOWN = listOf(CLOUDS, PRECIP, PRESSURE, WIND, TEMPERATURE, VISIBILITY)
+    }
+}
 
 /** The page's view choices, kept on the device. */
 internal object MissionWxLook {
@@ -154,12 +165,17 @@ internal object MissionWxLook {
         private set
     var isobars by mutableStateOf(Repo.getInt("mwx_isobars", 0) == 1)
         private set
+    /** 1.4.1: the fill blended between the cell centres (the Windy look), else a block a cell */
+    var smooth by mutableStateOf(Repo.getInt("mwx_smooth", 1) == 1)
+        private set
 
     /** A fill chip pressed: that fill, or none when it was the one on. */
     fun fill(v: WxFill) { fill = if (fill == v) WxFill.NONE else v; Repo.putInt("mwx_fill", fill.ordinal) }
+    /** The wind barbs on or off. */
     fun wind(v: Boolean) { wind = v; Repo.putInt("mwx_wind", if (v) 1 else 0) }
     fun level(v: Int) { level = v.coerceIn(0, 9); Repo.putInt("mwx_level", level) }
     fun isobars(v: Boolean) { isobars = v; Repo.putInt("mwx_isobars", if (v) 1 else 0) }
+    fun smooth(v: Boolean) { smooth = v; Repo.putInt("mwx_smooth", if (v) 1 else 0) }
 }
 
 /** The mission picture drawn over the weather: the route and the flight's airfields. */
@@ -297,6 +313,8 @@ internal fun MissionWeatherPage(
         val panel: @Composable (Modifier) -> Unit = { mod ->
             Column(mod.verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (mapModel) MapPanel(w, frame, map, picked, theater) else TypePanel(w)
+                Rule(0.35f)
+                SunMoonBlock(w, theater, briefing?.overview?.sunrise)
                 briefing?.let { BriefingFigures(it) }
                 w.notes.forEach { Text(it, color = Hud.TextFaint, fontSize = 11.5.sp, lineHeight = 15.sp) }
             }
@@ -357,7 +375,9 @@ private fun WxMissionMap(w: MissionWeather, theater: Theater?, map: MissionWxMap
     val state = rememberMapState()
     val text = rememberTextMeasurer(cacheSize = 512)
     val fill = MissionWxLook.fill
-    val image = remember(map, fill) { map?.let { fillImage(it, fill) } }
+    // built once per map, fill and (for the wind) level — never per frame
+    val level = if (fill == WxFill.WIND) MissionWxLook.level else 0
+    val image = remember(map, fill, level) { map?.let { fillImage(it, fill, level) } }
     val isobars = remember(map) { map?.let { isobarSegments(it) } }
     val uniform = if (w.model != MissionWeather.MAP_MODEL || w.frames.isEmpty()) WxType.ofCode(w.condition.coerceIn(1, 4)) else null
     Box(Modifier.fillMaxSize()) {
@@ -393,71 +413,57 @@ private fun WxMissionMap(w: MissionWeather, theater: Theater?, map: MissionWxMap
     }
 }
 
-/** The fill layer, a pixel a cell, drawn scaled and smoothed over the theater. Null for no fill. */
-private fun fillImage(m: MissionWxMap, fill: WxFill): ImageBitmap? {
+/** The fill a pixel a cell ([cells]) and the same smoothed onto [SMOOTH_K] pixels a cell ([smooth]). */
+private class FillImage(val cells: ImageBitmap, val smooth: ImageBitmap)
+
+/** Pixels a cell of the smoothed fill: enough that the bilinear step drawn each frame no longer shows a lattice. */
+private const val SMOOTH_K = 4
+
+/**
+ * The fill layer, a pixel a cell (its centre), drawn over the theater either a block a cell or blended between the
+ * cell centres (**Smooth**: scaled once onto [SMOOTH_K] pixels a cell by the platform's best filter — a cubic on the
+ * PC and in the browser — and drawn each frame with a plain bilinear one). Null for no fill. Built once per map, fill
+ * and level, so a frame only scales it.
+ */
+private fun fillImage(m: MissionWxMap, fill: WxFill, level: Int): FillImage? {
     if (fill == WxFill.NONE) return null
     val img = ImageBitmap(m.cols, m.rows)
     val canvas = androidx.compose.ui.graphics.Canvas(img)
     val paint = Paint()
+    val pressure = WxRamps.pressureRange(m)
     for (r in 0 until m.rows) for (c in 0 until m.cols) {
-        val i = r * m.cols + c
-        paint.color = when (fill) {
-            WxFill.CLOUDS -> cloudInk(WxCover.ofCode(m.cover[i]), m.towering.getOrNull(i) == 1)
-            WxFill.PRECIP -> precipInk(m, i)
-            WxFill.VISIBILITY -> visInk(m.visKm[i].toDouble())
-            WxFill.TEMPERATURE -> Color(WxColors.temperature(m.tempC[i].toDouble())).copy(alpha = 0.5f)
-            WxFill.NONE -> Color.Transparent
-        }
+        paint.color = WxRamps.ink(m, r * m.cols + c, fill, level, pressure)
         canvas.drawRect(c.toFloat(), r.toFloat(), c + 1f, r + 1f, paint)
     }
-    return img
+    val big = ImageBitmap(m.cols * SMOOTH_K, m.rows * SMOOTH_K)
+    androidx.compose.ui.graphics.Canvas(big).drawImageRect(
+        img, IntOffset.Zero, IntSize(m.cols, m.rows), IntOffset.Zero, IntSize(m.cols * SMOOTH_K, m.rows * SMOOTH_K),
+        Paint().apply { filterQuality = FilterQuality.High },
+    )
+    return FillImage(img, big)
 }
 
-private fun cloudInk(c: WxCover, towering: Boolean): Color = when (c) {
-    WxCover.NONE -> Color.Transparent
-    WxCover.FEW -> Color(0xFFE6ECF2).copy(alpha = 0.22f)
-    WxCover.SCATTERED -> Color(0xFFE6ECF2).copy(alpha = 0.38f)
-    WxCover.BROKEN -> (if (towering) Color(0xFFD7DCE6) else Color(0xFFE6ECF2)).copy(alpha = 0.56f)
-    WxCover.OVERCAST -> Color(0xFFC9D0DA).copy(alpha = 0.72f)
-}
-
-/** BMS rains only in inclement weather (snow at or below freezing); a version 8 map's shower flag adds showers. */
-private fun precipKind(m: MissionWxMap, i: Int): Int = when {
-    m.type[i] == WxType.INCLEMENT.code -> if (m.tempC[i] <= 0f) 3 else 2
-    m.shower.getOrNull(i) == 1 -> 1
-    else -> 0
-}
-
-private val RAIN = Color(0xFF2E7BEA)
-private val SHOWER = Color(0xFF5FB4F5)
-private val SNOW = Color(0xFFF2F6FF)
-
-private fun precipInk(m: MissionWxMap, i: Int): Color = when (precipKind(m, i)) {
-    3 -> SNOW.copy(alpha = 0.6f)
-    2 -> RAIN.copy(alpha = 0.55f)
-    1 -> SHOWER.copy(alpha = 0.38f)
-    else -> Color.Transparent
-}
-
-/** Visibility, red under 1.6 km (a mile), amber under 5, yellow under 8, a pale green beyond. */
-private fun visInk(km: Double): Color = when {
-    km < 1.6 -> Color(0xFFE53935).copy(alpha = 0.62f)
-    km < 5 -> Color(0xFFFF9800).copy(alpha = 0.55f)
-    km < 8 -> Color(0xFFFFEB3B).copy(alpha = 0.45f)
-    km < 20 -> Color(0xFF8BC34A).copy(alpha = 0.3f)
-    else -> Color(0xFF8BC34A).copy(alpha = 0.12f)
-}
-
-private fun DrawScope.drawMissionWeather(pr: MapProjection, m: MissionWxMap, image: ImageBitmap?, isobars: List<Isobar>?, text: TextMeasurer) {
+private fun DrawScope.drawMissionWeather(pr: MapProjection, m: MissionWxMap, image: FillImage?, isobars: List<Isobar>?, text: TextMeasurer) {
     val cw = pr.side / m.cols
     val ch = pr.side / m.rows
     image?.let {
+        // a pixel's centre is its cell's: the blocks, or the smoothed image blended between its pixels
+        val smooth = MissionWxLook.smooth
+        val src = if (smooth) it.smooth else it.cells
         drawImage(
-            it, srcOffset = IntOffset.Zero, srcSize = IntSize(m.cols, m.rows),
+            src, srcOffset = IntOffset.Zero, srcSize = IntSize(src.width, src.height),
             dstOffset = IntOffset(pr.left.roundToInt(), pr.top.roundToInt()), dstSize = IntSize(pr.side.roundToInt(), pr.side.roundToInt()),
-            filterQuality = FilterQuality.Low,
+            filterQuality = if (smooth) FilterQuality.Low else FilterQuality.None,
         )
     }
+    val fill = MissionWxLook.fill
+    // the visible cells, for everything drawn a cell at a time
+    val c0 = floor(-pr.left / cw).toInt().coerceAtLeast(0)
+    val c1 = ceil((size.width - pr.left) / cw).toInt().coerceAtMost(m.cols - 1)
+    val r0 = floor(-pr.top / ch).toInt().coerceAtLeast(0)
+    val r1 = ceil((size.height - pr.top) / ch).toInt().coerceAtMost(m.rows - 1)
+    // showers hatched, snow outlined: told apart without their colour
+    if (fill == WxFill.PRECIP && image != null) precipMarks(m, pr.left, pr.top, cw, ch, c0, c1, r0, r1, 7.dp.toPx())
     drawRect(Color.White.copy(alpha = 0.35f), Offset(pr.left, pr.top), Size(pr.side, pr.side), style = Stroke(1f))
     val ink = Color.White
     val halo = Color.Black
@@ -488,12 +494,8 @@ private fun DrawScope.drawMissionWeather(pr: MapProjection, m: MissionWxMap, ima
         }
     }
     // figures and glyphs in as many cells as they can be read in, on a fixed lattice so they do not shimmer
-    val fill = MissionWxLook.fill
-    val glyphs = fill == WxFill.CLOUDS || fill == WxFill.VISIBILITY || fill == WxFill.TEMPERATURE
-    val c0 = floor(-pr.left / cw).toInt().coerceAtLeast(0)
-    val c1 = ceil((size.width - pr.left) / cw).toInt().coerceAtMost(m.cols - 1)
-    val r0 = floor(-pr.top / ch).toInt().coerceAtLeast(0)
-    val r1 = ceil((size.height - pr.top) / ch).toInt().coerceAtMost(m.rows - 1)
+    val glyphs = fill == WxFill.CLOUDS || fill == WxFill.VISIBILITY || fill == WxFill.TEMPERATURE || (fill == WxFill.PRESSURE && !MissionWxLook.isobars) ||
+        (fill == WxFill.WIND && !MissionWxLook.wind)
     if (glyphs) {
         // the fill already says it everywhere: the glyphs and figures are a sparse key over it, never a carpet
         val stride = ceil(56.dp.toPx() / cw).toInt().coerceAtLeast(1)
@@ -517,6 +519,14 @@ private fun DrawScope.drawMissionWeather(pr: MapProjection, m: MissionWxMap, ima
                     val t = text.measure(visText(m.visKm[i].toDouble()), style)
                     drawText(t, topLeft = centre - Offset(t.size.width / 2f, t.size.height / 2f))
                 }
+                WxFill.PRESSURE -> {
+                    val t = text.measure(m.pressureMb[i].roundToInt().toString(), style)
+                    drawText(t, topLeft = centre - Offset(t.size.width / 2f, t.size.height / 2f))
+                }
+                WxFill.WIND -> {
+                    val t = text.measure(m.windKt[i * MissionWxMap.LEVELS + MissionWxLook.level].toString(), style)
+                    drawText(t, topLeft = centre - Offset(t.size.width / 2f, t.size.height / 2f))
+                }
                 else -> {
                     val t = text.measure("${m.tempC[i].roundToInt()}°", style)
                     drawText(t, topLeft = centre - Offset(t.size.width / 2f, t.size.height / 2f))
@@ -534,7 +544,7 @@ private fun DrawScope.drawMissionWeather(pr: MapProjection, m: MissionWxMap, ima
             if (r < 0 || c < 0 || r >= m.rows || c >= m.cols) continue
             val k = (r * m.cols + c) * MissionWxMap.LEVELS + level
             val centre = Offset(pr.left + (c + 0.5f) * cw, pr.top + (r + 0.5f) * ch)
-            windBarb(centre, m.windDeg[k].toDouble(), m.windKt[k].toDouble(), unit * 0.46f, Color(0xFFFFE082), halo)
+            windBarb(centre, m.windDeg[k].toDouble(), m.windKt[k].toDouble(), unit * 0.46f, if (fill == WxFill.WIND) Color.White else Color(0xFFFFE082), halo)
         }
     }
 }
@@ -642,12 +652,15 @@ private fun LayerChips() {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        for (f in listOf(WxFill.CLOUDS, WxFill.PRECIP, WxFill.VISIBILITY, WxFill.TEMPERATURE)) {
+        // the fills (one at a time), then the overlays and the look
+        for (f in WxFill.SHOWN) {
             EditorChip(f.label, selected = MissionWxLook.fill == f) { MissionWxLook.fill(f) }
         }
-        EditorChip("Wind", selected = MissionWxLook.wind) { MissionWxLook.wind(!MissionWxLook.wind) }
-        EditorChip("Pressure", selected = MissionWxLook.isobars) { MissionWxLook.isobars(!MissionWxLook.isobars) }
-        if (MissionWxLook.wind) {
+        Box(Modifier.width(1.dp).height(18.dp).background(Hud.Outline.copy(alpha = 0.6f)))
+        EditorChip("Barbs", selected = MissionWxLook.wind) { MissionWxLook.wind(!MissionWxLook.wind) }
+        EditorChip("Isobars", selected = MissionWxLook.isobars) { MissionWxLook.isobars(!MissionWxLook.isobars) }
+        EditorChip("Smooth", selected = MissionWxLook.smooth) { MissionWxLook.smooth(!MissionWxLook.smooth) }
+        if (MissionWxLook.wind || MissionWxLook.fill == WxFill.WIND) {
             Spacer(Modifier.width(4.dp))
             WxDefaults.WIND_ALTS.forEachIndexed { i, ft ->
                 EditorChip(windAltLabel(ft), selected = MissionWxLook.level == i) { MissionWxLook.level(i) }
@@ -659,36 +672,60 @@ private fun LayerChips() {
 /** "SFC", "FL060", "FL300", as a pilot names the levels the map carries. */
 private fun windAltLabel(ft: Int): String = if (ft == 0) "SFC" else "FL" + (ft / 100).toString().padStart(3, '0')
 
-/** The key for the fill and what the overlays show, over the map's top-left corner. */
+/**
+ * The key for the fill and what the overlays show, over the map's top-left corner. Its sentences fold away on a tap
+ * (folded to begin with on a phone, where the key would otherwise cover a third of the map); the title and the scale stay.
+ */
 @Composable
 private fun MapLegend(m: MissionWxMap, modifier: Modifier) {
     val fill = MissionWxLook.fill
+    val medium = isMedium()
+    var more by remember(medium) { mutableStateOf(medium) }
+    @Composable
+    fun LegendLine(s: String) { if (more) Text(s, color = Hud.TextDim, fontSize = 10.5.sp, lineHeight = 13.sp) }
+    @Composable
+    fun LegendTitle(s: String) = Text(s + if (more) "  ▾" else "  ▸", color = Hud.Text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, lineHeight = 13.sp)
     Column(
         modifier.padding(10.dp).widthIn(max = 250.dp).clip(RoundedCornerShape(5.dp)).background(Hud.Bg.copy(alpha = 0.84f))
-            .border(1.dp, Hud.Outline.copy(alpha = 0.7f), RoundedCornerShape(5.dp)).padding(horizontal = 10.dp, vertical = 7.dp),
+            .border(1.dp, Hud.Outline.copy(alpha = 0.7f), RoundedCornerShape(5.dp)).clickable { more = !more }
+            .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
+        val levelWords = WxDefaults.WIND_ALTS[MissionWxLook.level].let { if (it == 0) "the surface" else group(it) + " ft" }
         when (fill) {
             WxFill.CLOUDS -> {
-                Swatches(listOf("FEW" to cloudInk(WxCover.FEW, false), "SCT" to cloudInk(WxCover.SCATTERED, false), "BKN" to cloudInk(WxCover.BROKEN, false), "OVC" to cloudInk(WxCover.OVERCAST, false)))
-                LegendLine("Low cloud, base in 100s ft · ▲ towering")
+                LegendTitle("Low cloud cover")
+                CoverKey()
+                LegendLine("Circle = the sky covered: ¼ FEW, ½ SCT, ¾ BKN, full OVC · number = cloud base in hundreds of ft · ▲ towering cumulus")
             }
             WxFill.PRECIP -> {
-                val any = m.type.indices.any { precipKind(m, it) > 0 }
-                Swatches(listOf("Rain" to RAIN.copy(alpha = 0.55f), "Snow" to SNOW.copy(alpha = 0.6f)) + (if (m.shower.isNotEmpty()) listOf("Showers" to SHOWER.copy(alpha = 0.38f)) else emptyList()))
-                LegendLine(if (any) "BMS rains in inclement weather, and snows at or below 0 °C" else "No precipitation anywhere on this map")
+                val any = m.type.indices.any { WxRamps.precipKind(m, it) > 0 }
+                LegendTitle("Precipitation")
+                PrecipKey(showers = m.shower.isNotEmpty())
+                LegendLine(if (any) "BMS rains in inclement weather and snows there at or below 0 °C; showers are a map's own flag. BMS gives no intensity." else "No precipitation anywhere on this map")
             }
-            WxFill.VISIBILITY -> {
-                Swatches(listOf("<1.6" to visInk(1.0), "<5" to visInk(3.0), "<8" to visInk(6.0), "8+" to visInk(10.0)))
-                LegendLine("Visibility, km")
+            WxFill.PRESSURE -> {
+                val (lo, hi) = WxRamps.pressureRange(m)
+                LegendTitle("Pressure (QNH)")
+                ScaleBar(WxRamps.PRESSURE, 0f, 1f, pressureLabels(lo, hi))
+                LegendLine("Low blue, high red, over this map's range")
+            }
+            WxFill.WIND -> {
+                LegendTitle("Wind speed at $levelWords")
+                ScaleBar(WxRamps.WIND, 0f, 140f, listOf("0", "35", "70", "105", "140 kt"))
             }
             WxFill.TEMPERATURE -> {
-                Box(Modifier.width(190.dp).height(8.dp).clip(RoundedCornerShape(2.dp)).background(Brush.horizontalGradient((0..8).map { Color(WxColors.temperature(it * 5.0)) })))
-                LegendLine("Temperature at the surface, °C (0 · 20 · 40)")
+                LegendTitle("Temperature at the surface")
+                ScaleBar(WxRamps.TEMPERATURE, -30f, 40f, listOf("−30", "−12", "5", "23", "40 °C"))
+            }
+            WxFill.VISIBILITY -> {
+                LegendTitle("Visibility")
+                ScaleBar(WxRamps.VISIBILITY, 0f, 30f, listOf("0", "7.5", "15", "22.5", "30 km"))
+                LegendLine("Red under 1.6 km (a mile), amber under 5, yellow under 8")
             }
             WxFill.NONE -> {}
         }
-        if (MissionWxLook.wind) LegendLine("Wind at " + WxDefaults.WIND_ALTS[MissionWxLook.level].let { if (it == 0) "the surface" else group(it) + " ft" } + ", barbs into the wind")
+        if (MissionWxLook.wind) LegendLine("Barbs: wind at $levelWords, pointing into the wind")
         if (MissionWxLook.isobars) {
             val lo = m.pressureMb.minOrNull() ?: 0f
             val hi = m.pressureMb.maxOrNull() ?: 0f
@@ -697,21 +734,7 @@ private fun MapLegend(m: MissionWxMap, modifier: Modifier) {
     }
 }
 
-@Composable
-private fun Swatches(items: List<Pair<String, Color>>) {
-    Row(horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
-        items.forEach { (name, c) ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(10.dp).clip(RoundedCornerShape(2.dp)).background(c.copy(alpha = maxOf(c.alpha, 0.5f))).border(0.5.dp, Hud.Outline, RoundedCornerShape(2.dp)))
-                Spacer(Modifier.width(4.dp))
-                Text(name, color = Hud.Text, fontSize = 10.5.sp, maxLines = 1)
-            }
-        }
-    }
-}
 
-@Composable
-private fun LegendLine(s: String) = Text(s, color = Hud.TextDim, fontSize = 10.5.sp, lineHeight = 13.sp)
 
 /**
  * The maps through time: a tick per map, the one shown lit, and the save's clock, the take-off, the time over target
@@ -866,7 +889,7 @@ private fun cellLine(m: MissionWxMap, c: Int, r: Int): String {
     val mb = m.pressureMb[i].toDouble()
     val inHg = WxModel.mbToInHg(mb)
     val k = i * MissionWxMap.LEVELS
-    val precip = when (precipKind(m, i)) { 3 -> " SN"; 2 -> " RA"; 1 -> " SHRA"; else -> "" }
+    val precip = when (WxRamps.precipKind(m, i)) { 3 -> " SN"; 2 -> " RA"; 1 -> " SHRA"; else -> "" }
     return "${windText(m.windDeg[k].toDouble(), m.windKt[k].toDouble())}kt  ${visText(m.visKm[i].toDouble())} km$precip\n" +
         "$cloud  ${m.tempC[i].roundToInt()}°C  Q${mb.roundToInt()}  A${pressureText(inHg, false)}"
 }

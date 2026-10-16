@@ -263,8 +263,8 @@ such a value; a line the pilot added a point to in BMS is kept. A value the Plan
 pilot drew in BMS — is never one of them. BMS's memory itself still holds the old items until the next LOAD, which is
 why the Steps say LOAD (then SAVE) after opening the new mission.
 
-**Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (1.3.9; the Planner's Settings, on by default; the PC's
-setting `CleanOpenedMission` in `bridge-settings.json`, `GET`/`POST /api/planner/settings`). A line or PPT comes back
+**Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints** (1.3.9; the Planner's Settings; the PC's
+setting `OpenedLeftovers` in `bridge-settings.json` since 1.4.1 — asked once, below — `GET`/`POST /api/planner/settings`). A line or PPT comes back
 from BMS's memory long after the ledger forgets it. So when the Planner plans **another flight** than it had — Open
 mission… or Pick a flight (`POST /api/mission/opened?clean=1`; the same flight planned again, Reload from BMS or a seat
 changed, is not one) — the PC cleans **every** line (`lineSTPT_0…23`, each line whole), **every** PPT (`ppt_0…14`)
@@ -279,6 +279,19 @@ PPTs stay. The Planner then reads its cartridge again (empty of lines and PPTs),
 threats and its tanker and AWACS tracks — the Mission map draws them, the Planner's Map page lists them, one tap from a
 PPT or a line; nothing reaches BMS until the pilot adds them and saves. The cleaned points are in the ledger's `cleared`
 (under no flight when the Planner did not write them) for the Undo route. Off: nothing is cleaned at Open mission….
+
+**Asked once** (1.4.1): a pilot who carried his campaign PPTs from mission to mission lost them at every Open mission…,
+so the clean start is the pilot's choice. `OpenedLeftovers` in `bridge-settings.json` is `ask` (a new install, and
+everyone once by settings layout 5), `clean` or `keep` (`CleanOpenedMission` is now only its mirror, for an older
+build). While it is `ask`, the first Open mission… or Pick a flight of another **campaign** flight puts up the
+Planner's question (**Clear them** / **Keep them**, with what goes, what never does, why, and that Settings changes it
+later); the answer is written to the PC (`POST /api/planner/settings?openedLeftovers=`), so every device follows it,
+and that open goes on accordingly; × asks again next time. Settings shows the choice and has **Ask me again**. An
+older device, which never asks, cleans nothing while the choice is `ask`. **Keep** keeps them everywhere: at a new
+mission (a PRINT of another flight, another flight opened in WDP mode) and at a switch of mode the resets above leave
+every line, PPT and Open 1/2 steerpoint alone — the Planner's own for an earlier flight and BMS's copies of them —
+while the Planner's targets, weapon targets and nav offsets of an earlier flight still go (`keepCarried`). Otherwise
+"keep" would last only until the next PRINT.
 
 **What does not, and why.**
 - **The cartridge** keeps whatever BMS saved into it. Falcon BMS's own manual says so: in a campaign, PPTs and lines

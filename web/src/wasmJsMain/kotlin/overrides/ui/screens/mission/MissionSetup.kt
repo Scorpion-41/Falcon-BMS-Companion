@@ -71,6 +71,7 @@ fun MissionSetupPane(onConnected: () -> Unit) {
                 Para("The whole app runs in this browser; BMS Companion on the PC provides the data. Settings (BMS folders, AWACS feed, EZBoards) are changed on the PC.")
             }
             MissionSourceCard()
+            BmsInstallsCard()
             HostilesCard()
             MfdSetupCard()
             RadioLogCard()

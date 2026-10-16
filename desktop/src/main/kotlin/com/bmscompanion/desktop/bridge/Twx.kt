@@ -114,7 +114,13 @@ object Twx {
             version, model, condition, mapUpdates, heading, types, windHeld = !(headingModel == 1 && heading == 0), clock = clock,
             probabilities = probabilities, changes = changes,
             intervalMin = b.getInt(220).takeIf { it in 1..100_000 } ?: 0, intervalMax = b.getInt(224).takeIf { it in 1..100_000 } ?: 0,
-        )
+        ).withDate(b)
+    }
+
+    /** Version 4 and later: the year, month and day at bytes 4, 8 and 12 (the zulu date at the clock), when they make one. */
+    private fun PcTwx.withDate(b: ByteBuffer): PcTwx {
+        val y = b.getInt(4); val m = b.getInt(8); val d = b.getInt(12)
+        return if (com.bmscompanion.app.data.weather.Astro.validDate(y, m, d) != null) copy(year = y, month = m, day = d) else this
     }
 
     /** Versions up to 7, as WDP 3.7.24 reads them for BMS 4.35 and later (`fclsMain.ReadWeather`). */
@@ -154,6 +160,7 @@ object Twx {
         val temps = (0 until 4).map { listOf(int(), int(), int()) }
         val qnh = (0 until 4).map { listOf(int(), int(), int()) }
         val types = (0 until 4).map { k -> PcTwxType(wind[k], fogEnd[k], stratus[k], cumulus[k], temps[k], qnh[k], contrailFt = contrail[k]) }
-        return PcTwx(version, model, condition, mapUpdates, heading, types, clock = clock)
+        val t = PcTwx(version, model, condition, mapUpdates, heading, types, clock = clock)
+        return if (version >= 4) t.withDate(b) else t
     }
 }

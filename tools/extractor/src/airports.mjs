@@ -151,10 +151,42 @@ function runwayGeometry(th, db, ocdIdx) {
   });
   // each runway's rectangle (a point header of type 8, its first four runway-edge points: one end's pair, then the
   // other's), as airfields.mjs draws it: where the field's elevation is read when its ATC file gives none
-  const rects = phd.filter((h) => h && +h.Type === 8).map((h) => pd.slice(+h.FirstPtIdx, +h.FirstPtIdx + +h.PointCount)
-    .filter((p) => p && +p.Type === 8).slice(0, 4).map((p) => ({ e: +p.OffsetX, n: +p.OffsetY })))
-    .filter((c) => c.length === 4);
-  return { headers, feats, rects };
+  const rectHeaders = phd.filter((h) => h && +h.Type === 8).map((h) => ({ rwyNo: +h.RunwayNumber, c: pd.slice(+h.FirstPtIdx, +h.FirstPtIdx + +h.PointCount)
+    .filter((p) => p && +p.Type === 8).slice(0, 4).map((p) => ({ e: +p.OffsetX, n: +p.OffsetY })) }))
+    .filter((r) => r.c.length === 4);
+  const rects = rectHeaders.map((r) => r.c);
+  // and what each measures, exactly as airfields.mjs's buildRunways measures it for the ground charts (the middle of
+  // one end's pair of corners to the middle of the other's; the width across the first pair) — the figure BMS's own
+  // ground charts print in metres ("2745 X 45 M" at Osan is 9,004 × 149 ft)
+  const strips = rectHeaders.map(({ rwyNo, c }) => {
+    const a = { e: (c[0].e + c[1].e) / 2, n: (c[0].n + c[1].n) / 2 }, b = { e: (c[2].e + c[3].e) / 2, n: (c[2].n + c[3].n) / 2 };
+    return {
+      rwyNo,
+      lengthFt: Math.round(Math.hypot(b.e - a.e, b.n - a.n)),
+      widthFt: Math.round(Math.hypot(c[1].e - c[0].e, c[1].n - c[0].n)),
+      mid: { e: (a.e + b.e) / 2, n: (a.n + b.n) / 2 },
+      axis: norm360((Math.atan2(b.e - a.e, b.n - a.n) * 180) / Math.PI),
+    };
+  });
+  return { headers, feats, rects, strips };
+}
+
+/**
+ * The runway rectangle a pair of runway ends belongs to: one of the field's type 8 headers, its own RunwayNumber first
+ * (parallel strips share a course — Osan's 09L and 09R), lying along the ends' course, the nearest to their centre
+ * line (an end BMS gives no reciprocal finds the same rectangle as its other end would). A field with one rectangle has
+ * one runway, so an end whose own record is off — a taxi network stating course 0 (Novo Mesto), or one laid for a
+ * strip at another angle (Al-Muzabin's "18/36" on its 14/32 rectangle, Wujah Al Hajar, Kastoria in Hellas) — is on
+ * that one. Null where the field has none that fits.
+ */
+function stripFor(h, geo) {
+  const free = geo.strips || [];
+  const fits = (list) => list
+    .filter((s) => { const d = Math.abs(((s.axis - h.hdg) % 180 + 180) % 180); return Math.min(d, 180 - d) < 15; })
+    .map((s) => ({ s, off: Math.abs(s.mid.e * h.r[0] + s.mid.n * h.r[1] - h.lateral) }))
+    .filter((x) => x.off < 400)
+    .sort((x, y) => x.off - y.off)[0]?.s ?? null;
+  return fits(free.filter((s) => s.rwyNo === h.rwyNo)) ?? fits(free) ?? (free.length === 1 ? free[0] : null);
 }
 
 function designatorFor(h, geo) {
@@ -172,6 +204,54 @@ function designatorFor(h, geo) {
     if (!best || Math.abs(lat - h.lateral) < best.d) best = { des: des.length === 1 ? '0' + des : des, d: Math.abs(lat - h.lateral) };
   }
   return best?.des ?? null;
+}
+
+/**
+ * Which runway end each of a station line's four ILS frequencies serves, as Falcon BMS itself works it out (read out
+ * of `Falcon BMS.exe` with its pdb, 4.38.1):
+ * - `ATCBrain::ATCBrain` takes the field's number of runways from the objective class (OCD `DataRate`, held to 2) and
+ *   walks its type 1 point headers in PHD order (`NextHeaderIdx`, which `LoadClassTable` sets to the next record of the
+ *   same file), filing each under its `RunwayNumber` q: the first as the runway's header 0, any later one as header 1.
+ * - `TacanList::TuneILS` takes frequency slot s as runway s / 2's header s % 2, and `NavigationSystem::SetIlsData` flies
+ *   that header's first point to its next one with the localizer at the OTHER header's first point
+ *   (`ATCBrain::GetOppositeRunway`), naming the runway from the other header's heading and landing pattern ("%02dL").
+ * - `ATCBrain::FindBestLandingRunway` agrees from the other side: landing on runway q's header j asks
+ *   `TacanList::ILSFreqForRwy` for slot 2q + (1 - j).
+ * So slot 2q is the end of runway q's second header, slot 2q + 1 its first's: within each RunwayNumber the PHD order is
+ * swapped. Up to 1.4.0 the slots were given in PHD order, which put Cheongju's one ILS on 06R (it is 24L, as BMS's KTO
+ * AIP prints it); Daegu, the case that had been checked, was right only because 13R and 31L share 108.7. A runway with
+ * one header serves no slot (its other end does not exist to the sim), nor does a runway past the count.
+ * Returns Map(header → slot).
+ */
+export function ilsEnds(headers, runways) {
+  const out = new Map();
+  const count = Math.min(runways > 0 ? runways : 2, 2);
+  for (let q = 0; q < count; q++) {
+    const list = headers.filter((h) => h.rwyNo === q);
+    if (list.length < 2) continue;
+    const pair = [list[0], list[list.length - 1]];
+    out.set(pair[1], 2 * q);
+    out.set(pair[0], 2 * q + 1);
+  }
+  return out;
+}
+
+/**
+ * The ATC file's entry for a runway end (its QFU and its pattern): the one on the end's own runway (Database Runway
+ * "Number" = the header's RunwayNumber) whose axis lies along the end's heading. Up to 1.4.0 it was the entry at the
+ * header's place in PHD order, and the ATC files do not keep that order: Aviano's lists 05 first and its PHD the 230°
+ * end first, so the 230° end was named 05 (with 05's pattern) and the 050° end 23 — 121 ends in the Balkans, 17 in the
+ * Falklands, Skopje and Tanagra in Hellas, every one of them the two names of a runway the wrong way round, and with
+ * them the ILS figure printed against the wrong number. An entry with no axis is taken by place, as before.
+ */
+function atcRunwayFor(atc, h) {
+  const list = atc?.runways || [];
+  const along = (r) => r.axisTrue != null && Math.abs(((r.axisTrue - h.hdg) % 360 + 540) % 360 - 180) < 30;
+  const byPlace = list[h.order] || null;
+  // a header stating course 0 says nothing (Novo Mesto, Korce): it keeps the entry at its place
+  if (!h.hdg) return byPlace;
+  return list.find((r) => r.dbRunway === h.rwyNo && along(r)) || list.find(along)
+    || (byPlace && byPlace.axisTrue == null ? byPlace : null);
 }
 
 function runwayLength(h, geo) {
@@ -215,7 +295,9 @@ export function buildAirports(th) {
     const rec = parseRecords(findFileCI(ocdDir, `OCD_${String(ocd).padStart(5, '0')}.XML`), 'OCD')?.[ocd];
     if (!rec) return null;
     const c = db.ct[+rec.CtIdx];
-    return c && +c.Domain === 3 && +c.Class === 4 ? { type: +c.Type, name: rec.Name } : null;
+    // DataRate is the field's number of runways to the sim (ATCBrain's constructor reads it as such: 1 or 2 at the
+    // fields, 7 on the carriers, held to 2), which decides how many ILS slots it serves (ilsEnds)
+    return c && +c.Domain === 3 && +c.Class === 4 ? { type: +c.Type, name: rec.Name, runways: +rec.DataRate || 0 } : null;
   };
 
   const airports = [];
@@ -226,6 +308,19 @@ export function buildAirports(th) {
   const navaids = [];
   const placeRaw = [];
   const typeCache = new Map();
+  // Every field's own objective name (1.4.1). A station line's comment is only a label, and it can name another field:
+  // Korea's line for CampId 947 (Sangwon Highwaystrip) says "# Songwhan Highway Strip", the name of objective 925, which
+  // has no line at all — so the app showed two "Songwhan"s, the northern one with radios. A comment naming another
+  // field is not this one's full name (nor where its ICAO code comes from). BMS's genuine other names (Kumi for Gumi,
+  // Koksan for Kangdong) name no objective, so they stay.
+  const fieldKey = (s) => (s || '').replace(/\([A-Z0-9]{4}\)/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  const fieldByName = new Map();
+  for (const o of objs.values()) {
+    if (!typeCache.has(o.ocd)) typeCache.set(o.ocd, ocdType(o.ocd));
+    const t = typeCache.get(o.ocd);
+    if (t && OBJ_TYPES[t.type] && o.name && !fieldByName.has(fieldKey(o.name))) fieldByName.set(fieldKey(o.name), o.campId);
+  }
+  const namesAnother = (label, campId) => { const c = fieldByName.get(fieldKey(label)); return c != null && c !== campId; };
   for (const o of objs.values()) {
     if (!typeCache.has(o.ocd)) typeCache.set(o.ocd, ocdType(o.ocd));
     const t = typeCache.get(o.ocd);
@@ -237,21 +332,22 @@ export function buildAirports(th) {
       if (st?.tacan && !st.towerUhf) navaids.push({ campId: o.campId, name: st.label || o.name, objective: o.name, x: Math.round(o.x), y: Math.round(o.y), tacan: st.tacan });
       continue;
     }
-    const icao = (o.name.match(/\(([A-Z0-9]{4})\)/) || st?.label?.match(/\(([A-Z0-9]{4})\)/) || [])[1] || null;
+    const ownLabel = st?.label && !namesAnother(st.label, o.campId) ? st.label : null;
+    const icao = (o.name.match(/\(([A-Z0-9]{4})\)/) || ownLabel?.match(/\(([A-Z0-9]{4})\)/) || [])[1] || null;
     const atc = atcByCamp.get(o.campId) || null;
     const geo = runwayGeometry(th, db, o.ocd);
     if (!(geo && geo.headers.length) && !st?.towerUhf && !st?.towerVhf) continue;
     const runways = [];
     if (geo && geo.headers.length) {
-      // ILS slots follow runway ends ordered by database runway number (verified: Daegu ILS 31L 108.7).
-      const ilsOrder = [...geo.headers].sort((a, b) => a.rwyNo - b.rwyNo || a.order - b.order);
+      // which end each ILS frequency serves: the sim's own rule (ilsEnds), PHD order swapped within each RunwayNumber
+      const ilsSlot = ilsEnds(geo.headers, t.runways);
       const ends = geo.headers.map((h) => {
-        const atcRwy = atc?.runways?.[h.order] || null;
+        const atcRwy = atcRunwayFor(atc, h);
         let des = designatorFor(h, geo) || atcRwy?.qfu || String(Math.round(h.hdg / 10) || 36).padStart(2, '0');
         return {
           h, des,
           hdgTrue: Math.round(h.hdg * 10) / 10,
-          ils: st ? st.ils[ilsOrder.indexOf(h)] || null : null,
+          ils: st && ilsSlot.has(h) ? st.ils[ilsSlot.get(h)] || null : null,
           pattern: atcRwy ? {
             overheadSide: atcRwy.overheadSide ?? null, hasBase: !!atcRwy.hasBase, hasLongFinal: !!atcRwy.hasLongFinal,
             final: atcRwy.final, base: atcRwy.base, entry: atcRwy.entry, holding: atcRwy.holding, loiter: atcRwy.loiter ?? null,
@@ -286,10 +382,17 @@ export function buildAirports(th) {
         }
         for (const p of pairs) {
           p.sort((a, b) => parseInt(a.des, 10) - parseInt(b.des, 10));
+          // the length and width are BMS's own runway rectangle's (the ground chart's, to the foot); only a field with
+          // none that fits keeps the old estimate between the threshold lights (often thousands of feet short: Souda's
+          // 8,800 for 10,990), marked lenEst. A ship (no features at all) has no strip: its rectangle is the deck's
+          // approach path, and the estimate finds nothing on it either.
+          const strip = geo.feats.length ? stripFor(p[0].h, geo) : null;
+          const est = strip ? null : runwayLength(p[0].h, geo);
           runways.push({
             dbRunway: rwyNo,
             name: p.map((e) => e.des).join('/'),
-            lengthFt: runwayLength(p[0].h, geo),
+            lengthFt: strip ? strip.lengthFt : est,
+            ...(strip ? { widthFt: strip.widthFt } : est != null ? { lenEst: true } : {}),
             ends: p.map((e) => ({ designator: e.des, headingTrue: e.hdgTrue, ils: e.ils, pattern: e.pattern })),
           });
         }
@@ -309,7 +412,7 @@ export function buildAirports(th) {
     airports.push({
       id: o.campId,
       name: o.name.replace(/\s*\([A-Z0-9]{4}\)\s*$/, '').trim(),
-      fullName: st?.label || o.name,
+      fullName: ownLabel || o.name,
       icao,
       type: isCarrier ? 'Carrier' : OBJ_TYPES[t.type],
       x: Math.round(o.x), y: Math.round(o.y),

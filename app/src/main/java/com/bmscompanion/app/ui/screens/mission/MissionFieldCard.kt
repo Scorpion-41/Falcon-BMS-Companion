@@ -54,9 +54,9 @@ import androidx.compose.ui.unit.toSize
 /**
  * The airfield card of the Mission map (1.4.0): a tap on an airfield — its symbol, its name, or anywhere on its diagram
  * when the map is close enough to draw one — opens this, densely packed, rather than a point card with a button to the
- * field's page. Name, ICAO, what the field is to the flight, bearing and range from the jet and from the bullseye, the
- * runways with their lengths, then the airfield page's own Info box ([DivertBlock], unframed, on narrower columns: the
- * coordinates and ELEV, then every frequency in divert order — a tap copies a figure), and **Airfield page ›** for the
+ * field's page. Name, ICAO, what the field is to the flight, bearing and range from the jet and from the bullseye,
+ * then the airfield page's own Info box ([DivertBlock], unframed, on narrower columns: the
+ * coordinates and ELEV, the runways' length × width in feet, then every frequency in divert order — a tap copies a figure), and **Airfield page ›** for the
  * rest (charts, ground chart, ATC). Where the card is wide enough (a tablet or the PC) a small ground chart of the field
  * sits beside its heading, which opens the page too. It scrolls inside whatever height its caller leaves it.
  */
@@ -110,14 +110,16 @@ fun MissionFieldCard(
                         own?.let { FactPair("FROM YOU", bra(it.first, it.second, a.x, a.y), Hud.Amber) }
                         bull?.let { FactPair("BULLS", bra(it.first, it.second, a.x, a.y), Hud.Cyan) }
                     }
-                    if (a.runways.isNotEmpty()) Row(Modifier.padding(top = 3.dp)) {
+                    // with a theater the Info box below lists the runways (BMS's own lengths and widths); this line is
+                    // only for a card without one
+                    if (th == null && a.runways.isNotEmpty()) Row(Modifier.padding(top = 3.dp)) {
                         Text("RWY", style = LocalExtra.current.overline.copy(fontSize = 9.5.sp, letterSpacing = 0.6.sp), color = Hud.TextDim, modifier = Modifier.width(40.dp).padding(top = 2.dp))
                         // one item a runway, so a runway never breaks across two lines
                         androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             a.runways.forEach { r ->
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(r.name, style = LocalExtra.current.mono.copy(fontSize = 13.sp, lineHeight = 17.sp), fontWeight = FontWeight.Bold, color = Hud.Text, maxLines = 1)
-                                    r.lengthFt?.let { Text("  %,d ft".format(it), style = LocalExtra.current.mono.copy(fontSize = 12.sp, lineHeight = 17.sp), color = Hud.TextDim, maxLines = 1) }
+                                    r.lengthFt?.let { Text((if (r.lenEst) "  ≈ " else "  ") + "%,d ft".format(it), style = LocalExtra.current.mono.copy(fontSize = 12.sp, lineHeight = 17.sp), color = Hud.TextDim, maxLines = 1) }
                                 }
                             }
                         }

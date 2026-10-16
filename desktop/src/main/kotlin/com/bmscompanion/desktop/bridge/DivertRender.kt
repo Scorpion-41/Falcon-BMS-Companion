@@ -25,6 +25,8 @@ import com.bmscompanion.app.ui.screens.AirportDetail
 import com.bmscompanion.app.ui.screens.DivertBlock
 import com.bmscompanion.app.ui.screens.airportKind
 import com.bmscompanion.app.ui.screens.divertCoords
+import com.bmscompanion.app.ui.screens.runwayFigures
+import com.bmscompanion.app.ui.screens.runwayMetres
 import com.bmscompanion.app.ui.screens.wdp.WdpProbe
 import com.bmscompanion.app.ui.theme.BmsTheme
 import com.bmscompanion.app.ui.theme.Hud
@@ -39,6 +41,8 @@ import kotlin.math.cos
  * 1. Its coordinates against BMS's own: every airbase the KTO AIP prints a "BMS coord" for (AD 3.1.1-3.1.2), the
  *    block's DED figure beside the AIP's, the difference in thousandths of a minute and in metres (a FAIL over 2 m,
  *    which is more than the print's own rounding).
+ *    1b. Its runways (length × width in feet, BMS's runway rectangles) against the metres BMS's ground charts print
+ *    ([AGC_RUNWAYS]; a FAIL over 10 ft of length or 5 ft of width, or an estimate where a rectangle was expected).
  * 2. The page drawn headless — Jungwon (KTO), a carrier and a Falklands field, and at phone and tablet only Aviano
  *    (Balkans), Andravida (Hellas), Ramat David (Israel) and HMS Hermes (a Falklands ship typed "Airbase"), and Aqaba
  *    (Israel, a VHF-only tower) at all three; every theater's every field is `--divertcheck` (DivertCheck.kt) — at a phone (400 x 800 dp), a tablet
@@ -50,8 +54,12 @@ import kotlin.math.cos
  */
 object DivertRender {
     private const val RAIL_DP = 80
-    /** The tallest the Info box may be with its tables on one column (a phone), and on two or three (dp). */
-    private const val MAX_ONE_COL_DP = 330
+    /**
+     * The tallest the Info box may be with its tables on one column (a phone), and on two or three (dp). One column was
+     * 330 until 1.4.1 put the runways in the box: the most a field has (two runways and seven radios — Jungwon, Osan,
+     * Gimpo …, twelve lines) is 331 dp there.
+     */
+    private const val MAX_ONE_COL_DP = 340
     private const val MAX_DP = 230
     private const val MAX_GAP_DP = 24
 
@@ -63,6 +71,19 @@ object DivertRender {
         Triple("Incheon Intl Airport", "N 37°28.430'", "E 126°27.083'"), Triple("Pohang AB", "N 35°59.123'", "E 129°25.200'"),
         Triple("Sacheon AB", "N 35°04.997'", "E 128°03.978'"), Triple("Seoul AB", "N 37°26.922'", "E 127°06.512'"),
         Triple("Suwon AB", "N 37°13.880'", "E 127°00.727'"), Triple("Yangyang Intl Airport", "N 38°03.859'", "E 128°40.045'"),
+    )
+
+    /** A runway as a theater's ground chart prints it ("2745 X 45 M"): BMS 4.38.1's `_AGC.png` in each theater's Docs. */
+    private data class AgcRunway(val theater: String, val field: String, val runway: String, val lengthM: Int, val widthM: Int)
+
+    private val AGC_RUNWAYS = listOf(
+        AgcRunway("korea-kto", "Osan AB", "09R/27L", 2745, 45),
+        AgcRunway("korea-kto", "Gunsan AB", "18/36", 2749, 45),
+        AgcRunway("korea-kto", "Gumi Highway Strip", "08/26", 1781, 25),
+        AgcRunway("hellas", "Souda Airbase", "11/29", 3350, 45),
+        AgcRunway("balkans", "Aviano Airbase", "05/23", 2606, 45),
+        AgcRunway("israel", "Hatzor Airbase", "05/23", 2417, 46),
+        AgcRunway("israel", "Hatzor Airbase", "11/29", 2479, 47),
     )
 
     private data class Shape(val name: String, val w: Int, val h: Int, val d: Float, val rail: Boolean)
@@ -92,6 +113,25 @@ object DivertRender {
             val m = kotlin.math.hypot(dLat * 1.852, dLng * 1.852 * cos(Math.toRadians(latDeg)))
             val ok = m <= 2.0
             appendLine("${if (ok) "ok  " else "FAIL"} ${name.padEnd(22)} ours ${c.lat} ${c.lng} (keys ${c.latKeys} / ${c.lngKeys}) · AIP $lat $lng · Δ ${dLat}/${dLng} thousandths of a minute = ${"%.1f".format(m)} m")
+        }
+        appendLine()
+        appendLine("1b. The runways' length × width in feet (runwayFigures) against the metres BMS's own ground charts (_AGC.png) print:")
+        for (r in AGC_RUNWAYS) {
+            val th = runBlocking { Repo.theater(r.theater) }
+            val a = th?.let { t -> runBlocking { Repo.airportSet(t.airportSet) }.airports.firstOrNull { it.name == r.field } }
+            val chart = if (th?.airfieldSet != null && a != null) runBlocking { Repo.airfield(th.airfieldSet!!, a.id) } else null
+            val fig = a?.let { runwayFigures(it, chart) }?.firstOrNull { it.name == r.runway }
+            if (fig == null) { appendLine("FAIL ${r.field} ${r.runway}: no runway figure (${if (a == null) "not in the airport data" else "runways: " + runwayFigures(a, chart).joinToString { it.name }})"); continue }
+            val lenFt = r.lengthM * 3.28084
+            val widFt = r.widthM * 3.28084
+            // the metres the box shows (runwayMetres) against the chart's own, at most a metre apart (the chart's rounding)
+            val m = runwayMetres(fig.lengthFt)
+            val ok = fig.exact && kotlin.math.abs(fig.lengthFt - lenFt) <= 10 && fig.widthFt != null && kotlin.math.abs(fig.widthFt!! - widFt) <= 5 &&
+                kotlin.math.abs(m - r.lengthM) <= 1
+            appendLine(
+                "${if (ok) "ok  " else "FAIL"} ${(r.field + " " + r.runway).padEnd(30)} ours ${fig.lengthFt} × ${fig.widthFt} ft${if (fig.exact) "" else " (estimate)"}, shown as $m m · " +
+                    "chart ${r.lengthM} × ${r.widthM} m = ${"%.0f".format(lenFt)} × ${"%.0f".format(widFt)} ft${if (m == r.lengthM) "" else " (${m - r.lengthM} m)"}",
+            )
         }
         appendLine()
         appendLine("2. The page: the block's size in the chart's column, and its place under the chart:")
@@ -219,7 +259,8 @@ object DivertRender {
                 }
             }
         }
-        try { var t = 0L; repeat(4) { scene.render(t); t += 50_000_000 } } finally { scene.close() }
+        // a few frames with a pause: the runways come with the field's ground chart, loaded off the frame
+        try { var t = 0L; repeat(16) { scene.render(t); t += 50_000_000; Thread.sleep(25) } } finally { scene.close() }
         return (h / d).toInt()
     }
 

@@ -683,9 +683,32 @@ object MissionLink {
     suspend fun plannerSettings(): PcAnswer<PlannerPcSettings> =
         answer("GET", "/api/planner/settings", PlannerPcSettings.serializer(), timeoutMs = 8_000)
 
+    /** The Falcon BMS installs on the PC and the active one (1.4.1, `GET /api/bms/installs`; an older PC: 404). */
+    suspend fun bmsInstalls(refresh: Boolean = false): PcAnswer<BmsInstallList> =
+        answer("GET", "/api/bms/installs" + (if (refresh) "?refresh=1" else ""), BmsInstallList.serializer(), timeoutMs = 10_000)
+
+    /** A change of the installs: [op] `active`/`add`/`remove`/`label` with [args] (`id`, `path`, `label`); `/api/info` is read again after it. */
+    suspend fun bmsInstallsChange(op: String, args: Map<String, String>): PcAnswer<BmsInstallList> {
+        val q = args.entries.joinToString("&") { it.key + "=" + enc(it.value) }
+        val a = answer("POST", "/api/bms/installs/$op" + (if (q.isEmpty()) "" else "?$q"), BmsInstallList.serializer(), timeoutMs = 30_000)
+        runCatching { get<BridgeInfo>("/api/info") }.onSuccess { _info.value = it }
+        return a
+    }
+
     /** Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints on or off (`POST /api/planner/settings?cleanOpened=1|0`). */
     suspend fun setCleanOpened(on: Boolean): PcAnswer<PlannerPcSettings> =
         answer("POST", "/api/planner/settings?cleanOpened=" + (if (on) "1" else "0"), PlannerPcSettings.serializer(), timeoutMs = 8_000)
+
+    /** The pilot's noteboards for the mission now (`GET /api/notes`, 1.4.1; an older PC: 404). */
+    suspend fun notes(): PcAnswer<NotesState> = answer("GET", "/api/notes", NotesState.serializer(), timeoutMs = 8_000)
+
+    /** Keeps the noteboards on the PC for the mission they name (`POST /api/notes`); answers the mission now's. */
+    suspend fun saveNotes(doc: NotesDoc): PcAnswer<NotesState> =
+        answer("POST", "/api/notes", NotesState.serializer(), Repo.json.encodeToString(NotesDoc.serializer(), doc), timeoutMs = 8_000)
+
+    /** The opened mission's leftovers: ask, clean or keep (`POST /api/planner/settings?openedLeftovers=…`, 1.4.1; `PlannerPcSettings.ASK`…). */
+    suspend fun setOpenedLeftovers(choice: String): PcAnswer<PlannerPcSettings> =
+        answer("POST", "/api/planner/settings?openedLeftovers=$choice", PlannerPcSettings.serializer(), timeoutMs = 8_000)
 
 
     private suspend fun <T> answer(method: String, path: String, serializer: KSerializer<T>, body: String? = null, timeoutMs: Int = 20_000): PcAnswer<T> =

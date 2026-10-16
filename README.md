@@ -4,6 +4,8 @@ A companion for **Falcon BMS 4.38** on **Windows PCs, Android phones and tablets
 
 Everything it shows about the game — airfields, charts, aircraft, weapons, threats — is **generated from the Falcon BMS install's own files**. The install is read only, except where a feature writes on request; see [What it writes to the BMS folder](#what-it-writes-to-the-bms-folder).
 
+**New in 1.4.1:** a **Noteboard** page for the cockpit kneeboard (notes, laser codes, figures) and **Upd Kneeboard** in EZBoards mode too; quick switching between several Falcon BMS installs; runway lengths in feet and metres in every airfield's Info box; colour scales and a **Sun & Moon** block on Mission weather; Open mission… asks before it clears lines and PPTs; and ILS frequencies on the right runway ends, thanks to **Havhingstor**. Full list: [CHANGELOG.md](CHANGELOG.md).
+
 **New in 1.4.0:** a **Mission weather** page showing the weather the mission flies; **target pictures** drawn from BMS's own 3-D models on the Briefing, the Threats pages and the kneeboard; maps that zoom down to half a metre a pixel from BMS's own terrain and imagery, a **Topographic** style and airfield diagrams; an **airfield card** on the Mission map; a **Files** tab; DED highlighting; and in the Planner conformal tanks, tankers on the DataCard, bingo and joker, and Briefing text that wraps as you type. Airfield elevations now follow BMS's terrain levelling, thanks to **oakdesign**. Full list: [CHANGELOG.md](CHANGELOG.md).
 
 **New in 1.3.9:** lines, PPTs and Open 1/2 steerpoints that survive BMS's DTC LOAD and SAVE, with a clean start for each opened mission; **Add to Open bank…** on the Planner's Map page; control towers, arresting cables and free rotation on the ground charts; checked photographs in the Reference section. Full list: [CHANGELOG.md](CHANGELOG.md).
@@ -275,9 +277,9 @@ Several things around BMS are called a kneeboard. Three of them can write the on
 
 **Weather first, in either mode:** if you want weather of your own, make it on the **Weather** tab, then in BMS pick it (Weather → Map Model → **`BMSC <name>`**, MAPS AUTO UPDATE on for a series and off for one map) and save it (**SAVE WTH** in a TE, the campaign save in a campaign) before anything below reads it.
 
-**In EZBoards mode:** plan and **SAVE** the DTC in BMS, press **PRINT** in BMS (EZBoards runs if it is set to), press **GENERATE NOW** on the Kneeboards page if the DTC was saved again after it, export in HTML Briefing if you use it, then commit and enter the cockpit. Changed the weather after PRINT? Save it in BMS and PRINT again (and GENERATE NOW if kneeboards are not made at PRINT).
+**In EZBoards mode:** plan and **SAVE** the DTC in BMS, press **PRINT** in BMS (EZBoards runs if it is set to), press **GENERATE NOW** on the Kneeboards page if the DTC was saved again after it, export in HTML Briefing if you use it, then press **TAKEOFF** in BMS. Changed the weather after PRINT? Save it in BMS and PRINT again (and GENERATE NOW if kneeboards are not made at PRINT).
 
-**In WDP mode:** in BMS pick your flight, **SAVE** the DTC and the mission, and **PRINT**; in the Planner **Open mission…**, plan and **Save to DTC**; **LOAD** in BMS's DTC window; **Populate from Planner**, **Upd Kneeboard**, then commit and enter the cockpit. Changed the weather after that? Save it in BMS, **Open mission…** the same flight again, then **Upd Kneeboard** and **Populate** again.
+**In WDP mode:** in BMS pick your flight, **SAVE** the DTC and the mission, and **PRINT**; in the Planner **Open mission…**, plan and **Save to DTC**; **LOAD** in BMS's DTC window; **Populate from Planner**, **Upd Kneeboard**, then press **TAKEOFF** in BMS. Changed the weather after that? Save it in BMS, **Open mission…** the same flight again, then **Upd Kneeboard** and **Populate** again.
 
 BMS reads the pages as you enter the cockpit, so anything made while you are in it shows the next time. Leave *HTML Briefings* unticked in BMS — the HTML Briefing tool does not need it, and turning it on costs you the text briefing EZBoards and this app both read. `docs/KNEEBOARDS.md` has the long version.
 
@@ -334,10 +336,10 @@ The Planner is a port of Falcas's Weapon Delivery Planner (WDP) to Falcon BMS 4.
 4. **Open mission…** — your saves, grouped by theater, newest first. Pick yours, then your flight and seat in **Pick a flight**, and **Plan this flight**. It asks WDP's question "Did you save Precision STPT in the DTC for THIS flight in BMS?": **No** (the default) plans every steerpoint from the save, **Yes** from your cartridge, and from the mission file where your cartridge's slot is empty.
 5. **Plan** on the pages you need: DataCard, DTC, Attack, Map.
 6. **Save to DTC**.
-7. **In BMS:** open the DTC again, **LOAD**, then **SAVE** (without LOAD, FLY saves BMS's old copy over the Planner's).
+7. **In BMS:** open the DTC again, **LOAD**, then **SAVE** (without LOAD, TAKEOFF saves BMS's old copy over the Planner's).
 8. **Populate from Planner** — the Mission section and the VR boards show your flight on every device.
 9. **Upd Kneeboard** — your cards on the cockpit kneeboard.
-10. **FLY**, and **LOAD** on the DTE page in the cockpit.
+10. **TAKEOFF** (BMS's button at the bottom right; its tooltip says Fly), and **LOAD** on the DTE page in the cockpit.
 
 The toolbar's **Steps** button opens these ten steps beside the page and marks the current one. The **Guide** covers each step and each page, and can be read without the PC.
 
@@ -537,7 +539,7 @@ The Android app, the PC program and the browser version are built from the same 
 | Kneeboard tables | EZBoards `bin\xbrief.exe` (read-only, output to memory) |
 | Screenshots | `User\Pictures` (or `g_sPicturesDirectory`); thumbnails made on the PC |
 | The Config list | the stock `User\Config\Falcon BMS.cfg` your version ships with |
-| BMS folder, pilot callsign, theater | Registry `HKLM\SOFTWARE\WOW6432Node\Benchmark Sims\Falcon BMS 4.xx` |
+| BMS folder, pilot callsign, theater | Registry `HKLM\SOFTWARE\WOW6432Node\Benchmark Sims\Falcon BMS 4.xx` (every installed version is listed under Setup → **Falcon BMS installs**, with any folder you add; one click switches which one is read) |
 
 Everything bundled in the apps — aircraft, weapons, threats, airfields, charts, maps, ground charts — is produced by the extractor in `tools/extractor` from a real install, and checked against something the game itself publishes. [docs/DATA-SOURCES.md](docs/DATA-SOURCES.md) has a row per feature: the file it comes from, how the reading is verified, and what to look at when that file changes.
 

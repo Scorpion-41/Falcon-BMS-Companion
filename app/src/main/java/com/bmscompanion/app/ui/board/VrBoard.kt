@@ -149,6 +149,12 @@ enum class BoardKind(
      */
     EXPORTED("exported", "HTML Briefing kneeboards", "The pages UOAF's HTML Briefing tool exported, as it made them.", 12),
 
+    /**
+     * The pilot's Noteboard (1.4.1): the notes, laser codes and figures composed on the Kneeboards page or in Upd
+     * Kneeboard, read from the PC every few seconds. One page per noteboard ("board" option: 1, 2 or both).
+     */
+    NOTES("notes", "Notes", "Your Noteboard: notes, laser codes and figures, as you wrote them on any device.", 2, configurable = true),
+
     ;
 
     companion object {
@@ -393,6 +399,35 @@ private fun boardPages(kind: BoardKind, slot: BoardSlot, env: MissionEnv, step: 
     BoardKind.PLATES -> chartPages(env)
     BoardKind.PICTURE -> picturePages(env)
     BoardKind.EXPORTED -> exportedPages()
+    BoardKind.NOTES -> notesPages(slot)
+}
+
+/**
+ * The Noteboard on a VR board (1.4.1): each noteboard the board shows ("board" option: "1", "2" or "both", Noteboard 1
+ * by default) is one page, drawn as the cockpit page is but in the board's own skin, from the notes the PC keeps
+ * (`/api/notes`), read again every four seconds so a change typed on a tablet reaches the headset by itself. Works in
+ * both modes, with or without a printed briefing (the comm ladder and steerpoint blocks fill from it when there is one).
+ */
+@Composable
+private fun notesPages(slot: BoardSlot): List<BoardPage> {
+    LaunchedEffect(Unit) {
+        while (true) {
+            if (!com.bmscompanion.app.data.mission.Noteboards.dirty) com.bmscompanion.app.data.mission.Noteboards.load()
+            delay(4_000)
+        }
+    }
+    val mission by MissionLink.mission.collectAsState()
+    val boards = when (slot.options["board"]) { "2" -> listOf(1); "both" -> listOf(0, 1); else -> listOf(0) }
+    return boards.map { i ->
+        BoardPage("Noteboard ${i + 1}") {
+            val b = com.bmscompanion.app.data.mission.Noteboards.board(i)
+            Box(Modifier.fillMaxSize().padding(start = SHEET_SIDE - 12.dp, end = SHEET_SIDE - 12.dp, top = SHEET_HEAD - 10.dp, bottom = SHEET_FOOT - 5.dp)) {
+                com.bmscompanion.app.ui.screens.mission.NoteboardSheet(
+                    b, i, mission, com.bmscompanion.app.ui.screens.mission.NoteInks.hud, foot = null, modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -778,7 +813,7 @@ private fun ColumnScopeLike.AirfieldFacts(role: String, a: Airport?) {
                 listOf(
                     e.designator to 1.1f,
                     (((e.headingTrue.roundToInt() % 360) + 360) % 360).toString().padStart(3, '0') to 1.1f,
-                    (r.lengthFt?.let { "$it ft" } ?: "–") to 1.4f,
+                    (r.lengthFt?.let { (if (r.lenEst) "≈ " else "") + "$it ft" } ?: "–") to 1.4f,
                     (e.ils ?: "–") to 1.6f,
                 ),
                 row = i,

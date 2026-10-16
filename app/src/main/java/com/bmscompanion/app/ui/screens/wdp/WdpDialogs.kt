@@ -86,6 +86,8 @@ class WdpMessage(
     val buttons: List<String> = listOf("OK"),
     val default: Int = 0,
     val onAnswer: ((String) -> Unit)? = null,
+    /** what the × and Escape do, when not answering the last button (as Windows' Cancel): a question that must not take a choice from a close */
+    val onClose: (() -> Unit)? = null,
 )
 
 /**
@@ -120,7 +122,7 @@ object WdpDialogs {
         stack.removeAt(stack.lastIndex)
         (top as? WdpDialog)?.onDismiss?.invoke()
         (top as? WdpPanelWindow)?.onDismiss?.invoke()
-        (top as? WdpMessage)?.let { m -> m.onAnswer?.invoke(m.buttons.lastOrNull() ?: "OK") }
+        (top as? WdpMessage)?.let { m -> m.onClose?.invoke() ?: m.onAnswer?.invoke(m.buttons.lastOrNull() ?: "OK") }
     }
 
     fun show(w: WdpPanelWindow) { stack += w }
@@ -328,7 +330,9 @@ private fun MessageButton(text: String, first: Boolean, size: androidx.compose.u
     }
     val shape = RoundedCornerShape(5.dp)
     Box(
-        Modifier.widthIn(min = if (finger) 90.dp else 80.dp).height(if (finger) 42.dp else 28.dp).clip(if (finger) RoundedCornerShape(8.dp) else shape).background(fill)
+        // named for the headless checks (planner/Message/<caption>, only while WdpProbe is on)
+        Modifier.plannerProbe("Message/$text")
+            .widthIn(min = if (finger) 90.dp else 80.dp).height(if (finger) 42.dp else 28.dp).clip(if (finger) RoundedCornerShape(8.dp) else shape).background(fill)
             .border(1.dp, if (first) androidx.compose.ui.graphics.lerp(base, Color.Black, 0.2f) else Color(0xFFC3CAD3), if (finger) RoundedCornerShape(8.dp) else shape)
             .hoverable(src).clickable(src, indication = null) { onClick() }
             .padding(horizontal = if (finger) 18.dp else 14.dp),

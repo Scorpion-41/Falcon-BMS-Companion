@@ -1,7 +1,5 @@
 package com.bmscompanion.desktop.bridge
 
-import com.sun.jna.platform.win32.Advapi32Util
-import com.sun.jna.platform.win32.WinReg
 import java.io.File
 
 /**
@@ -13,8 +11,10 @@ import java.io.File
  * writes into a BMS folder first asks [refusal], and refuses unless the folder it would write is plainly a copy:
  *
  * - neither the folder nor any folder above it holds `Falcon BMS.exe` (at its top or in `Bin\x64`/`Bin\x86`);
- * - it is not, is not inside, and does not contain the folder the registry names as Falcon BMS's install (`baseDir`
- *   of every `Falcon BMS 4.x` key), whatever the settings' override says.
+ * - it is not, is not inside, and does not contain a folder the registry names as a Falcon BMS install (`baseDir`
+ *   of every `Falcon BMS 4.x` key, 32- and 64-bit views: every install of the list of installs the registry has, not
+ *   only the active one), whatever the settings' override says. A folder the pilot added to that list is a real
+ *   install by the first rule when it holds `Falcon BMS.exe`.
  *
  * **When it is on:** while a developer check runs ([SelfTest] sets the system property [PROPERTY] to `1` as soon as
  * a check is dispatched, and in-process UI checks run in that same process), or when the environment has
@@ -62,25 +62,15 @@ object DevGuard {
         "${target.path} could not be checked: ${e.message ?: e::class.java.simpleName}"
     }
 
-    /** Every `baseDir` the registry gives for a Falcon BMS version (read only). */
+    /**
+     * Every `baseDir` the registry gives for a Falcon BMS version (read only): every `Falcon BMS 4.x` key in the 32-bit
+     * and the 64-bit view ([Installs.registry]) — each install of a pilot who keeps several (1.4.1), whichever is active.
+     */
     fun registryBaseDirs(): List<File> = try {
-        if (!Advapi32Util.registryKeyExists(WinReg.HKEY_LOCAL_MACHINE, SIMS_KEY)) emptyList()
-        else Advapi32Util.registryGetKeys(WinReg.HKEY_LOCAL_MACHINE, SIMS_KEY)
-            .filter { it.startsWith("Falcon BMS", ignoreCase = true) }
-            .mapNotNull { name ->
-                val v = runCatching { Advapi32Util.registryGetValues(WinReg.HKEY_LOCAL_MACHINE, "$SIMS_KEY\\$name")["baseDir"] }.getOrNull()
-                val s = when (v) {
-                    is ByteArray -> String(v, Charsets.US_ASCII)
-                    is String -> v
-                    else -> null
-                }?.trimEnd(' ', ' ')?.trimEnd('\\')
-                s?.takeIf { it.isNotBlank() }?.let(::File)
-            }
+        Installs.registry().map { File(it.dir) }
     } catch (_: Throwable) {
         emptyList()
     }
-
-    private const val SIMS_KEY = "SOFTWARE\\WOW6432Node\\Benchmark Sims"
     private val EXES = listOf("Falcon BMS.exe", "Bin\\x64\\Falcon BMS.exe", "Bin\\x86\\Falcon BMS.exe")
 
     private fun canonical(f: File): File = runCatching { f.canonicalFile }.getOrElse { f.absoluteFile }

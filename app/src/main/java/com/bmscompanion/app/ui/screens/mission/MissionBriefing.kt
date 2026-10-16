@@ -486,5 +486,7 @@ fun WeatherCard(b: Briefing) {
         }
         // WDP mode: the save's weather file it was read from, and as of when (BMS's printed forecast names none)
         w.source?.let { Text(it, Modifier.padding(top = 6.dp), fontSize = 11.sp, color = Hud.TextFaint, lineHeight = 15.sp) }
+        // 1.4.1: the sun and the moon for the mission's date at the take-off field, one line (Mission weather has the rest)
+        com.bmscompanion.app.ui.screens.editor.SunMoonLine()
     }
 }

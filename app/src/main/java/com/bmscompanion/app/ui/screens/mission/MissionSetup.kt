@@ -61,6 +61,7 @@ fun MissionSetupPane(onConnected: () -> Unit) {
             ConnectionCard(onConnected)
             StatusCard()
             MissionSourceCard()
+            BmsInstallsCard()
             HostilesCard()
             TabsCard()
             MfdSetupCard()

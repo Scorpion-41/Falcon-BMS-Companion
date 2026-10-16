@@ -1335,6 +1335,34 @@ class DtcWiring(private val source: DtcSource = LinkDtcSource) : WdpWiring {
     internal val model: com.bmscompanion.app.data.wdp.DtcModel? get() = page.m.takeIf { loadedText != null }
 
     /**
+     * Another Falcon BMS install is read on the PC (1.4.1, `BmsInstallSeen`): the page's edits were made on the other
+     * install's cartridge, so they are dropped without a question (a later Save to DTC must never write them into this
+     * install's callsign file), the file MAIN opened is forgotten, and the new install's cartridge is read. Until it
+     * is in, the page holds nothing a save could write ([loadedText] null). Never throws.
+     */
+    fun dropForInstall(after: (String) -> Unit = {}) {
+        runCatching {
+            AttackFocus.clear()
+            sessionSlots.clear()
+            cartridgeFile = null
+            pending.clear()
+            pptEdit.clear()
+            loadedText = null
+            baseline = null
+            baseSaved = null
+            state = null
+            page = DtcPage()
+            status = null
+            version++
+            // [after]: the DataCard takes the new cartridge as its own once it is in
+            launch { reloadNow(null, quiet = true); loadedText?.let { t -> runCatching { after(t) } } }
+        }
+    }
+
+    /** True while the page holds a cartridge with edits a save would write (the install check). */
+    internal val hasUnsavedEdits: Boolean get() = hasEdits()
+
+    /**
      * A new mission or a switch of mode (MissionEpoch → [WdpSession.resetAttack]; 1.3.8): the delivery data leaves the
      * page, as the PC clears it from the file at the same moment (`CartridgeStore.resetForSwitch`) — every
      * `[NAV OFFSETS]` key of the cartridge as loaded and as edited here (Modesel none, VIP/VRP zeros, no offset aim
@@ -2541,7 +2569,7 @@ class DtcWiring(private val source: DtcSource = LinkDtcSource) : WdpWiring {
                 rows += RunwayRow(e.designator, e.course, db?.ils, r.lengthFt, r.widthFt, af.n + e.at.n, af.e + e.at.e)
             }
         } else {
-            for (r in a.runways.take(2)) for (e in r.ends.take(2)) rows += RunwayRow(e.designator, e.headingTrue, e.ils, r.lengthFt ?: 0, 0, null, null)
+            for (r in a.runways.take(2)) for (e in r.ends.take(2)) rows += RunwayRow(e.designator, e.headingTrue, e.ils, r.lengthFt ?: 0, r.widthFt ?: 0, null, null)
         }
         return rows
     }

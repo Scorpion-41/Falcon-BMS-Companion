@@ -8,6 +8,7 @@ import com.bmscompanion.app.ui.screens.DedCoords
 import com.bmscompanion.app.ui.screens.airportKind
 import com.bmscompanion.app.ui.screens.divertCoords
 import com.bmscompanion.app.ui.screens.divertIsShip
+import com.bmscompanion.app.ui.screens.runwayFigures
 import kotlinx.coroutines.runBlocking
 import org.apache.pdfbox.Loader
 import org.apache.pdfbox.text.PDFTextStripper
@@ -52,7 +53,7 @@ object DivertCheck {
         val index = runBlocking { Repo.index() }
         val fieldsBy = LinkedHashMap<String, List<Field>>()
         appendLine("1. Every field of every theater")
-        appendLine("   theater | fields | coords | none: ship / no projection / failed | projection | missing: APP TCN TWR(any) GND ILS ATIS ELEV | VHF-only tower | ship rule")
+        appendLine("   theater | fields | coords | none: ship / no projection / failed | projection | missing: APP TCN TWR(any) GND ILS ATIS ELEV | VHF-only tower | ship rule | runways: BMS's rectangles / estimate only / none")
         for (th in index.theaters) {
             val set = try { runBlocking { Repo.airportSet(th.airportSet) }.airports } catch (e: Throwable) {
                 appendLine("FAIL ${th.name}: airport set ${th.airportSet}: ${e::class.simpleName}: ${e.message}"); continue
@@ -108,8 +109,22 @@ object DivertCheck {
             // the ship rule against the ground chart: a field whose chart is a deck is a ship, and only those
             val afSet = th.airfieldSet
             var charts = 0; var chartShips = 0
+            // the Info box's runways (runwayFigures): fields with BMS's runway rectangles, with the airport record's
+            // estimate only, with none (ships have none by design and are not counted)
+            var rwExact = 0; var rwEstimate = 0; val rwNone = mutableListOf<String>()
+            val idx = if (afSet == null) emptyMap() else try { runBlocking { Repo.airfieldIndex(afSet) } } catch (_: Throwable) { emptyMap() }
+            for (a in set) {
+                if (divertIsShip(a)) continue
+                val af = if (afSet == null || idx[a.id.toString()] == null) null else try { runBlocking { Repo.airfield(afSet, a.id) } } catch (_: Throwable) { null }
+                if (af?.ship != null) continue
+                val figs = runwayFigures(a, af)
+                when {
+                    figs.isEmpty() -> rwNone += a.name
+                    figs.all { it.exact } -> rwExact++
+                    else -> rwEstimate++
+                }
+            }
             if (afSet != null) {
-                val idx = try { runBlocking { Repo.airfieldIndex(afSet) } } catch (_: Throwable) { emptyMap() }
                 for (a in set) {
                     if (idx[a.id.toString()] == null) continue
                     val af = try { runBlocking { Repo.airfield(afSet, a.id) } } catch (_: Throwable) { null } ?: continue
@@ -121,7 +136,8 @@ object DivertCheck {
             fieldsBy[th.id] = fields
             appendLine(
                 "${if (fails.isEmpty()) "ok  " else "FAIL"} ${th.name.padEnd(22)} | ${set.size.toString().padStart(3)} | ${fields.size.toString().padStart(3)} | " +
-                    "$ships / $noProj / $failed | $how | $app $tcn $twr $gnd $ils $atis $elev | $vhfOnly | ship rule held on $charts charts ($chartShips decks)",
+                    "$ships / $noProj / $failed | $how | $app $tcn $twr $gnd $ils $atis $elev | $vhfOnly | ship rule held on $charts charts ($chartShips decks)" +
+                    " | runways $rwExact / $rwEstimate / ${rwNone.size}${if (rwNone.isEmpty()) "" else " (" + rwNone.take(4).joinToString() + ")"}",
             )
             fails.take(25).forEach { appendLine("       $it") }
             if (fails.size > 25) appendLine("       … ${fails.size - 25} more")

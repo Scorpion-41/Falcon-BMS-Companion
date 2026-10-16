@@ -137,4 +137,6 @@ fun MissionEpochWatcher() {
     LaunchedEffect(info?.mission?.mode, info?.mission?.populated?.at, mission?.briefingModified, mission?.mode, planner) {
         MissionEpoch.observe(info, mission)
     }
+    // another Falcon BMS install chosen on the PC (1.4.1): the Planner and the mission's view start afresh
+    BmsInstallWatcher()
 }

@@ -110,9 +110,9 @@ internal object MissionSourceTest {
                 it.copy(
                     BmsDirOverride = root.path, EzBoardsDir = null, AutoEzBoardsOnPrint = false, TacviewEnabled = false,
                     MissionSource = MissionMode.EZBOARDS,
-                    // the parts before 1.3.9 check the Planner's own leftovers alone; 8c turns it on for itself
-                    CleanOpenedMission = false,
-                )
+                    // the parts before 1.3.9 check the Planner's own leftovers alone; 8c turns it on for itself. Not
+                    // chosen ("ask"): Open mission… cleans nothing and the resets clear as they always did (keep would not)
+                ).withOpenedLeftovers(com.bmscompanion.app.data.mission.PlannerPcSettings.ASK)
             }
             Bridge.startForCheck()
             val base = Bridge.install.baseDir?.let(::File)
@@ -202,13 +202,20 @@ internal object MissionSourceTest {
             val c = BridgeSettings.load()
             ok(c.MissionSource == MissionMode.WDP && c.MissionSourceSince == 5L, "a current file keeps WDP mode as the pilot left it")
             // 4 (1.3.9): Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints set on once, a pilot's later off kept
+            // 5 (1.4.1): everyone is asked once — the choice back to "ask" whatever the file held (the mirror off)
+            val ASK = com.bmscompanion.app.data.mission.PlannerPcSettings.ASK
+            val KEEP = com.bmscompanion.app.data.mission.PlannerPcSettings.KEEP
             file.writeText("""{"Port":47474,"CleanOpenedMission":false,"SettingsVersion":3}""")
             val d = BridgeSettings.load()
-            ok(d.CleanOpenedMission && d.SettingsVersion == BridgeSettings.CURRENT && BridgeSettings.load().CleanOpenedMission,
-                "a layout-3 file comes forward with Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints on (step 4, once)")
-            file.writeText("""{"Port":47474,"CleanOpenedMission":false,"SettingsVersion":${BridgeSettings.CURRENT}}""")
-            ok(!BridgeSettings.load().CleanOpenedMission, "a current file keeps it off as the pilot left it")
-            ok(BridgeSettings().CleanOpenedMission, "a new install has it on")
+            ok(d.leftoversChoice == ASK && !d.CleanOpenedMission && d.SettingsVersion == BridgeSettings.CURRENT && BridgeSettings.load().leftoversChoice == ASK,
+                "a layout-3 file comes forward with the opened mission's leftovers not chosen yet (steps 4 and 5, once): the Planner asks")
+            file.writeText("""{"Port":47474,"CleanOpenedMission":true,"SettingsVersion":4}""")
+            val d4 = BridgeSettings.load()
+            ok(d4.leftoversChoice == ASK && !d4.CleanOpenedMission && d4.SettingsVersion == BridgeSettings.CURRENT,
+                "a 1.3.9 file (layout 4, the silent clean start on) comes forward to \"ask\" (step 5): the pilot is asked once")
+            file.writeText("""{"Port":47474,"OpenedLeftovers":"keep","CleanOpenedMission":false,"SettingsVersion":${BridgeSettings.CURRENT}}""")
+            ok(BridgeSettings.load().leftoversChoice == KEEP, "a current file keeps the pilot's choice (keep)")
+            ok(BridgeSettings().leftoversChoice == ASK && !BridgeSettings().CleanOpenedMission, "a new install asks (not chosen yet)")
         } catch (e: Throwable) {
             ok(false, "the settings part threw: $e")
         } finally {

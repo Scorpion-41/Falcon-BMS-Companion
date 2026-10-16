@@ -94,6 +94,8 @@ import javax.swing.SwingUtilities
  * 9. **The Attack rail** at 1600×900 and 1280×800 by mouse, and by finger on a tablet (1138×711, 711×1138) and a phone
  *    (412×915): three buttons beside the page, never over it, a finger high by finger, each turning the page
  *    (`shell/rail-<size>-<page>.png`).
+ * 10. **The opened mission's question** (1.4.1): Clear them / Keep them over the Planner on a phone, a tablet and a PC
+ *    window (`shell/question-<size>.png`): both answers on screen and pressed, the × answering nothing.
  */
 object ShellOutcome {
     private class Size(val name: String, val wDp: Int, val hDp: Int, val density: Float) {
@@ -172,6 +174,7 @@ object ShellOutcome {
                 try { sizes(r, dir, data, theater?.name) } catch (e: Throwable) { threw(r, "the sizes run", e) }
                 try { fits(r, dir, data, theater?.name) } catch (e: Throwable) { threw(r, "the toolbar-fits run", e) }
                 try { rail(r, dir, data, theater?.name) } catch (e: Throwable) { threw(r, "the Attack rail run", e) }
+                try { question(r, dir, data, theater?.name) } catch (e: Throwable) { threw(r, "the opened mission's question run", e) }
                 try { empty(r, dir, theater?.name) } catch (e: Throwable) { threw(r, "the empty-states run", e) }
             }
         } finally {
@@ -657,6 +660,49 @@ object ShellOutcome {
     }
 
     // ------------------------------------------------------------------------------------------------ 7. sizes
+
+    /**
+     * 10. The one-time question at Open mission… of another campaign flight (1.4.1, `PlannerLeftovers.questionBox`):
+     * drawn over the Planner on a phone and a tablet (by finger) and in a PC window (`shell/question-<size>.png`) — its
+     * two answers on screen and pressable, the note naming where the choice changes later; Keep them pressed answers
+     * keep, the × answers nothing (the open cleans nothing and the question comes again next time).
+     */
+    private fun question(r: Report, dir: File, data: MissionData, theaterName: String?) {
+        r.head("10. the opened mission's leftovers: the one-time question")
+        val lo = com.bmscompanion.app.ui.screens.wdp.PlannerLeftovers
+        val sizes = listOf(Size("question-phone", 400, 800, 2f) to true, Size("question-tablet", 1280, 800, 1.5f) to true, Size("question-pc", 1600, 900, 1f) to false)
+        for ((size, finger) in sizes) {
+            com.bmscompanion.app.data.Platform.touchFirst = finger
+            val d = Probe(size) { WdpPlanner(data, theaterName, Modifier.fillMaxSize()) }
+            try {
+                d.settle(30, 40)
+                var got: String? = "-"
+                val box = edt { lo.questionBox { got = it }.also { WdpDialogs.stack += it } }
+                d.settle(8, 20)
+                val clear = d.rect("planner/Message/${lo.CLEAR}")
+                val keep = d.rect("planner/Message/${lo.KEEP}")
+                val inside = listOfNotNull(clear, keep).all { it.left >= 0f && it.top >= 0f && it.right <= size.w + 1f && it.bottom <= size.h + 1f }
+                r.check(clear != null && keep != null && inside, "${size.name}: \"${box.title}\" shows ${lo.CLEAR} and ${lo.KEEP}, both on screen", { "clear $clear, keep $keep" })
+                r.check(box.text.contains("Your choice becomes the default") && box.text.contains("Planner → Options → Settings…") &&
+                    box.text.contains("PPTs") && box.text.contains("Never cleared"), "${size.name}: the text says what goes, what never does, and where the choice changes later")
+                d.png(File(dir, "${size.name}.png"))
+                if (keep != null) d.click(keep.center)
+                d.settle(3)
+                r.check(got == com.bmscompanion.app.data.mission.PlannerPcSettings.KEEP && edt { WdpDialogs.stack.none { it === box } },
+                    "${size.name}: ${lo.KEEP} pressed answers keep and closes the box", { "answered $got" })
+                got = "-"
+                val again = edt { lo.questionBox { got = it }.also { WdpDialogs.stack += it } }
+                d.settle(4)
+                edt { WdpDialogs.closeTop() }
+                d.settle(3)
+                r.check(got == null && edt { WdpDialogs.stack.none { it === again } }, "${size.name}: the × (or Escape) answers nothing: no choice is taken from a close", { "answered $got" })
+            } finally {
+                d.close()
+                com.bmscompanion.app.data.Platform.touchFirst = false
+                edt { WdpDialogs.stack.clear(); WdpFocus.on = false; WdpFocus.auto = false }
+            }
+        }
+    }
 
     private fun sizes(r: Report, dir: File, data: MissionData, theaterName: String?) {
         val s = WdpSession

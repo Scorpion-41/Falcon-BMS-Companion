@@ -31,6 +31,13 @@ import java.io.File
  * 3. The same flight planned again (no `clean`), a PRINT of another flight and a switch of mode: nothing of the
  *    pilot's lines or PPTs goes.
  * 4. The setting off: Open mission… cleans nothing.
+ * 5. (1.4.1, `BridgeSettings.OpenedLeftovers`) Not chosen yet ("ask"): an older device's `clean=1` cleans nothing.
+ * 6. The device's question (`PlannerLeftovers.choose`, through the in-process link, its answer from `testAnswer`): a
+ *    TE never asks; the first campaign open asks, Keep them becomes the PC's setting and both files stay byte for
+ *    byte; the next open asks nothing.
+ * 7. Keep at a new mission: a PRINT of another flight keeps the line, PPT and Open 1 steerpoint the Planner saved for
+ *    an earlier flight, its precision target still goes; with "ask" the same PRINT clears them as always.
+ * 8. The Settings window's choice (clean: no question, the next open cleans) and Ask me again (asked again).
  *
  * Every file touched is put back byte for byte with its time, and the setting as it was.
  */
@@ -50,7 +57,8 @@ internal object ClearLinesTest {
         val ledgerWas = ledgerFile.takeIf { it.isFile }?.readBytes()
         val brief = Bridge.briefingPath?.let(::File)?.takeIf { it.isFile }
         val briefTime = brief?.lastModified() ?: 0L
-        val settingWas = Bridge.settings.value.CleanOpenedMission
+        val settingWas = Bridge.settings.value.leftoversChoice
+        val answerWas = com.bmscompanion.app.ui.screens.wdp.PlannerLeftovers.testAnswer
         val theater = Bridge.install.theater
         val set = Theaters.of(Bridge.install)
         val camp = runCatching { set?.let { s -> s.current(theater)?.let { s.campaignDir(it) } } }.getOrNull()
@@ -164,11 +172,75 @@ internal object ClearLinesTest {
             open(b.copy(opened = System.currentTimeMillis()), clean = true)
             ok(off?.cleanOpened == false && ModeSwitchReset.openFiles(b) == null && holds(cart, line1 + line2 + pptBms) && holds(load, line1 + line2 + pptBms),
                 "4. off: Open mission… cleans nothing")
+
+            // ---- 5-8 (1.4.1): asked once — not chosen ("ask"), Clear them / Keep them, keep honoured at a new mission
+            val P = PlannerPcSettings
+            val L = com.bmscompanion.app.ui.screens.wdp.PlannerLeftovers
+            fun same(f: File, was: ByteArray) = f.readBytes().contentEquals(was)
+            val askS = setting(req("POST", "/api/planner/settings", mapOf("openedLeftovers" to P.ASK)))
+            val c5 = cart.readBytes(); val l5 = load.readBytes()
+            open(b.copy(opened = System.currentTimeMillis()), clean = true)
+            ok(askS?.openedLeftovers == P.ASK && askS.cleanOpened == false && setting(req("GET", "/api/planner/settings"))?.openedLeftovers == P.ASK &&
+                Bridge.settings.value.leftoversChoice == P.ASK && !Bridge.settings.value.CleanOpenedMission && same(cart, c5) && same(load, l5),
+                "5. not chosen yet: the PC says \"ask\" (cleanOpened false for an older device), and an older device's Open mission… (clean=1, it never asks) cleans nothing")
+
+            com.bmscompanion.app.data.mission.MissionLink.useThisPc()
+            L.testAnswer = P.KEEP
+            val q0 = L.questionsDue
+            val te = kotlinx.coroutines.runBlocking { L.choose(false) }
+            ok(te && L.questionsDue == q0 && Bridge.settings.value.leftoversChoice == P.ASK, "6. a TE's or a training's flight is never asked about (nothing of a TE is cleaned)")
+            val go1 = kotlinx.coroutines.runBlocking { L.choose(true) }
+            ok(L.questionsDue == q0 + 1 && !go1 && Bridge.settings.value.leftoversChoice == P.KEEP && setting(req("GET", "/api/planner/settings"))?.openedLeftovers == P.KEEP,
+                "…the first Open mission… of another campaign flight asks; Keep them is written to the PC as the setting for every device")
+            open(b.copy(opened = System.currentTimeMillis()), clean = go1)
+            open(b.copy(opened = System.currentTimeMillis()), clean = true)
+            ok(same(cart, c5) && same(load, l5), "…Keep them: the cartridge and ${load.name} byte for byte (and a device sending clean=1 changes nothing)")
+            val go2 = kotlinx.coroutines.runBlocking { L.choose(true) }
+            ok(L.questionsDue == q0 + 1 && go2, "…the next open asks nothing: the choice is kept")
+
+            // keep at a new mission: what the Planner saved for another flight X — a line, a PPT, an Open 1 steerpoint —
+            // stays at the next PRINT; X's precision target still goes (it is the last mission's)
+            val x = b.copy(callsign = "Zulu9", packageId = null, flightId = null, save = null, opened = System.currentTimeMillis())
+            val lineX = (18..20).map { i -> CartridgeEdit("STPT", "lineSTPT_$i", pt(1_150_000.0 + i * 2_000, 1_720_000.0 + i * 1_500)) }
+            val pptX = CartridgeEdit("STPT", "ppt_5", "1340000.000000, 1090000.000000, 0.000000, 60000.0, SA3")
+            val openX = CartridgeEdit("STPT", "target_82", "1330000.000000, 1080000.000000, -30.000000, 0, X nav point")
+            // a free slot for X's target: the Recon bank (STPT 16-22), else a weapon target
+            val tgtKey = ((15..21).map { "target_$it" } + (0..15).map { "wpntarget_$it" })
+                .firstOrNull { k -> held(cart, k)?.let { Leftovers.isEmpty(Leftovers.kindOf("STPT", k)!!.first, it) } != false }
+            val tgtFree = tgtKey != null
+            val tgtX = CartridgeEdit("STPT", tgtKey ?: "target_15", "1240000.000000, 1040000.000000, -100.000000, -1, X target")
+            val carriedX = lineX + pptX + openX
+            val forX = state(req("POST", "/api/cartridge/save", mapOf("for" to enc(x)), edits(carriedX + (if (tgtFree) listOf(tgtX) else emptyList()))))
+            ModeSwitchReset.forgetFlights()
+            brief.setLastModified(System.currentTimeMillis() + 10_000)
+            ModeSwitchReset.printed()
+            ok(forX.error == null && holds(cart, carriedX) && (!tgtFree || empty(cart, listOf(tgtX.key))),
+                "7. keep: a PRINT of another flight keeps the line, PPT and STPT 83 the Planner saved for ${x.callsign}" +
+                    (if (tgtFree) "; its target (${tgtX.key}) still goes" else " (no free target slot: the target part not checked)"))
+            req("POST", "/api/planner/settings", mapOf("openedLeftovers" to P.ASK))
+            ModeSwitchReset.forgetFlights()
+            brief.setLastModified(System.currentTimeMillis() + 15_000)
+            ModeSwitchReset.printed()
+            ok(empty(cart, carriedX.map { it.key }), "…not chosen (or clear): the same PRINT clears them, the Planner's leftovers of another flight as always")
+
+            // the Settings window's switch and Ask me again
+            val cl = setting(req("POST", "/api/planner/settings", mapOf("openedLeftovers" to P.CLEAN)))
+            val go3 = kotlinx.coroutines.runBlocking { L.choose(true) }
+            open(b.copy(opened = System.currentTimeMillis()), clean = go3)
+            ok(cl?.openedLeftovers == P.CLEAN && cl.cleanOpened && go3 && L.questionsDue == q0 + 1 && empty(cart, (line1 + line2 + pptBms + open1).map { it.key }) &&
+                empty(load, (line1 + line2 + pptBms + open1).map { it.key }),
+                "8. Settings changed to clear: no question, and the next Open mission… cleans the pilot's lines, PPT and Open 1 steerpoints from both files")
+            req("POST", "/api/planner/settings", mapOf("openedLeftovers" to P.ASK))
+            L.testAnswer = P.CLEAN
+            val go4 = kotlinx.coroutines.runBlocking { L.choose(true) }
+            ok(go4 && L.questionsDue == q0 + 2 && Bridge.settings.value.leftoversChoice == P.CLEAN && Bridge.settings.value.CleanOpenedMission,
+                "…Ask me again (\"ask\"): the next open asks again, and Clear them is the setting (its 1.3.9 mirror on for an older build)")
         } catch (e: Throwable) {
             ok(false, "part 8c threw: $e")
         } finally {
             ModeSwitchReset.forget()
-            runCatching { Bridge.update(reapply = false) { it.copy(CleanOpenedMission = settingWas) } }
+            runCatching { Bridge.update(reapply = false) { it.withOpenedLeftovers(settingWas) } }
+            com.bmscompanion.app.ui.screens.wdp.PlannerLeftovers.testAnswer = answerWas
             runCatching { brief?.setLastModified(briefTime) }
             kept.forEach { (f, v) -> runCatching { if (!f.readBytes().contentEquals(v.first)) f.writeBytes(v.first); f.setLastModified(v.second) } }
             runCatching { if (!cart.readBytes().contentEquals(bytes)) cart.writeBytes(bytes); cart.setLastModified(time) }

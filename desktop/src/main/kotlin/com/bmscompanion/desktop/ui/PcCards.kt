@@ -415,7 +415,7 @@ fun SetupChecklistCard(status: PcStatus) {
         add(
             if (install.baseDir != null) Step("Falcon BMS is found", Check.OK, "Found: ${install.baseDir}" + (install.registryVersion?.let { " ($it)" } ?: ""))
             else Step("Falcon BMS is found", Check.PROBLEM, "Falcon BMS was not found. Choose the BMS folder.",
-                listOf("Choose BMS folder…" to { pickFolder("Select your Falcon BMS folder", s.BmsDirOverride)?.let { p -> Bridge.update { it.copy(BmsDirOverride = p) } } }))
+                listOf("Choose BMS folder…" to { pickFolder("Select your Falcon BMS folder", s.BmsDirOverride)?.let { p -> Bridge.update { it.copy(BmsDirOverride = p).withOverrideListed() } } }))
         )
         val seen = status.devices.isNotEmpty()
         add(
@@ -646,10 +646,10 @@ fun BmsSettingsCard() {
 
         Overline("FOLDERS AND ADVANCED")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Field("BMS folder (only if not found)", bmsDir, { bmsDir = it }, Modifier.weight(1f))
-            SmallButton("Browse…", null, primary = false) { pickFolder("Select the Falcon BMS folder", s.BmsDirOverride)?.let { p -> Bridge.update { it.copy(BmsDirOverride = p) } } }
+            Field("BMS folder in use (empty: the registry's; Falcon BMS installs switches)", bmsDir, { bmsDir = it }, Modifier.weight(1f))
+            SmallButton("Browse…", null, primary = false) { pickFolder("Select the Falcon BMS folder", s.BmsDirOverride)?.let { p -> Bridge.update { it.copy(BmsDirOverride = p).withOverrideListed() } } }
         }
-        if (bmsDir != s.BmsDirOverride.orEmpty()) SmallButton("Save BMS folder", null, primary = true) { Bridge.update { it.copy(BmsDirOverride = bmsDir.trim().ifEmpty { null }) } }
+        if (bmsDir != s.BmsDirOverride.orEmpty()) SmallButton("Save BMS folder", null, primary = true) { Bridge.update { it.copy(BmsDirOverride = bmsDir.trim().ifEmpty { null }).withOverrideListed() } }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Field("Screenshots folder (only if not the BMS one)", picsDir, { picsDir = it }, Modifier.weight(1f))
             SmallButton("Browse…", null, primary = false) { pickFolder("Select the folder with your BMS screenshots", s.PicturesDirOverride)?.let { p -> Bridge.update { it.copy(PicturesDirOverride = p) } } }
@@ -765,7 +765,8 @@ fun PcStatusCard(status: PcStatus) {
             state is LinkState.Online,
         )
         MissionLink.info.collectAsState().value?.let { i ->
-            StatusRow("Falcon BMS", when { i.bms.running -> "running ${i.bms.version ?: ""} · ${if (i.bms.flying) "3D" else "UI"}"; i.bms.installed -> "installed, not running"; else -> "not found" }, i.bms.running)
+            StatusRow("Falcon BMS", when { i.bms.running -> "running ${i.bms.version ?: ""} · ${if (i.bms.flying) "3D" else "UI"}"; i.bms.installed -> "installed, not running"; else -> "not found" } +
+                (i.bms.install?.takeIf { i.bms.installs > 1 }?.let { " · $it" } ?: ""), i.bms.running)
             StatusRow("Briefing", if (i.briefing.available) "printed ${i.briefing.generated ?: ""}" else "not printed yet", i.briefing.available)
             StatusRow("AWACS feed", if (i.tacview.connected) "connected · ${i.tacview.objects} objects" else i.tacview.state, i.tacview.connected)
         }

@@ -14,7 +14,7 @@ object PlannerOutcome {
     // `send` (Send to Mission, S1) was retired in 1.3.8 with the window: WDP mode's Populate from Planner replaced it
     val PARTS = listOf("shell", "browser", "print", "printpages", "guide")
     /** parts run only by name (their arguments differ from the others', so `all` leaves them out): `tanker` (TankerOutcome) */
-    val OWN = listOf("tanker")
+    val OWN = listOf("tanker", "notes")
 
     fun run(part: String, outDir: File, more: List<String>): String {
         val parts = if (part == "all") PARTS else listOf(part)
@@ -29,6 +29,8 @@ object PlannerOutcome {
                         "print" -> PrintOutcome.run(outDir, more)
                         "printpages" -> PrintPagesOutcome.run(outDir, more)
                         "tanker" -> TankerOutcome.run(outDir, more)
+                        // the Noteboard and Upd Kneeboard from the Kneeboards page (1.4.1), also part 4 of printpages
+                        "notes" -> NoteboardOutcome.run(outDir, more)
                         else -> GuideOutcome.run(outDir, more)
                     }
                 } catch (e: Throwable) {

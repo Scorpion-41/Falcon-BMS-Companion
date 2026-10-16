@@ -113,6 +113,21 @@ object TaxiRender {
         }
         groundNumbers(out)
         landmarks(out, field)
+        // BMSC_TAXI_FIELDS="Songwan|Osan AB": those fields' Taxi pages too (a field looked at before and after a data change)
+        System.getenv("BMSC_TAXI_FIELDS")?.split('|')?.map { it.trim() }?.filter { it.isNotEmpty() }?.forEach { name ->
+            val f = findField(index.theaters, name)
+            if (f == null) { appendLine("  (no chart named \"$name\")"); return@forEach }
+            val towers = f.features.filter { it.k == "tower" }
+            appendLine("$name: ${towers.size} control tower(s)" + towers.joinToString("") { " — ${it.src ?: "?"} ${it.w.toInt()}x${it.l.toInt()} ft at e${it.e.toInt()} n${it.n.toInt()}" })
+            val pc = SHAPES.first { it.name == "pc-1600x900" }
+            val slug = name.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-')
+            shot(out, "taxi-field-$slug", pc) { TaxiView(f, Modifier.fillMaxSize()) }
+            towers.maxByOrNull { it.ht ?: 0 }?.let { t ->
+                shot(out, "taxi-field-$slug-tower", Shape("closeup", 900, 700, 1f, rail = false, chrome = 0)) {
+                    com.bmscompanion.app.ui.components.AirfieldChart(f, f.routes.firstOrNull(), com.bmscompanion.app.ui.components.ChartInks.day, Modifier.fillMaxSize(), follow = Offset(t.e.toFloat(), t.n.toFloat()), followSpanFt = 1400.0)
+                }
+            }
+        }
     }
 
     /** Runs [body] with the Taxi page's turn and panel set, and puts the device's own back after. */

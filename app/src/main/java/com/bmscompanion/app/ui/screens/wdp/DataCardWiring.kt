@@ -2939,6 +2939,24 @@ class DataCardWiring : WdpWiring, WdpControlContent {
         version++
     }
 
+    /**
+     * Another Falcon BMS install is read on the PC (1.4.1, `WdpSession.dropForInstall`): the card's entries were made
+     * against the other install's cartridge, so they wait for nothing — no cartridge is the card's until the DTC page
+     * has read the new install's ([takeCartridge] then), no attack profile chosen, nothing handed. Never throws.
+     */
+    internal fun dropForInstall() {
+        runCatching {
+            val s = sources
+            sources = DataCardSources(
+                s.theater, s.airports, s.charts, cartridge = null, panels = s.panels, radio = s.radio, geo = s.geo,
+                cartridgeText = null, grounds = s.grounds, weapons = s.weapons,
+            )
+        }
+        profileChosen = null
+        handed = null
+        version++
+    }
+
     /** Why the card cannot reach the cartridge: the DTC page, which holds it, is made with the Planner. */
     private fun noCartridge(title: String) =
         WdpDialogs.message(title, "The cartridge is not available yet: the DTC page holds it. Open the DTC page once, then try again.")

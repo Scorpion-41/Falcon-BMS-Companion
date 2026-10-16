@@ -216,6 +216,13 @@ data class PcTwx(
     /** 1.4.0, version 8: the Probabilistic model's change interval, minutes (min, max); 0 unknown */
     val intervalMin: Int = 0,
     val intervalMax: Int = 0,
+    /**
+     * 1.4.1, version 4 and later: the date BMS's sky is at, the zulu date at [clock] (BMS's `Weather` keeps year,
+     * month and day and moves them on as the clock passes midnight zulu, `SetUniversalTime`); 0 unknown
+     */
+    val year: Int = 0,
+    val month: Int = 0,
+    val day: Int = 0,
 )
 
 /**

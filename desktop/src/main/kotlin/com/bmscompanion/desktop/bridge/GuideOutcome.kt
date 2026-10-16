@@ -129,12 +129,16 @@ object GuideOutcome {
         // the toolbar's Options menu (WDP's: Settings…, About WDP), and the Settings window's switches (1.3.9: the PC's
         // Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints)
         "Options", "Settings…", "About WDP", "Show tooltips", "Auto load last mission on startup", "Start each opened mission with clean lines, PPTs and Open 1/2 steerpoints",
+        // 1.4.1: the one-time question at Open mission… (PlannerLeftovers.CLEAR/KEEP) and the Settings window's way back to it
+        "Clear them", "Keep them", "Ask me again",
         // 1.3.8: the toolbar's Steps (the evening in ten lines) and WDP's ATO Target List as the last page tab
         "Steps", "ATO Targets",
         // 1.3.8: Pop-up, HADB and TOSS under one Attack tab (a rail beside the page)
         "Attack",
         // Upd Kneeboard's own buttons (1.3.8: Browse picture…, WDP's Browse Picture)
         "Mission set", "Browse picture…", "← Insert left", "Insert right →",
+        // 1.4.1: the Noteboard (its editor's Edit notes…, Keep for the next mission; the Kneeboards page's Edit notes)
+        "Edit notes…", "Keep for the next mission", "Edit notes",
         // WDP's own cartridge buttons on the DataCard (back on the page in 1.3.8, beside the toolbar's Save to DTC)
         "Get DTC File", "Save DTC",
         // the Map page's tools (WDP's MAP tab, 1.3.8)
@@ -145,6 +149,9 @@ object GuideOutcome {
         "IP STPT",
         // 1.3.8 (D94): a steerpoint on the VRP becomes the IP, Pop-up and TOSS in VRP mode, after its one question
         "IP STPT at the VRP", "Create IP STPT",
+        // Falcon BMS's own 2D button into the cockpit (1.4.1: labelled TAKEOFF in a campaign, a TE and a training; only
+        // its tooltip says Fly, so the Guide never calls it FLY — checked case-sensitively below)
+        "TAKEOFF",
     )
     private val OLD_NAMES = listOf(
         "Use in app", "Save to cartridge", "Target bar", "Open mission file", "Print to kneeboard",
@@ -248,6 +255,8 @@ object GuideOutcome {
         }
         val bare = Regex("Open mission(?!…)").findAll(all).count()
         r.check(bare == 0, "\"Open mission\" is always \"Open mission…\", as on the button", { "$bare without the dots" })
+        val fly = Regex("\\bFLY\\b").findAll(all).count()
+        r.check(fly == 0, "BMS's button into the cockpit is TAKEOFF, as BMS labels it, never \"FLY\"", { "$fly times" })
         // markup
         val badMarks = sections.flatMap { s -> textsOf(s).filter { Regex("\\*\\*").findAll(it).count() % 2 != 0 || it.count { c -> c == '`' } % 2 != 0 }.map { "${s.id}: ${it.take(50)}" } }
         r.check(badMarks.isEmpty(), "every ** and ` is closed", { badMarks.joinToString(" | ") })

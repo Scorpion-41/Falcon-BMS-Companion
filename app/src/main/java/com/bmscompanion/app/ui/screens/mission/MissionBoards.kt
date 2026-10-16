@@ -72,10 +72,15 @@ fun MissionBoardsPane(env: MissionEnv, onSetup: () -> Unit, onOpenTab: ((Mission
     val mission by MissionLink.mission.collectAsState()
     val board = mission?.board
     val ezInfo = info?.ezBoards
+    // the noteboards' mission, for the line under Edit notes (1.4.1)
+    androidx.compose.runtime.LaunchedEffect(info?.briefing?.modified, info?.mission?.populated?.at) { com.bmscompanion.app.data.mission.Noteboards.load() }
 
+    // Upd Kneeboard and the Noteboard editor open over this page (1.4.1): the Planner's windows, hosted here too
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         WhichKneeboard(info.wdpMode)
         EzGenerateCard(onSetup, onOpenTab)
+        UpdKneeboardCard()
 
         // The VR board addresses: a page of its own until now, and only ever on the PC that runs the headset.
         vrBoardsPane?.let { pane ->
@@ -103,6 +108,12 @@ fun MissionBoardsPane(env: MissionEnv, onSetup: () -> Unit, onOpenTab: ((Mission
             board.tables.filter { it.rows.isNotEmpty() }.forEach { BoardTableCard(it) }
         }
         board.tables.firstOrNull { it.rows.isEmpty() && it.title.isNotBlank() }?.let { Text(it.title, fontSize = 11.sp, color = Hud.TextFaint, modifier = Modifier.padding(start = 4.dp)) }
+    }
+    // only the windows this page opens (and the guide Upd Kneeboard's Help opens): the Planner's others stay the Planner's
+    val window = com.bmscompanion.app.ui.screens.wdp.PlannerWindows.open
+    com.bmscompanion.app.ui.screens.wdp.PlannerWindowHost(
+        open = window?.takeIf { it == com.bmscompanion.app.ui.screens.wdp.PlannerWindow.PRINT || it == com.bmscompanion.app.ui.screens.wdp.PlannerWindow.NOTES || it == com.bmscompanion.app.ui.screens.wdp.PlannerWindow.GUIDE },
+    )
     }
 }
 
@@ -154,7 +165,7 @@ fun EzGenerateCard(onSetup: () -> Unit, onOpenTab: ((MissionTab) -> Unit)? = nul
             Step("1", "Open your flight in the Planner", "Open mission…, then pick your flight and seat. Weather of your own is picked and saved in BMS before this (Weather → Map Model, SAVE WTH or the campaign save). PRINT in BMS is optional.")
             Step("2", "Save to DTC", "In the Planner. Then press LOAD in BMS's DTC window, so the jet has it.")
             Step("3", MissionMode.POPULATE, "Fills the Mission section, on every device, from that flight and your cartridge as saved.")
-            Step("4", "Upd Kneeboard", "In the Planner: your DataCard and the pages you choose, on the cockpit kneeboard. Then commit and enter the cockpit.")
+            Step("4", "Upd Kneeboard", "In the Planner: your DataCard and the pages you choose, on the cockpit kneeboard. Then press TAKEOFF in BMS.")
             return@SectionCard
         }
         KneeboardState(last, running, printed, info?.briefing?.generated, ezInfo?.autoOnPrint == true)
@@ -188,7 +199,7 @@ fun EzGenerateCard(onSetup: () -> Unit, onOpenTab: ((MissionTab) -> Unit)? = nul
         Step(
             "3", "After the cartridge changes, generate again",
             "EZBoards reads the cartridge as it was when it ran, so kneeboards made before a later SAVE of the DTC do " +
-                "not show it. Press GENERATE NOW below, then commit and enter the cockpit.",
+                "not show it. Press GENERATE NOW below, then TAKEOFF in BMS.",
         )
 
         Spacer(Modifier.height(14.dp))
@@ -526,14 +537,14 @@ private fun WhichKneeboard(wdp: Boolean) {
                 "(SAVE WTH in a TE, the campaign save in a campaign) before anything else reads it. " +
                 (if (wdp) "In WDP mode: in BMS pick your flight, SAVE the DTC and the mission, and PRINT; in the Planner " +
                     "Open mission…, plan and Save to DTC; LOAD in BMS's DTC window; Populate from Planner, Upd " +
-                    "Kneeboard, then commit and enter the cockpit (EZBoards and HTML Briefing stay paused here: both " +
+                    "Kneeboard, then TAKEOFF in BMS (EZBoards and HTML Briefing stay paused here: both " +
                     "would write over the Planner's pages; the VR boards work as always). Weather " +
                     "changed after that? Save it in BMS, Open mission… the same flight again, then Upd Kneeboard and " +
                     "Populate from Planner."
                 else "In EZBoards mode: plan and SAVE the DTC in BMS, press PRINT (EZBoards runs if it is set to), " +
                     "press GENERATE NOW if the DTC was saved again after it, export in HTML Briefing if you use it, " +
-                    "then commit and enter the cockpit. Weather changed after PRINT? Save it in BMS and PRINT again (and GENERATE NOW if kneeboards are not made at PRINT).") +
-                " BMS reads the pages as you enter it: anything printed while you are in the cockpit shows the next time you enter.",
+                    "then TAKEOFF. Weather changed after PRINT? Save it in BMS and PRINT again (and GENERATE NOW if kneeboards are not made at PRINT).") +
+                " BMS reads the pages as you enter the cockpit: anything printed while you are in the cockpit shows the next time you enter.",
             color = Hud.TextDim, fontSize = 12.sp,
         )
         Spacer(Modifier.height(6.dp))

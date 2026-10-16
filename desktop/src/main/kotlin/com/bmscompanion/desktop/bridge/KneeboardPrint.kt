@@ -394,6 +394,8 @@ object KneeboardPrint {
         KbKind.ROUTE_MAP, KbKind.ATTACK, KbKind.DEPARTURE, KbKind.ARRIVAL, KbKind.ALTERNATE, KbKind.PICTURE,
         // 1.4.0
         KbKind.SCHEDULE, KbKind.ROUTE_MAP_DARK, KbKind.TARGET_PICTURES,
+        // 1.4.1: the Noteboard
+        KbKind.NOTES, KbKind.NOTES_2,
     )
 
     private val TAG_RE = Regex("""^$TAG(\S*)(?: L([a-z])([0-9a-z-]))?(?: R([a-z])([0-9a-z-]))?""")

@@ -413,13 +413,25 @@ object Leftovers {
  * and PPTs** — when the Planner plans another flight (Open mission… or Pick a flight, `POST /api/mission/opened?clean=1`)
  * the PC takes every HSD line (`lineSTPT_0…23`) and every PPT (`ppt_0…14`) out of the cartridge and out of the campaign
  * mission file BMS's LOAD reads for that flight, whoever made them (never in a TE or a training, never what the
- * Planner saved for that flight, never a target). Never at a PRINT or a switch of mode. On by default; off = nothing is
- * cleaned then.
+ * Planner saved for that flight, never a target). Never at a PRINT or a switch of mode.
+ *
+ * [openedLeftovers] (1.4.1): the pilot's choice, in three states — [ASK] (not chosen yet: the Planner asks the first
+ * time it would clean, and the answer becomes the setting; every install starts there, settings layout 5), [CLEAN] or
+ * [KEEP]. [KEEP] also keeps the lines, PPTs and Open 1/2 steerpoints the Planner saved for an earlier flight at a new
+ * mission or a switch of mode (`CartridgeStore.resetForSwitch`). Empty from an older PC (it knows [cleanOpened] only).
+ * [cleanOpened] is true only for [CLEAN]: an older device, which never asks, cleans nothing while the choice is not made.
  */
 @Serializable
 data class PlannerPcSettings(
     val cleanOpened: Boolean = true,
-)
+    val openedLeftovers: String = "",
+) {
+    companion object {
+        const val ASK = "ask"
+        const val CLEAN = "clean"
+        const val KEEP = "keep"
+    }
+}
 
 /**
  * What a switch of the Mission section's mode reset by itself (`MissionSourceInfo.reset`; docs/DATA-STORES.md, "What a

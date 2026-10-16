@@ -98,8 +98,12 @@ object KneeboardPages {
         KbPageKind(KbKind.COORDINATION_RIGHT, "Coordination Card, right half", "Coord. R") { CardHalf("pnlPage_2", WdpPage.COORDINATION, left = false) },
     )
 
-    /** Every kind the window offers, in its order: this file's, then [KneeboardExtraPages]'s. */
-    val kinds: List<KbPageKind> get() = BASE + KneeboardExtraPages.kinds.filter { k -> BASE.none { it.id == k.id } } + KneeboardTargets.kind
+    /**
+     * Every kind the window offers, in its order: Leave as it is and Picture, the two Noteboards ([KneeboardNotes],
+     * 1.4.1), the rest of this file's, then [KneeboardExtraPages]'s and Target pictures.
+     */
+    val kinds: List<KbPageKind> get() = BASE.take(2) + KneeboardNotes.kinds + BASE.drop(2) +
+        KneeboardExtraPages.kinds.filter { k -> BASE.none { it.id == k.id } } + KneeboardTargets.kind
 
     fun of(id: String?): KbPageKind? = kinds.firstOrNull { it.id == id }
 
@@ -117,8 +121,12 @@ object KneeboardPages {
      * app's data once, then kept, so the first capture is not taken while the grid is still on its way.
      */
     suspend fun preload(kind: String) {
+        // EZBoards mode: the Mission section's own mission and fields, read before any page draws from them (1.4.1)
+        if (KneeboardEzSource.active) KneeboardEzSource.prepare()
         // the other page kinds load their own data (maps, airfields, forms): asked directly, not left to warm()
         if (kind in KneeboardExtraPages.ids) { KneeboardExtraPages.preload(kind); return }
+        // a Noteboard: every change kept on the PC first, so the page printed is the one the VR board shows
+        if (kind in KneeboardNotes.ids) { KneeboardNotes.preload(); return }
         if (kind !in CARD_KINDS) return
         Repo.wdpForm(CARD_FORM)
         cardBackground(if (kind == KbKind.DATACARD_LEFT || kind == KbKind.DATACARD_RIGHT) "pnlPage_1" else "pnlPage_2")
