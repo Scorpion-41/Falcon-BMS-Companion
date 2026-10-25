@@ -126,8 +126,10 @@ enum class DashCard(val title: String, val desc: String, val icon: ImageVector, 
     WEATHER("Weather", "Cloud, visibility, wind and temperature at take-off, target and landing; the QNH in WDP mode", Icons.Default.Cloud),
     SUPPORT("Tankers & support", "Tankers with TACAN and UHF, AWACS, JSTARS; airborne position from bullseye", Icons.Default.Hub),
     PRESETS("Radio presets", "DTC UHF/VHF presets", Icons.Default.Radio),
-    BOARDS("Kneeboards", "Generate EZBoards kneeboards", Icons.Default.Assignment),
+    BOARDS("Kneeboards", "The cockpit kneeboard pages, as BMS will show them in 3D", Icons.Default.Assignment),
     PLAN("DTC settings", "Your cartridge's laser codes, bingo, ALOW, MSL floor and EWS programs", Icons.Default.EditNote),
+    // new kinds go at the end: a layout is kept by the kind's name
+    FUEL_PLAN("Fuel plan", "Bingo, Joker, playtime over the target and the minimum fuel at each steerpoint, from the flight plan", Icons.Default.LocalGasStation),
 }
 
 /** Card width relative to the dashboard: S = one column, M = two thirds, L = full width. */
@@ -421,6 +423,8 @@ private fun PageButtons(key: String, page: Int, modifier: Modifier = Modifier) {
 private fun defaultWidthOf(c: DashCard) = when (c) {
     DashCard.MFDS -> DashWidth.L
     DashCard.MAP -> DashWidth.M
+    // the steerpoint table's six columns
+    DashCard.FUEL_PLAN -> DashWidth.M
     else -> DashWidth.S
 }
 
@@ -634,9 +638,11 @@ private fun DashCardContent(item: DashItem, env: MissionEnv, d: MapData, mapStat
         DashCard.WEATHER -> brief?.takeIf { it.weather?.rows?.isNotEmpty() == true }?.let { WeatherCard(it) }
             ?: EmptyCard(item.card, fillHint("Press PRINT on the BMS briefing screen.", wdpNoWeather()))
         DashCard.PRESETS -> if (merged.presets.isNotEmpty()) PresetCard(merged, l?.uhfPreset ?: 0) else EmptyCard(item.card, fillHint("Save the DTC in BMS.", "No presets in your cartridge as saved: Save to DTC in the Planner, then Populate from Planner."))
-        DashCard.BOARDS -> EzGenerateCard(onSetup = { env.nav.go(com.bmscompanion.app.ui.Routes.SETUP) }, onOpenTab = onOpenTab)
+        // the cockpit kneeboard of this mission to look at (1.4.1); making it is on the Kneeboards page
+        DashCard.BOARDS -> CockpitKneeboardCard(env.nav, onOpenTab)
         DashCard.SUPPORT -> SupportCard(rememberSupportAssets(env))
         DashCard.PLAN -> DashPlanCard(merged)
+        DashCard.FUEL_PLAN -> FuelPlanCard(merged, env, compact = item.width == DashWidth.S)
     }
 }
 

@@ -78,36 +78,36 @@ fun MissionBoardsPane(env: MissionEnv, onSetup: () -> Unit, onOpenTab: ((Mission
     // Upd Kneeboard and the Noteboard editor open over this page (1.4.1): the Planner's windows, hosted here too
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        WhichKneeboard(info.wdpMode)
+        // Looking at them first (1.4.1): every kneeboard of the mission, as BMS will show it in the cockpit, the HTML
+        // Briefing pages and EZBoards' tables — the page opened on the explanation, and the pages were a scroll away
+        val tables = board?.tables.orEmpty()
+        KneeboardViewSection(env.nav, tables) { HtmlBriefPages(env.nav) }
+        if (tables.none { it.rows.isNotEmpty() } && ezInfo?.configured == true && info?.briefing?.available == true && !info.wdpMode) {
+            Text("EZBoards' table preview unavailable (xbrief could not read the briefing).", color = Hud.TextFaint, fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp))
+        }
+
+        // then making them
+        Text("MAKING THE KNEEBOARDS", style = LocalExtra.current.overline, color = Hud.TextFaint, modifier = Modifier.padding(start = 4.dp, top = 6.dp))
         EzGenerateCard(onSetup, onOpenTab)
         UpdKneeboardCard()
+
+        // html_brief is somebody else's tool: folded shut for everyone who does not use it, and open ever after for
+        // everyone who does. Its pages are read above; here it is set up and started.
+        CollapsibleCard(
+            "HTML Briefing",
+            initiallyOpen = false,
+            accent = Hud.Amber,
+            rememberKey = "kb_html",
+            preview = "UOAF's HTML Briefing tool: start its export from here. Nothing here needs you if you do not use it.",
+        ) { HtmlBriefRun(onOpenTab) }
 
         // The VR board addresses: a page of its own until now, and only ever on the PC that runs the headset.
         vrBoardsPane?.let { pane ->
             CollapsibleCard("VR boards for OpenKneeboard", initiallyOpen = true, accent = Hud.Cyan, rememberKey = "kb_vr") { pane() }
         }
 
-        // html_brief is somebody else's tool: folded shut for everyone who does not use it, and open ever after for
-        // everyone who does.
-        CollapsibleCard(
-            "HTML Briefing kneeboard",
-            initiallyOpen = false,
-            accent = Hud.Amber,
-            rememberKey = "kb_html",
-            preview = "The pages UOAF's HTML Briefing tool exports. Nothing here needs you if you do not use it.",
-        ) { KneeboardPages(env.nav, onOpenTab) }
-
-        if (board == null || board.tables.none { it.rows.isNotEmpty() }) {
-            if (ezInfo?.configured == true && info?.briefing?.available == true && !info.wdpMode) {
-                Text("Board preview unavailable (xbrief could not read the briefing).", color = Hud.TextFaint, fontSize = 12.sp)
-            }
-            return@Column
-        }
-        Text("KNEEBOARD CONTENT", style = LocalExtra.current.overline, color = Hud.TextFaint, modifier = Modifier.padding(start = 4.dp))
-        Masonry(minColumn = 480.dp, maxColumns = 2) {
-            board.tables.filter { it.rows.isNotEmpty() }.forEach { BoardTableCard(it) }
-        }
-        board.tables.firstOrNull { it.rows.isEmpty() && it.title.isNotBlank() }?.let { Text(it.title, fontSize = 11.sp, color = Hud.TextFaint, modifier = Modifier.padding(start = 4.dp)) }
+        // read once: at the foot, folded
+        WhichKneeboard(info.wdpMode)
     }
     // only the windows this page opens (and the guide Upd Kneeboard's Help opens): the Planner's others stay the Planner's
     val window = com.bmscompanion.app.ui.screens.wdp.PlannerWindows.open
@@ -457,7 +457,7 @@ private fun ResultBanner(r: EzRun) {
 
 /** An xbrief table rendered natively: own flight rows highlighted, wide tables scroll sideways on phones. */
 @Composable
-private fun BoardTableCard(t: BoardTable) {
+internal fun BoardTableCard(t: BoardTable) {
     val accent = when {
         t.title.startsWith("Package") -> Hud.Cyan
         t.title.startsWith("Comm") -> Hud.Amber

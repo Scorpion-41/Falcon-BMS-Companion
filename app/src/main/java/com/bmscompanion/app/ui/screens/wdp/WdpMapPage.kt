@@ -347,12 +347,13 @@ private fun PanelTabs(touch: Boolean) {
 
 /** The Map page's view, kept for as long as the app runs (the other pages' state is, [WdpSession]); the layers are [WdpMapPrefs]. */
 internal object WdpMapView {
-    var hsd by mutableStateOf(Repo.getInt("wm_hsd", 0) == 1)
-    var hsdRange by mutableIntStateOf(Repo.getInt("wm_hsd_range", 60))
+    // these three follow another device's change too (MissionSync, PrefWatch)
+    var hsd by com.bmscompanion.app.data.mission.prefState("wm_hsd") { Repo.getInt("wm_hsd", 0) == 1 }
+    var hsdRange by com.bmscompanion.app.data.mission.prefIntState("wm_hsd_range") { Repo.getInt("wm_hsd_range", 60) }
     /** the steerpoint the HSD preview centres on; null: the first target of the flight plan */
     var hsdCentre by mutableStateOf<Int?>(null)
     /** the HSD preview also shows, dim and dashed, what the mission knows and the cartridge does not carry */
-    var ghosts by mutableStateOf(Repo.getInt("wm_ghosts", 1) == 1)
+    var ghosts by com.bmscompanion.app.data.mission.prefState("wm_ghosts") { Repo.getInt("wm_ghosts", 1) == 1 }
 
     var sel by mutableStateOf<MapPick?>(null)
     /** a cartridge item waiting for the tap that says where it goes */

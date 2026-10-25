@@ -330,6 +330,12 @@ private fun CreditsCard(open: ((String) -> Unit)?) {
                 "MIT licence, Copyright (c) 2017 Craig Andera.",
             "https://candera.github.io/weathergen/", open,
         )
+        Credit(
+            "flag-icons — Panayiotis Lipiridis",
+            "The country flags beside the team names in the PC program's Command section (version 7.2.3). " +
+                "MIT licence, Copyright (c) 2013 Panayiotis Lipiridis.",
+            "https://github.com/lipis/flag-icons", open,
+        )
         PhotoCreditsList(open)
         Text(
             "The reference pages come from Falcon BMS and from published AIP documents.",

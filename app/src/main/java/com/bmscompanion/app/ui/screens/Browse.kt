@@ -140,7 +140,8 @@ fun HomeScreen(nav: NavHostController) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         // Hero
         Box(Modifier.fillMaxWidth().height(210.dp)) {
-            AssetImage("maps/korea.webp", Modifier.fillMaxSize(), ContentScale.Crop)
+            // the bundled overview of Korea's relief (the maps' folders are maps/<mapId>/<style>.webp since 1.4.0)
+            AssetImage("maps/korea/relief.webp", Modifier.fillMaxSize(), ContentScale.Crop)
             Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Hud.Bg.copy(alpha = 0.35f), Hud.Bg))))
             Column(Modifier.align(Alignment.BottomStart).padding(20.dp)) {
                 Text("FALCON BMS", style = LocalExtra.current.overline, color = Hud.Green)

@@ -652,6 +652,14 @@ class PopupPlan {
         elev.clear()
     }
 
+    /** Another device's `[PopUp]` section (the app's, 1.4.2): the page's Load again on [ini], as [resetToDefaults] on none. */
+    fun reloadIni(ini: List<Pair<String, String>>?) {
+        val boxes = messageBoxes
+        setupIni = ini
+        if (created) guard { loadEvent() }
+        messageBoxes = boxes
+    }
+
     /** `cntPopUp_Load`: Setup (reading [setupIni]), Profile, Ref, Selections, then the flow and the zoom. */
     private fun loadEvent() {
         loaded = false

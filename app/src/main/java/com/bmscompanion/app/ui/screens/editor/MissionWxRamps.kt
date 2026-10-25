@@ -151,6 +151,59 @@ internal object WxRamps {
         ),
     )
 
+    /**
+     * The weather type, the picture a pilot reads first (the colours ViperOps and Weather Commander use): Sunny a pale
+     * sky blue, Fair green, Poor yellow, Inclement red. [typeInk] is the wash on the map, [typeColor] the solid swatch.
+     */
+    fun typeColor(t: WxType): Color = when (t) {
+        WxType.SUNNY -> Color(0xFF7CC4EE)
+        WxType.FAIR -> Color(0xFF4CB963)
+        WxType.POOR -> Color(0xFFF0C53C)
+        WxType.INCLEMENT -> Color(0xFFE5533D)
+    }
+    fun typeInk(t: WxType): Color = typeColor(t).copy(alpha = if (t == WxType.SUNNY) 0.36f else 0.44f)
+
+    /**
+     * Cloud base, ft MSL, where there is cloud: low and dangerous red, orange under 1,500, yellow under 3,000, green
+     * about 5,000, blue and fading out high; a clear cell is not coloured.
+     */
+    val CLOUD_BASE = WxRamp(
+        listOf(
+            0f to Color(0xFFD32F2F).copy(alpha = 0.62f),
+            1000f to Color(0xFFFF5722).copy(alpha = 0.56f),
+            2500f to Color(0xFFFFB300).copy(alpha = 0.50f),
+            5000f to Color(0xFF66BB6A).copy(alpha = 0.44f),
+            9000f to Color(0xFF42A5F5).copy(alpha = 0.40f),
+            15000f to Color(0xFF9FA8DA).copy(alpha = 0.22f),
+        ),
+    )
+
+    /** Cumulus size, 0 congestus (deep, dark violet) to 5 humilis (flat, pale); a clear cell is not coloured. */
+    val CLOUD_SIZE = WxRamp(
+        listOf(
+            0f to Color(0xFF4A148C).copy(alpha = 0.66f),
+            1.5f to Color(0xFF7B1FA2).copy(alpha = 0.54f),
+            3f to Color(0xFF5C8DD6).copy(alpha = 0.44f),
+            5f to Color(0xFFDDE6F2).copy(alpha = 0.30f),
+        ),
+    )
+
+    /** Towering cumulus: the cells that carry the flag, in a warning orange. */
+    val TOWERING = Color(0xFFFF7A1A)
+    fun toweringInk() = TOWERING.copy(alpha = 0.52f)
+
+    /** The fog layer's height, ft: nothing at 0, a pale haze, then denser and violet-grey as it reaches higher. */
+    val FOG = WxRamp(
+        listOf(
+            0f to Color(0x00D8D4E8),
+            1f to Color(0xFFE6E2F0).copy(alpha = 0.26f),
+            1500f to Color(0xFFC7C0DC).copy(alpha = 0.40f),
+            4000f to Color(0xFF9A8FBF).copy(alpha = 0.52f),
+            8000f to Color(0xFF6A5D99).copy(alpha = 0.62f),
+            12000f to Color(0xFF453A73).copy(alpha = 0.70f),
+        ),
+    )
+
     /** BMS rains only in inclement weather (snow at or below freezing); a version 8 map's shower flag adds showers. */
     fun precipKind(m: MissionWxMap, i: Int): Int = when {
         m.type[i] == WxType.INCLEMENT.code -> if (m.tempC[i] <= 0f) 3 else 2
@@ -167,14 +220,30 @@ internal object WxRamps {
 
     /** The colour of cell [i] of [m] for [fill] at wind [level]. */
     fun ink(m: MissionWxMap, i: Int, fill: WxFill, level: Int, pressure: Pair<Float, Float>): Color = when (fill) {
-        WxFill.CLOUDS -> CLOUD.at(coverFraction(m.cover[i]))
+        WxFill.CLOUDS -> CLOUD.at(coverFraction(coverAt(m, i).code))
         WxFill.PRECIP -> precipInk(m, i)
         WxFill.VISIBILITY -> VISIBILITY.at(m.visKm[i])
         WxFill.TEMPERATURE -> TEMPERATURE.at(m.tempC[i])
         WxFill.PRESSURE -> PRESSURE.at((m.pressureMb[i] - pressure.first) / (pressure.second - pressure.first))
         WxFill.WIND -> WIND.at(m.windKt.getOrNull(i * MissionWxMap.LEVELS + level)?.toFloat() ?: 0f)
         WxFill.NONE -> Color.Transparent
+        WxFill.TYPE -> typeInk(WxType.ofCode(m.type[i].coerceIn(1, 4)))
+        WxFill.CLOUD_BASE -> if (cloudy(m, i)) CLOUD_BASE.at(m.cloudBaseFt[i].toFloat()) else Color.Transparent
+        WxFill.CLOUD_SIZE -> if (cloudy(m, i)) m.cloudSize.getOrNull(i)?.let { CLOUD_SIZE.at(it) } ?: Color.Transparent else Color.Transparent
+        WxFill.TOWERING -> if (m.towering.getOrNull(i) == 1) toweringInk() else Color.Transparent
+        WxFill.SHOWER -> if (m.shower.getOrNull(i) == 1) showerInk() else Color.Transparent
+        WxFill.FOG -> m.fogFt.getOrNull(i)?.let { FOG.at(it.toFloat()) } ?: Color.Transparent
     }
+
+    /**
+     * The sky cover BMS flies in cell [i]: the map's code, except that a **sunny** cell is clear whatever the code says
+     * (the Technical Manual's rule, docs/WEATHER.md "Cloud coverage is a code"; BMS's own maps carry SCT on sunny cells).
+     */
+    fun coverAt(m: MissionWxMap, i: Int): WxCover =
+        if (m.type.getOrNull(i) == WxType.SUNNY.code) WxCover.NONE else WxCover.ofCode(m.cover[i])
+
+    /** A cell with cloud in it. */
+    fun cloudy(m: MissionWxMap, i: Int): Boolean = coverAt(m, i) != WxCover.NONE
 }
 
 /**
@@ -182,10 +251,12 @@ internal object WxRamps {
  * screen, clipped to each shower cell in view, so it runs on unbroken from cell to cell; the snow's edge is drawn
  * between a snow cell and each neighbour that is not.
  */
-internal fun DrawScope.precipMarks(m: MissionWxMap, left: Float, top: Float, cw: Float, ch: Float, c0: Int, c1: Int, r0: Int, r1: Int, spacing: Float) {
+internal fun DrawScope.precipMarks(m: MissionWxMap, left: Float, top: Float, cw: Float, ch: Float, c0: Int, c1: Int, r0: Int, r1: Int, spacing: Float, showerFlag: Boolean = false) {
     val hatch = WxRamps.SHOWER.copy(alpha = 0.85f)
     val edge = WxRamps.SNOW_EDGE
-    fun kind(c: Int, r: Int): Int = if (c < 0 || r < 0 || c >= m.cols || r >= m.rows) 0 else WxRamps.precipKind(m, r * m.cols + c)
+    // [showerFlag]: the Shower fill, which hatches every cell carrying the flag, whatever its type
+    fun kind(c: Int, r: Int): Int = if (c < 0 || r < 0 || c >= m.cols || r >= m.rows) 0
+        else if (showerFlag) (if (m.shower.getOrNull(r * m.cols + c) == 1) 1 else 0) else WxRamps.precipKind(m, r * m.cols + c)
     for (r in r0..r1) for (c in c0..c1) {
         val k = kind(c, r)
         if (k == 0) continue
@@ -224,16 +295,40 @@ internal fun ScaleBar(ramp: WxRamp, from: Float, to: Float, labels: List<String>
     }
 }
 
-/** The cloud legend's four station circles, each with its name: the key to the circles drawn on the map. */
+/** The four weather types' colours, each with its name (the Weather type fill and the profile's columns). */
 @Composable
-internal fun CoverKey() {
+internal fun TypeKey() {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        listOf(WxType.SUNNY, WxType.FAIR, WxType.POOR, WxType.INCLEMENT).forEach { t ->
+            FlagKey(t.label, WxRamps.typeColor(t).copy(alpha = 0.85f))
+        }
+    }
+}
+
+/** One swatch and its name: a flag fill's key (towering cumulus, shower). */
+@Composable
+internal fun FlagKey(name: String, c: Color, hatched: Boolean = false) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Canvas(Modifier.size(14.dp).clip(RoundedCornerShape(1.dp))) {
+            drawRect(c)
+            if (hatched) precipHatch(this)
+            drawRect(Hud.Outline, Offset.Zero, Size(size.width, size.height), style = Stroke(1f))
+        }
+        Spacer(Modifier.width(4.dp))
+        Text(name, color = Hud.Text, fontSize = 10.5.sp, maxLines = 1)
+    }
+}
+
+/** The cloud legend's four cover classes, each with its name; [circles] adds the station circle the map draws for it. */
+@Composable
+internal fun CoverKey(circles: Boolean = true) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         listOf(WxCover.FEW to "FEW", WxCover.SCATTERED to "SCT", WxCover.BROKEN to "BKN", WxCover.OVERCAST to "OVC").forEach { (c, name) ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 // the fill's colour behind the circle the map draws for it
                 Canvas(Modifier.size(18.dp).clip(RoundedCornerShape(2.dp))) {
                     drawRect(WxRamps.CLOUD.at(WxRamps.coverFraction(c.code)).let { it.copy(alpha = (it.alpha * 1.3f).coerceAtMost(1f)) })
-                    coverGlyph(Offset(size.width / 2, size.height / 2), c, false, size.minDimension * 0.3f, Color.White, Color.Black)
+                    if (circles) coverGlyph(Offset(size.width / 2, size.height / 2), c, false, size.minDimension * 0.3f, Color.White, Color.Black)
                 }
                 Spacer(Modifier.width(3.dp))
                 Text(name, color = Hud.Text, fontSize = 10.5.sp, maxLines = 1)

@@ -83,8 +83,12 @@ import kotlin.system.exitProcess
  * BMS Companion for Windows: one program with the app, the part that reads Falcon BMS, and the server for phones, tablets,
  * browsers and client PCs. One window that is either the light server page or the full app, plus a tray icon.
  *
- * Arguments: `--tray` starts without a window (used by "Start with Windows"); `--route <route>` (or env BMSC_ROUTE) opens a
- * route in the app. Developer checks: `--selftest out.txt`, `--dumpstrings out.txt`, `--eztest <EZBoards copy> out.txt`.
+ * Arguments: `--autostart` (what Start with Windows registers: the Start minimized setting decides, and a copy already
+ * running is left alone), `--minimized` (the window starts minimized on the taskbar; so does Windows' own `start /min`
+ * or a shortcut set to Run: Minimized), `--show` (shown, whatever Start minimized says), `--tray` (no window, only the
+ * tray icon; what Start with Windows registered before 1.4.1); `--route <route>` (or env BMSC_ROUTE) opens a route in
+ * the app, shown. See [AutoStart.launch]. Developer checks: `--selftest out.txt`, `--dumpstrings out.txt`, `--eztest
+ * <EZBoards copy> out.txt`.
  */
 fun main(args: Array<String>) {
     Repo.init()
@@ -94,11 +98,24 @@ fun main(args: Array<String>) {
     com.bmscompanion.app.ui.screens.mission.vrBoardsPane = { com.bmscompanion.app.ui.screens.mission.MissionVrBoardsPane() }
     com.bmscompanion.app.ui.railTop = railFullScreen
     com.bmscompanion.app.ui.railBottom = railServerPage
+    // the campaign editor: a section of the PC's own window only (it works on this PC's files in-process)
+    com.bmscompanion.app.ui.commandSection = { nav -> com.bmscompanion.desktop.ui.command.CommandSection(nav) }
+    // the Planner's type in Arial hinted onto whole pixels, as GDI sets WDP's (WdpType); the headless checks draw it so too
+    com.bmscompanion.app.ui.screens.wdp.WdpType.face = com.bmscompanion.desktop.bridge.wdpFace()
+    com.bmscompanion.app.ui.screens.wdp.WdpType.platform = com.bmscompanion.desktop.bridge.crispType()
     PcLog.install() // there is no console here: a failure that reaches nobody goes to the log in the settings folder
     if (SelfTest.run(args)) exitProcess(0)
-    val trayStart = "--tray" in args
-    // one copy per user: a second start shows the running one (a start with Windows just leaves it alone)
-    if (!SingleInstance.acquire(quiet = trayStart) { ShowRequests.value++ }) exitProcess(0)
+    val startRoute = args.indexOf("--route").takeIf { it >= 0 }?.let { args.getOrNull(it + 1) } ?: System.getenv("BMSC_ROUTE")
+    // shown, minimized on the taskbar or only in the tray: the arguments, Windows' STARTUPINFO, then Start minimized
+    val launch = AutoStart.launch(args, startRoute)
+    val trayStart = launch.show == AutoStart.Show.TRAY
+    // one copy per user: a second start shows the running one (one asked to stay out of the way — a start with
+    // Windows, --minimized, start /min — leaves it alone)
+    if (!SingleInstance.acquire(quiet = launch.quiet) { ShowRequests.value++ }) exitProcess(0)
+    AutoStart.startMinimizedOnce(launch.show == AutoStart.Show.MINIMIZED)
+    // Start with Windows: the Run value points at this copy (the portable zip can be moved)
+    AutoStart.refreshAtStart()
+    if (launch.show != AutoStart.Show.SHOWN) com.bmscompanion.desktop.bridge.BridgeLog.info("Started ${launch.show.name.lowercase()}: ${launch.why}")
 
     // Once per version, and only now that this is known to be the only copy running: what the version being
     // replaced left behind is thrown out (its cached installer, its stale lock, its rendered pages), while
@@ -118,7 +135,6 @@ fun main(args: Array<String>) {
     // an installer left behind by an update that has already happened is a few hundred megabytes of nothing
     com.bmscompanion.app.data.update.Updates.tidyCache()
     runCatching { javax.swing.UIManager.setLookAndFeel(javax.swing.UIManager.getSystemLookAndFeelClassName()) } // native folder dialogs
-    val startRoute = args.indexOf("--route").takeIf { it >= 0 }?.let { args.getOrNull(it + 1) } ?: System.getenv("BMSC_ROUTE")
     PcServices.apply()
 
     application {
@@ -126,6 +142,10 @@ fun main(args: Array<String>) {
         val showRequest by ShowRequests.collectAsState()
         LaunchedEffect(showRequest) { if (showRequest > 0) windowOpen = true }
         val tray = rememberTrayState()
+        // the Command section is listed only while this window reads Falcon BMS on this PC
+        LaunchedEffect(Unit) {
+            com.bmscompanion.app.data.mission.MissionLink.mode.collect { com.bmscompanion.app.ui.commandShown.value = it == com.bmscompanion.app.data.mission.LinkMode.LOCAL }
+        }
         var trayNoticeShown by remember { mutableStateOf(false) }
 
         fun closeWindow() {
@@ -192,8 +212,19 @@ private class WindowOwner : LifecycleOwner, ViewModelStoreOwner {
 
 @Composable
 private fun ApplicationScope.MainWindow(startRoute: String?, nav: NavHostController, owner: WindowOwner, showRequest: Int, onClose: () -> Unit) {
+    // A minimized start (AutoStart.launch): only the first window of this run, never one reopened from the tray or
+    // recreated for full screen. It is made minimized while still hidden, told not to take the focus, and only then
+    // shown, so Windows puts it on the taskbar (SW_SHOWMINNOACTIVE) and the program in front keeps the keyboard.
+    val startMinimized = remember { AutoStart.consumeMinimized() }
+    var visibleNow by remember { mutableStateOf(!startMinimized) }
+    if (startMinimized) LaunchedEffect(Unit) {
+        // the window's own effect below shows it; this is only the safety net should that never run
+        kotlinx.coroutines.delay(3000)
+        visibleNow = true
+    }
     val normalState = rememberWindowState(
         placement = if (Repo.getInt("pc_win_max", 0) == 1) WindowPlacement.Maximized else WindowPlacement.Floating,
+        isMinimized = startMinimized,
         position = Repo.getInt("pc_win_x", Int.MIN_VALUE).let { x ->
             if (x == Int.MIN_VALUE) WindowPosition(Alignment.Center) else WindowPosition(x.dp, Repo.getInt("pc_win_y", 0).dp)
         },
@@ -217,6 +248,7 @@ private fun ApplicationScope.MainWindow(startRoute: String?, nav: NavHostControl
         Window(
             onCloseRequest = onClose,
             state = state,
+            visible = visibleNow,
             title = "BMS Companion ${com.bmscompanion.app.AppVersion.NAME}",
             icon = rememberVectorPainter(AppIcon),
             undecorated = fullscreen,
@@ -237,6 +269,8 @@ private fun ApplicationScope.MainWindow(startRoute: String?, nav: NavHostControl
                         com.bmscompanion.app.data.PcFiles.isBrowsing -> false
                         com.bmscompanion.app.ui.screens.wdp.WdpDialogs.stack.isNotEmpty() -> false
                         com.bmscompanion.app.ui.screens.wdp.PlannerWindows.isOpen -> { com.bmscompanion.app.ui.screens.wdp.PlannerWindows.close(); true }
+                        // the Mission weather page's profile line being drawn: Escape finishes it
+                        com.bmscompanion.app.ui.screens.editor.WxProfile.drawing -> { com.bmscompanion.app.ui.screens.editor.WxProfile.escape(); true }
                         else -> { toggleFullscreen(); true }
                     }
                     else -> UiScale.handleKey(e)
@@ -247,6 +281,14 @@ private fun ApplicationScope.MainWindow(startRoute: String?, nav: NavHostControl
                 windowRef = window
                 window.minimumSize = java.awt.Dimension(560, 600)
                 if (!fullscreen) DarkTitleBar.apply(window)
+                if (!visibleNow) {
+                    // AWT shows an iconified frame SW_SHOWMINNOACTIVE when it may not ask for the focus
+                    window.isAutoRequestFocus = false
+                    visibleNow = true
+                    kotlinx.coroutines.delay(1500)
+                    // from now on a second start or the tray brings it to the front as before
+                    window.isAutoRequestFocus = true
+                }
             }
             LaunchedEffect(showRequest) {
                 if (showRequest == 0) return@LaunchedEffect
@@ -260,6 +302,8 @@ private fun ApplicationScope.MainWindow(startRoute: String?, nav: NavHostControl
             if (!fullscreen) LaunchedEffect(state) {
                 // remember size, position and maximized state (debounced while the user drags)
                 snapshotFlow { Triple(state.placement, state.position, state.size) }.debounce(500).collect { (placement, pos, size) ->
+                    // minimized, Windows parks a window far off screen: nothing worth keeping
+                    if (state.isMinimized) return@collect
                     Repo.putInt("pc_win_max", if (placement == WindowPlacement.Maximized) 1 else 0)
                     if (placement == WindowPlacement.Floating) {
                         if (pos is WindowPosition.Absolute) { Repo.putInt("pc_win_x", pos.x.value.toInt()); Repo.putInt("pc_win_y", pos.y.value.toInt()) }

@@ -82,7 +82,7 @@ import kotlin.io.encoding.ExperimentalEncodingApi
 /** Whether the Files tab shows: on until the pilot turns it off (Setup → Mission pages). */
 object FilesTabPrefs {
     private const val KEY = "mission_tab_files"
-    private var v by mutableStateOf(Repo.getInt(KEY, 1))
+    private var v by com.bmscompanion.app.data.mission.prefState(KEY) { Repo.getInt(KEY, 1) }
     var shown: Boolean
         get() = v == 1
         set(x) { v = if (x) 1 else 0; Repo.putInt(KEY, v) }
@@ -95,9 +95,20 @@ object OpenFiles {
     private const val LAST = "files_last_dir"
     const val MAX = 12
 
-    val paths = mutableStateListOf<String>().apply { addAll(Repo.getString(KEY)?.split('\n')?.filter { it.isNotBlank() }.orEmpty().take(MAX)) }
-    var selected by mutableIntStateOf(Repo.getInt(SEL, 0))
+    private fun kept() = Repo.getString(KEY)?.split('\n')?.filter { it.isNotBlank() }.orEmpty().take(MAX)
+    val paths = mutableStateListOf<String>().apply { addAll(kept()) }
+    // the file on show is where the pilot is: another device's is taken when this one becomes active (MissionPrefs.NAV_KEYS)
+    var selected by com.bmscompanion.app.data.mission.prefIntState(SEL) { Repo.getInt(SEL, 0) }
         private set
+
+    init {
+        // the files another device opened or closed (MissionSync)
+        com.bmscompanion.app.data.mission.PrefWatch.on(KEY) {
+            val now = kept()
+            if (now != paths.toList()) { paths.clear(); paths.addAll(now) }
+            if (selected > paths.lastIndex) selected = paths.lastIndex.coerceAtLeast(0)
+        }
+    }
 
     /** The folder the last file was opened from, for the next Open file… */
     val lastFolder: String? get() = Repo.getString(LAST)?.takeIf { it.isNotBlank() }
@@ -266,14 +277,18 @@ private fun FileView(path: String, onOpen: (String) -> Unit) {
             }
             SmallButton("Reload", null, primary = false) { reload++ }
         }
+        // the kind through a `when (subject)` of its own: a subject-less `when` that mixes `a == null` with `v.kind ==
+        // "text"` is miscompiled by Kotlin/Wasm (it hashes `a` as the string; CLAUDE.md, Gotchas) and froze the browser
         when {
             a == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("Opening…", color = Hud.TextDim) }
             v == null -> PaneEmpty("Could not open the file", a.error ?: if (a.status == 404) PcAnswer.OLD_PC else "The PC did not send it.")
-            v.kind == "text" -> TextFile(v)
-            v.kind == "html" -> HtmlFile(v, onOpen)
-            v.kind == "image" -> PictureFile(path)
-            v.kind == "pdf" -> PdfFile(path, v.pages)
-            else -> PaneEmpty("Not a file this tab opens", v.name)
+            else -> when (v.kind) {
+                "text" -> TextFile(v)
+                "html" -> HtmlFile(v, onOpen)
+                "image" -> PictureFile(path)
+                "pdf" -> PdfFile(path, v.pages)
+                else -> PaneEmpty("Not a file this tab opens", v.name)
+            }
         }
     }
 }
@@ -292,15 +307,27 @@ internal fun fileTime(ms: Long): String = runCatching {
 // ---------------------------------------------------------------- text
 
 private object TextPrefs {
+    // the size is this device's (a phone's and a PC's screens differ: MissionPrefs); the wrap follows other devices
     var size by mutableIntStateOf(Repo.getInt("files_text_size", 13))
-    var wrap by mutableStateOf(Repo.getInt("files_text_wrap", 1) == 1)
+    var wrap by com.bmscompanion.app.data.mission.prefState("files_text_wrap") { Repo.getInt("files_text_wrap", 1) == 1 }
     fun resize(s: Int) { size = s.coerceIn(9, 24); Repo.putInt("files_text_size", size) }
     fun wrapLines(w: Boolean) { wrap = w; Repo.putInt("files_text_wrap", if (w) 1 else 0) }
 }
 
+/**
+ * [line] with each tab turned into the blanks up to the next stop of [width] columns: a font has no glyph for a tab
+ * (the browser drew a box for each), and BMS's files line their columns up with tabs.
+ */
+internal fun expandTabs(line: String, width: Int = 8): String {
+    if ('\t' !in line) return line
+    val sb = StringBuilder(line.length + 16)
+    for (c in line) if (c == '\t') { do sb.append(' ') while (sb.length % width != 0) } else sb.append(c)
+    return sb.toString()
+}
+
 @Composable
 private fun TextFile(v: PcFileView) {
-    val lines = remember(v) { v.text.orEmpty().replace("\r\n", "\n").replace('\r', '\n').split('\n') }
+    val lines = remember(v) { v.text.orEmpty().replace("\r\n", "\n").replace('\r', '\n').split('\n').map { expandTabs(it) } }
     val list = rememberLazyListState()
     var query by remember(v) { mutableStateOf("") }
     val hits = remember(lines, query) { if (query.length < 2) emptyList() else lines.indices.filter { lines[it].contains(query, ignoreCase = true) } }

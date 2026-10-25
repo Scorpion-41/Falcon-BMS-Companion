@@ -152,7 +152,7 @@ object KneeboardPrintSession {
      */
     val EZ_KINDS: Set<String> = setOf(
         KbKind.LEAVE, KbKind.PICTURE, KbKind.NOTES, KbKind.NOTES_2, KbKind.BLANK, KbKind.TEST, KbKind.TARGET_PICTURES,
-        KbKind.ROUTE_MAP, KbKind.ROUTE_MAP_DARK, KbKind.DEPARTURE, KbKind.ARRIVAL, KbKind.ALTERNATE,
+        KbKind.ROUTE_MAP, KbKind.ROUTE_MAP_DARK, KbKind.WEATHER_MAP, KbKind.DEPARTURE, KbKind.ARRIVAL, KbKind.ALTERNATE,
     )
 
     /** A kind the window offers in the mode of [st]: every kind in WDP mode, [EZ_KINDS] in EZBoards mode. */
@@ -263,11 +263,30 @@ object KneeboardPrintSession {
 
     private fun halfKey(k: String) = k.length in 2..3 && k.last() in "LR" && k.dropLast(1).toIntOrNull() in 1..16
 
-    /** Keeps the plan on the device, for the next launch. Never throws. */
-    private fun save() {
+    /**
+     * Keeps the plan on the device, for the next launch, and on the PC for every device (PlannerSync.KNEEBOARD, 1.4.2):
+     * [strong] when the pilot changed it ([touched], the Mission set button), weak when the window laid it by itself, so
+     * a tablet's first default never replaces the plan made on the PC. Never throws.
+     */
+    private fun save(strong: Boolean = pilotLay) {
         runCatching {
             Repo.putString(SAVED_KEY, Repo.json.encodeToString(Saved.serializer(), Saved(plan.toMap(), pictures.toMap(), planned, laidFor, madeIn, layout, KneeboardTargets.choices.toMap(), byButton, planMode, stashed.toMap())))
         }
+        com.bmscompanion.app.data.mission.PlannerSync.changed(com.bmscompanion.app.data.mission.PlannerSync.KNEEBOARD, strong)
+    }
+
+    /** the Mission set button is laying the plan: its save is the pilot's ([save]) */
+    private var pilotLay = false
+
+    /** The plan as every device shares it: what the device keeps in [SAVED_KEY]. */
+    fun sharedValue(): String? = runCatching { Repo.getString(SAVED_KEY) }.getOrNull()
+
+    /** Takes another device's plan ([sharedValue]): kept here as this device's, then read as a launch reads it. */
+    fun adoptShared(v: String): Boolean {
+        runCatching { Repo.json.decodeFromString(Saved.serializer(), v) }.getOrNull() ?: return false
+        runCatching { Repo.putString(SAVED_KEY, v) }
+        reloadSaved()
+        return true
     }
 
     /** Forgets the plan here and on the device: the next time the pages are read, the window opens on the Mission set. */
@@ -366,7 +385,7 @@ object KneeboardPrintSession {
         madeIn = mode()
         planMode = madeIn
         relaid = null
-        save()
+        save(strong = true)
     }
 
     fun slot(n: Int): KbSlot? = state?.pages?.firstOrNull { it.n == n }
@@ -426,6 +445,12 @@ object KneeboardPrintSession {
      * pages 1, 2 and 3; in EZBoards mode the window's EZBoards-mode default ([layDefault]), never a page of the Planner's.
      * In place of whatever was planned. Answers the pages it used.
      */
+    /** [missionSet] from its button: the pilot's choice, which every device takes (PlannerSync, 1.4.2). */
+    fun missionSetPressed(): List<Int> {
+        pilotLay = true
+        try { return missionSet() } finally { pilotLay = false }
+    }
+
     fun missionSet(): List<Int> {
         if (!wdpMode()) return layDefault()
         val pages = missionPages()
@@ -533,6 +558,9 @@ object KneeboardPrintSession {
     /** Reads the PC's pages again. */
     suspend fun load() {
         loading = true
+        // the plan (and the Planner's flight, whose targets a page lists) made on another device first: the PC's when it
+        // is newer than this device's, before anything below would lay a default (PlannerShared, 1.4.2)
+        PlannerShared.sync()
         val a = MissionLink.kbState()
         // a refusal may still carry the state (no page folder for this theater): both are kept
         state = a.value
@@ -870,6 +898,15 @@ private fun StatusLine(st: KbPrintState?, error: String?, loading: Boolean) {
         }
         OneLine((listOf(first) + quiet).joinToString("  ·  "), Hud.TextDim, "Print/Status")
         for ((i, n) in notes.withIndex()) OneLine(n, Hud.Amber, "Print/Note/$i")
+        // a plan of this device's own put aside for a newer one from another device (PlannerSync, 1.4.2): never silently
+        val sync = com.bmscompanion.app.data.mission.PlannerSync.client
+        if (sync.noticeOf == com.bmscompanion.app.data.mission.PlannerSync.KNEEBOARD) sync.notice?.let { said ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.weight(1f)) { OneLine(said, Hud.Amber, "Print/Taken") }
+                Btn("Use this device's plan", probe = "Print/UseOwn") { com.bmscompanion.app.data.mission.PlannerSync.useAsideSoon(com.bmscompanion.app.data.mission.PlannerSync.KNEEBOARD) }
+                Btn("OK", probe = "Print/TakenOk") { sync.dismiss() }
+            }
+        }
         error?.let { Text(it, color = Hud.Red, fontSize = 12.sp, lineHeight = 15.sp) }
     }
 }
@@ -1052,12 +1089,16 @@ private fun Preview(layer: GraphicsLayer, modifier: Modifier, across: Boolean = 
     val side = at?.second ?: s.selSide
     val kind = KneeboardPages.of(s.kind(n, side)) ?: KneeboardPages.LEAVE
     val slot = s.slot(n)
+    // worked out apart: `if (kind.draw == null) … else if (kind.id == KbKind.PICTURE) …` is miscompiled by Kotlin/Wasm
+    // into a string switch on `kind.draw` (a lambda), which trapped and froze the browser (CLAUDE.md, Gotchas)
+    val leftAsIs = kind.draw == null
+    val picture = kind.id == KbKind.PICTURE
     val caption = @Composable {
         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Text(
                 "Page $n · ${KneeboardPages.knee(side)}  " + (
-                    if (kind.draw == null) "Left as it is: " + ownerText((if (side == 'L') slot?.left else slot?.right) ?: KbOwner.OTHER, if (side == 'L') slot?.leftKind else slot?.rightKind)
-                    else if (kind.id == KbKind.PICTURE) "Picture: " + KneeboardPictures.nameOf(s.picture(n, side)).ifEmpty { "none chosen" } + ", stretched to fill the half page"
+                    if (leftAsIs) "Left as it is: " + ownerText((if (side == 'L') slot?.left else slot?.right) ?: KbOwner.OTHER, if (side == 'L') slot?.leftKind else slot?.rightKind)
+                    else if (picture) "Picture: " + KneeboardPictures.nameOf(s.picture(n, side)).ifEmpty { "none chosen" } + ", stretched to fill the half page"
                     else kind.label),
                 color = if (kind.draw == null) Hud.TextDim else Hud.Amber, fontSize = fingerSp(11f), lineHeight = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
             )
@@ -1159,7 +1200,7 @@ private fun Buttons(st: KbPrintState?, layer: GraphicsLayer, scope: CoroutineSco
     // one bar: the plan's buttons (sideways on a phone), and Print at its end
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Row(Modifier.weight(1f).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Btn("Mission set", enabled = ready, probe = "Print/MissionSet") { s.missionSet() }
+            Btn("Mission set", enabled = ready, probe = "Print/MissionSet") { s.missionSetPressed() }
             Btn("Browse picture…", enabled = ready, probe = "Print/Browse") { scope.launch { s.browsePicture(s.selN, s.selSide) } }
             Btn("Test page", enabled = ready && s.printable(s.slot(s.selN)), probe = "Print/TestPage") {
                 s.set(s.selN, 'L', KbKind.TEST); s.set(s.selN, 'R', KbKind.TEST)

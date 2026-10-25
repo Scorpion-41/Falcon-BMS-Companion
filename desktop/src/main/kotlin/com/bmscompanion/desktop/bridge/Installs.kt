@@ -269,6 +269,7 @@ object Installs {
         switches++
         BridgeLog.info("Falcon BMS folder is now ${new ?: "none"} (was ${old ?: "none"})")
         runCatching { MapTiles.forget() }
+        runCatching { com.bmscompanion.desktop.bridge.command.CampMap2D.forget() }
         runCatching { TargetPictures.forgetMemory() }
         runCatching { MissionGrounds.forget() }
         runCatching { MissionWeatherRoute.forget() }

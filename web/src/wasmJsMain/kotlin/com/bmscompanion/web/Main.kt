@@ -106,6 +106,8 @@ fun main() {
         query.firstOrNull { it.startsWith("kneeboard=") }?.substringAfter('=')?.let { it != "0" } == true
     com.bmscompanion.app.ui.Kneeboard.set(asked)
     if (asked) {
+        // a VR board is no device the pilot works on: it neither gives nor takes the Mission section (MissionSync)
+        com.bmscompanion.app.data.mission.MissionSync.enabled = false
         // only a VR board can be reshaped, and only the page can ask: the ☰ menu's shape list appears because of this
         com.bmscompanion.app.ui.Kneeboard.askShape = { w, h -> askBoardPixelSize(w, h) }
         com.bmscompanion.app.ui.Kneeboard.applyShape()
@@ -116,6 +118,8 @@ fun main() {
         com.bmscompanion.app.ui.Kneeboard.lastError = { okbLastError() }
         com.bmscompanion.app.ui.Kneeboard.roundCorners = { px -> setBoardCorner(px) }
     } else setDocumentTitle("BMS Companion ${AppVersion.NAME}") // a board's tab is named by the server instead
+    // the Planner's type hinted onto whole pixels, as GDI sets WDP's (WdpType)
+    com.bmscompanion.app.ui.screens.wdp.WdpType.platform = crispType()
     ComposeViewport(document.body!!) {
         // The browser has no system fonts to fall back on: the one font Compose for Web draws with lacks the arrows,
         // triangles, squares and ticks the app writes (◀ ▶ ◂ ▸ ▾ ■ ▲ ▼ ✓ ✕ ☰ ⋮ …), which came out as empty boxes.
@@ -127,6 +131,17 @@ fun main() {
             withTimeoutOrNull(4_000) { loadFallbackFont(fonts) }
             ready = true
             hideSplash()
+        }
+        // the tab shown again or the window focused: the Mission section takes where the pilot was on another device
+        // (MissionSync, 1.4.2)
+        LaunchedEffect(Unit) {
+            if (!hookTabShown()) return@LaunchedEffect
+            var seen = tabShownCount()
+            while (true) {
+                kotlinx.coroutines.delay(500)
+                val n = tabShownCount()
+                if (n != seen) { seen = n; com.bmscompanion.app.data.mission.MissionSync.activated() }
+            }
         }
         if (ready) {
             BoxWithConstraints(Modifier.fillMaxSize()) {

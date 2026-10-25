@@ -613,13 +613,14 @@ object MissionLink {
     suspend fun filesView(path: String): PcAnswer<PcFileView> =
         answer("GET", "/api/files/view?path=" + enc(path), PcFileView.serializer(), timeoutMs = 60_000)
 
-    /** The weather the mission flies (the Weather tab's Mission weather page, [MissionWeather]; 1.4.0). */
-    suspend fun missionWeather(): PcAnswer<MissionWeather> =
-        answer("GET", "/api/weather/mission", MissionWeather.serializer(), timeoutMs = 30_000)
+    /** The weather the mission flies (the Weather tab's Mission weather page, [MissionWeather]; 1.4.0); [query]
+     *  `?theater=&save=&flight=` for a flight the Planner has open, `?printed=1` to fall back on the printed briefing. */
+    suspend fun missionWeather(query: String = ""): PcAnswer<MissionWeather> =
+        answer("GET", "/api/weather/mission" + query, MissionWeather.serializer(), timeoutMs = 30_000)
 
     /** One of [MissionWeather.frames]' maps, cell by cell ([MissionWxMap]). */
-    suspend fun missionWeatherMap(frame: String): PcAnswer<MissionWxMap> =
-        answer("GET", "/api/weather/mission/map?frame=" + enc(frame), MissionWxMap.serializer(), timeoutMs = 30_000)
+    suspend fun missionWeatherMap(frame: String, query: String = ""): PcAnswer<MissionWxMap> =
+        answer("GET", "/api/weather/mission/map?frame=" + enc(frame) + query.removePrefix("?").let { if (it.isEmpty()) "" else "&$it" }, MissionWxMap.serializer(), timeoutMs = 30_000)
 
     /** Page [page] (0 = the first) of a PDF on the PC, drawn at most [max] px a side. */
     suspend fun filesPdfPage(path: String, page: Int, max: Int = 1600): PcAnswer<PcPicture> =
@@ -666,6 +667,21 @@ object MissionLink {
     /** Keeps the noteboards on the PC for the mission they name (`POST /api/notes`); answers the mission now's. */
     suspend fun saveNotes(doc: NotesDoc): PcAnswer<NotesState> =
         answer("POST", "/api/notes", NotesState.serializer(), Repo.json.encodeToString(NotesDoc.serializer(), doc), timeoutMs = 8_000)
+
+    /** The planning the PC keeps for every device (`GET /api/planner/state`, 1.4.2; [PlannerSync]). */
+    suspend fun plannerState(): PcAnswer<PlannerStateAll> = answer("GET", "/api/planner/state", PlannerStateAll.serializer(), timeoutMs = 8_000)
+
+    /** The Mission section's values changed after [since] on the PC (`GET /api/sync`, 1.4.2; [MissionSync]). */
+    suspend fun syncGet(since: Long, prefix: String? = null): PcAnswer<SyncAnswer> =
+        answer("GET", "/api/sync?since=$since" + (prefix?.let { "&prefix=" + java.net.URLEncoder.encode(it, "UTF-8") } ?: ""), SyncAnswer.serializer(), timeoutMs = 8_000)
+
+    /** This device's changes of the Mission section, posted (`POST /api/sync`). */
+    suspend fun syncPost(p: SyncPost): PcAnswer<SyncAnswer> =
+        answer("POST", "/api/sync", SyncAnswer.serializer(), Repo.json.encodeToString(SyncPost.serializer(), p), timeoutMs = 8_000)
+
+    /** One change of the planning, posted (`POST /api/planner/state`); answers whether the PC kept it, else the PC's. */
+    suspend fun postPlannerState(p: PlannerStatePost): PcAnswer<PlannerStateAll> =
+        answer("POST", "/api/planner/state", PlannerStateAll.serializer(), Repo.json.encodeToString(PlannerStatePost.serializer(), p), timeoutMs = 8_000)
 
     /** The opened mission's leftovers: ask, clean or keep (`POST /api/planner/settings?openedLeftovers=…`, 1.4.1; `PlannerPcSettings.ASK`…). */
     suspend fun setOpenedLeftovers(choice: String): PcAnswer<PlannerPcSettings> =

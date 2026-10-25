@@ -55,7 +55,7 @@ object ModeSwitchReset {
     fun shown(mode: String): SwitchReset? = last?.takeIf { it.to == mode && System.currentTimeMillis() - it.at in 0 until SHOWN_MS }
 
     /** Forgets the last summary (a developer check). */
-    internal fun forget() { last = null; lastPrinted = null; lastOpened = null }
+    internal fun forget() { last = null; lastPrinted = null; lastOpened = null; openedAt = 0 }
 
     /**
      * Resets what the switch to [to] at [at] owes the pilot: the device's Planner flight is [planner] (`for=`; null when
@@ -70,7 +70,8 @@ object ModeSwitchReset {
         }
         last = r
         // the flight the switch reset for is the one a new-mission check compares the next PRINT or Open with
-        if (to == MissionMode.EZBOARDS) r.now?.let { lastPrinted = it } else planner?.let { lastOpened = it }
+        if (to == MissionMode.EZBOARDS) r.now?.let { lastPrinted = it }
+        else planner?.let { if (lastOpened?.sameFlight(it) != true) openedAt = System.currentTimeMillis(); lastOpened = it }
         return r
     }
 
@@ -97,8 +98,17 @@ object ModeSwitchReset {
     @Volatile private var lastPrinted: LedgerMission? = null
     @Volatile private var lastOpened: LedgerMission? = null
 
+    /** When (this PC's clock) the flight [lastOpened] names was first opened in the Planner in WDP mode; 0 before any. */
+    @Volatile private var openedAt: Long = 0
+
+    /**
+     * WDP mode's flight as the Planner last opened it, and when it was first opened ([openedAt]), for the Kneeboards
+     * page's "written for this mission" ([KneeboardPrint.missionSince]); null before any open since the program started.
+     */
+    internal fun openedFlight(): Pair<LedgerMission, Long>? = lastOpened?.let { m -> openedAt.takeIf { it > 0 }?.let { m to it } }
+
     /** Forgets which flights were last looked at, as a restart of the program does (a developer check). */
-    internal fun forgetFlights() { lastPrinted = null; lastOpened = null }
+    internal fun forgetFlights() { lastPrinted = null; lastOpened = null; openedAt = 0 }
 
     /**
      * EZBoards mode: BMS printed a briefing (the tick saw a new `briefing.txt`), or the program started with one. A
@@ -137,6 +147,8 @@ object ModeSwitchReset {
         else {
             val prev = lastOpened
             lastOpened = planner
+            // on this PC's clock, as the page files' times are: when the flight now planned was first opened
+            if (prev == null || !prev.sameFlight(planner)) openedAt = System.currentTimeMillis()
             if (prev != null && prev.sameFlight(planner)) null
             else {
                 var dropped: String? = null

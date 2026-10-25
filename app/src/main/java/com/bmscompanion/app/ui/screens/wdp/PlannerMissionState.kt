@@ -11,6 +11,7 @@ import com.bmscompanion.app.data.mission.CampKind
 import com.bmscompanion.app.data.mission.CampRef
 import com.bmscompanion.app.data.mission.MissionData
 import com.bmscompanion.app.data.mission.MissionLink
+import com.bmscompanion.app.data.mission.PlannerSync
 
 /**
  * What the Planner is planning from (R3-PLAN A1): the printed briefing and the cartridge, as by default, or one flight
@@ -77,7 +78,7 @@ object PlannerMissionState {
      * one; [theater] the save's theater-definition name; [precision] the answer to the Precision STPT question. All of
      * it changes at once, so the pages see one new mission.
      */
-    fun plan(theater: String, ref: CampRef, flight: CampFlight, seat: Int, file: CampFile? = null, precision: Boolean? = null) {
+    fun plan(theater: String, ref: CampRef, flight: CampFlight, seat: Int, file: CampFile? = null, precision: Boolean? = null, adopted: Boolean = false) {
         // another flight than the one planned (Open mission… or Pick a flight): the opened mission starts with clean
         // lines and PPTs when the PC's setting says so (PlannerLeftovers.planned); the same flight again (Reload from
         // BMS, a seat changed) keeps them
@@ -98,12 +99,56 @@ object PlannerMissionState {
         }
         // what Settings → Auto load last mission on startup opens again
         PlannerSettings.rememberLast(ref, this.seat)
+        // taken from the PC (PlannerShared, 1.4.2): the device that planned it already had the PC clean what it cleans,
+        // and the flight is the PC's already
+        if (adopted) return
         // what the Planner saved into the cartridge for another flight and is still there: asked about once
         PlannerLeftovers.planned(clean = another)
+        PlannerSync.changed(PlannerSync.FLIGHT, strong = true)
+    }
+
+    /**
+     * What every device plans from, as the PC keeps it ([PlannerSync.FLIGHT], 1.4.2): the source, the save and flight
+     * as the PC names them, the seat and the Precision STPT answer. Never the flight's data: a device reads that from
+     * the PC itself ([adoptShared]).
+     */
+    @kotlinx.serialization.Serializable
+    class Shared(
+        val source: String = BRIEFING,
+        val theater: String? = null,
+        val ref: CampRef? = null,
+        val seat: Int = 0,
+        val precision: Boolean? = null,
+        val file: CampFile? = null,
+    )
+
+    /** This device's [Shared], as JSON. */
+    fun sharedValue(): String = com.bmscompanion.app.data.Repo.json.encodeToString(
+        Shared.serializer(),
+        if (fromSave && ref != null) Shared(SAVE, theater, ref, seat, precision, file) else Shared(),
+    )
+
+    /**
+     * Takes another device's [Shared] ([v]): the printed briefing again, or that save's flight read from the PC and
+     * planned from the same seat with the same answer — never asking the Precision STPT question again, never asking
+     * the PC to clean what it cleaned when the flight was first planned. False when the flight could not be read.
+     */
+    suspend fun adoptShared(v: String): Boolean {
+        val s = runCatching { com.bmscompanion.app.data.Repo.json.decodeFromString(Shared.serializer(), v) }.getOrNull() ?: return false
+        val r = s.ref
+        if (s.source != SAVE || r == null) {
+            if (fromSave) backToBriefing(share = false)
+            return true
+        }
+        val f = flight
+        if (fromSave && f != null && ref == r && theater.equals(s.theater ?: r.theater, true) && seat == s.seat && precision == s.precision) return true
+        val read = runCatching { MissionLink.campaignFlight(r) }.getOrNull()?.value ?: return false
+        plan(s.theater ?: r.theater, r, read, s.seat, s.file, s.precision, adopted = true)
+        return true
     }
 
     /** **Back to BMS briefing**: the Planner plans the printed briefing and the cartridge again. */
-    fun backToBriefing() {
+    fun backToBriefing(share: Boolean = true) {
         Snapshot.withMutableSnapshot {
             source = BRIEFING
             theater = null
@@ -116,6 +161,7 @@ object PlannerMissionState {
             notes = emptyList()
             changes++
         }
+        if (share) PlannerSync.changed(PlannerSync.FLIGHT, strong = true)
     }
 
     /**

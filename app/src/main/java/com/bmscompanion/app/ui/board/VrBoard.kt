@@ -497,6 +497,8 @@ private fun BoardMap(env: MissionEnv, slot: BoardSlot, step: Int = -1) {
         // the mission's threats come under "sams" (MissionPicture): the briefed sites and the PPTs, nothing else
         MapLayers.follow = slot.options["follow"] != "0"
         MapLayers.save()
+        // the jet's size (0/1/2 = Small/Medium/Large) for this board, not saved over the device's own choice
+        com.bmscompanion.app.ui.components.OwnJetLook.board(slot.options["jet"])
     }
     // The zoom the board opens at — and, once the pilot turns a page, the step they have zoomed to. There is
     // nothing in a headset to pinch with, so the page binding is the zoom control.

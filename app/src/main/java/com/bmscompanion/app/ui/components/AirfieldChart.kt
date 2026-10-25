@@ -1523,7 +1523,7 @@ private fun DrawScope.drawRoutePath(r: AfRoute, path: List<Int>, highlight: IntR
     }
 }
 
-private fun DrawScope.aircraft(c: Offset, angle: Float, colour: Color, len: Float, edge: Color?, thin: Boolean = false) {
+private fun DrawScope.aircraft(c: Offset, angle: Float, colour: Color, len: Float, edge: Color?, thin: Boolean = false, edgeWidth: Float = if (thin) 0.5f else 1f) {
     val wing = len * 0.78f
     val path = Path()
     path.moveTo(c.x, c.y - len)
@@ -1533,7 +1533,7 @@ private fun DrawScope.aircraft(c: Offset, angle: Float, colour: Color, len: Floa
     path.close()
     rotate(angle, c) {
         drawPath(path, colour)
-        if (edge != null) drawPath(path, edge, style = Stroke(width = if (thin) 0.5f else 1f))
+        if (edge != null) drawPath(path, edge, style = Stroke(width = edgeWidth))
     }
 }
 
@@ -1557,12 +1557,16 @@ private fun DrawScope.drawYou(you: Offset, heading: Double?, v: ChartView, inks:
     val c = v.at(you.x.toDouble(), you.y.toDouble())
     // The halo says "you are here" on a field two miles across. On a deck a hundred feet either side of the jet is
     // a third of the ship, so it is drawn to the aircraft instead.
-    drawCircle(inks.you, radius = if (v.deck) max(5f, v.ft(40.0)) else max(8f, v.ft(120.0)), center = c, alpha = 0.22f)
+    // The floors follow the device's jet size (OwnJetLook, the map's Jet size): zoomed out over a whole field the
+    // jet was 7 px and lost among the spots; close in it is still drawn to the chart's own scale.
+    val f = OwnJetLook.chartFactor
+    val floor = max(7f, 5.dp.toPx()) * f
+    drawCircle(inks.you, radius = if (v.deck) max(5f, v.ft(40.0)) else max(floor * 1.4f, v.ft(120.0)), center = c, alpha = 0.22f)
     // On a deck the jet is drawn at its own size — an F-16 is fifty feet long — because there the chart knows where
     // it stands to within a few feet, and a symbol twice its size covers the wire or the catapult it is on.
-    val len = if (v.deck) max(6f, v.ft(32.0)) else max(7f, v.ft(84.0))
-    if (heading != null) aircraft(c, v.screenAngle(heading), inks.you, len, if (v.deck) Color.Black else inks.ground, v.deck)
-    else drawCircle(inks.you, radius = max(4f, v.ft(70.0)), center = c)
+    val len = if (v.deck) max(6f, v.ft(32.0)) else max(floor, v.ft(84.0))
+    if (heading != null) aircraft(c, v.screenAngle(heading), inks.you, len, if (v.deck) Color.Black else inks.ground, v.deck, edgeWidth = if (v.deck) 0.5f else max(1f, len / 9f))
+    else drawCircle(inks.you, radius = max(floor * 0.6f, v.ft(70.0)), center = c)
 }
 
 // ---------------------------------------------------------------- furniture of the chart itself

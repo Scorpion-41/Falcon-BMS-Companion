@@ -21,8 +21,9 @@ import kotlin.math.sqrt
 
 /** AWACS layer settings, remembered across launches. */
 object AwacsSettings {
-    private fun b(key: String, def: Boolean) = mutableStateOf(Repo.getInt("aw_$key", if (def) 1 else 0) == 1)
-    private fun i(key: String, def: Int) = mutableIntStateOf(Repo.getInt("aw_$key", def))
+    // (each follows another device's change too: MissionSync, PrefWatch)
+    private fun b(key: String, def: Boolean) = com.bmscompanion.app.data.mission.prefState("aw_$key") { Repo.getInt("aw_$key", if (def) 1 else 0) == 1 }
+    private fun i(key: String, def: Int) = com.bmscompanion.app.data.mission.prefIntState("aw_$key") { Repo.getInt("aw_$key", def) }
 
     var friendlies by b("fr", true)
     var hostiles by b("ho", true)
@@ -38,7 +39,7 @@ object AwacsSettings {
     var threats by b("th", false)
     var commitRings by b("cm", false)
     /** speed vector length: where the contact will be in this many minutes at its ground speed (0 = off; 1–3) */
-    var vectorMin by mutableIntStateOf(Repo.getInt("aw_vm", 1).coerceIn(0, 3))
+    var vectorMin by com.bmscompanion.app.data.mission.prefIntState("aw_vm") { Repo.getInt("aw_vm", 1).coerceIn(0, 3) }
     var bullRingNm by i("br", 20)
     var groupNm by i("gn", 5)
     var commitNm by i("cn", 30)

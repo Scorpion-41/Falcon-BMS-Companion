@@ -28,6 +28,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.bmscompanion.app.data.mission.prefIntState
+import com.bmscompanion.app.data.mission.prefState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -85,21 +87,22 @@ internal enum class WxOverlay(val label: String) {
  * third opacity, nothing written in the cells, pressure in inHg.
  */
 internal object WxGenLook {
-    var display by mutableStateOf(WxDisplay.entries.getOrNull(Repo.getInt("wx_gen_display", 1)) ?: WxDisplay.TYPE)
+    // (each follows another device's change too: MissionSync, PrefWatch)
+    var display by prefState("wx_gen_display") { WxDisplay.entries.getOrNull(Repo.getInt("wx_gen_display", 1)) ?: WxDisplay.TYPE }
         private set
-    var overlay by mutableStateOf(WxOverlay.entries.getOrNull(Repo.getInt("wx_gen_overlay", 0)) ?: WxOverlay.NONE)
+    var overlay by prefState("wx_gen_overlay") { WxOverlay.entries.getOrNull(Repo.getInt("wx_gen_overlay", 0)) ?: WxOverlay.NONE }
         private set
     /** which of the ten wind levels the barbs show, 0 being the surface */
-    var windLevel by mutableIntStateOf(Repo.getInt("wx_gen_wind_level", 0).coerceIn(0, 9))
+    var windLevel by prefIntState("wx_gen_wind_level") { Repo.getInt("wx_gen_wind_level", 0).coerceIn(0, 9) }
         private set
-    var opacity by mutableFloatStateOf(Repo.getInt("wx_gen_opacity", 33).coerceIn(0, 100) / 100f)
+    var opacity by prefState("wx_gen_opacity") { Repo.getInt("wx_gen_opacity", 33).coerceIn(0, 100) / 100f }
         private set
-    var mb by mutableStateOf(Repo.getInt("wx_gen_mb", 0) == 1)
+    var mb by prefState("wx_gen_mb") { Repo.getInt("wx_gen_mb", 0) == 1 }
         private set
-    var grid by mutableStateOf(Repo.getInt("wx_gen_grid", 0) == 1)
+    var grid by prefState("wx_gen_grid") { Repo.getInt("wx_gen_grid", 0) == 1 }
         private set
     /** the light chart style under the weather, which is how BMS's own 2D planning map looks */
-    var bms by mutableStateOf(Repo.getInt("wx_bms_map", 1) == 1)
+    var bms by prefState("wx_bms_map") { Repo.getInt("wx_bms_map", 1) == 1 }
         private set
 
     fun display(v: WxDisplay) { display = v; Repo.putInt("wx_gen_display", v.ordinal) }

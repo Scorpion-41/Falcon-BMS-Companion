@@ -1458,6 +1458,39 @@ class DataCardWiring : WdpWiring, WdpControlContent {
         m["txtJoker.tip"] = "Joker fuel (lb): bingo + 500, as BMS's manual defines it (User Manual 10.3.4). Type your own to keep it; empty the box for bingo + 500 again. The card's only: the cartridge has no joker."
     }
 
+    /** The figures [fillFuelStates] last put in the two boxes (bingo, joker), so a second fill does not ask about them. */
+    private var fuelFilled: Pair<String, String>? = null
+
+    /** The BINGO and JOKER boxes as they are now. */
+    fun fuelBoxes(): Pair<String, String> = plan.text("txtBingo").trim() to plan.text("txtJoker").trim()
+
+    /**
+     * The boxes holding a figure the pilot typed (or a file loaded) that [fillFuelStates] would replace with
+     * [bingo]/[joker]: the Fuel plan card asks before it fills them. Empty when nothing of the pilot's would be lost.
+     */
+    fun fuelTypedOver(bingo: Int, joker: Int): List<String> {
+        val (b, j) = fuelBoxes()
+        val filled = fuelFilled
+        return buildList {
+            if ("txtBingo" in typed && b.isNotEmpty() && b != bingo.toString() && b != filled?.first) add("Bingo $b")
+            if ("txtJoker" in typed && j.isNotEmpty() && j != joker.toString() && j != filled?.second) add("Joker $j")
+        }
+    }
+
+    /**
+     * The Mission section's Fuel plan into the card (after 1.4.1): BINGO and JOKER typed as the pilot would type them —
+     * shown as typed, the bingo counted in the entries Save to DTC writes ([unsavedEntries]), the joker kept as the
+     * pilot's (no longer bingo + 500 by itself). The caller asks first where [fuelTypedOver] names a box.
+     */
+    fun fillFuelStates(bingo: Int, joker: Int) {
+        val p = plan
+        p.type("txtBingo", bingo.toString()); typed += "txtBingo"
+        p.type("txtJoker", joker.toString()); typed += "txtJoker"
+        autoJoker = null
+        fuelFilled = bingo.toString() to joker.toString()
+        version++
+    }
+
     /**
      * **Fixed (D95):** WDP's `FillTanker` lists only the tankers on station while the flight is up, so where the save
      * holds none for that window — BMS plans tankers a few hours ahead, and a flight later in the day finds the
@@ -2498,6 +2531,7 @@ class DataCardWiring : WdpWiring, WdpControlContent {
     override fun onValue(name: String, value: String) {
         try { handleValue(name, value) } catch (e: Exception) { /* WDP would stop here; the phone must not */ }
         version++
+        onPilotChange?.let { runCatching { it() } }
     }
 
     private fun handleValue(name: String, value: String) {
@@ -2586,6 +2620,7 @@ class DataCardWiring : WdpWiring, WdpControlContent {
             if (name in SIDE_BUTTONS) WdpDialogs.message("Weapon Delivery Planner", "This did not work: " + (e.message ?: e::class.simpleName) + ".")
         }
         version++
+        onPilotChange?.let { runCatching { it() } }
     }
 
     private fun handleClick(name: String) {
@@ -2920,6 +2955,45 @@ class DataCardWiring : WdpWiring, WdpControlContent {
             return listOfNotNull(e.alowAglFt, e.mslFloorFt, e.bingoLbs, e.laserTgp, e.laserLst, e.attackProfile).size +
                 (e.ewsProgramNames?.count { it != null } ?: 0) + bp(e.profile1) + bp(e.profile2)
         }
+
+    // ---------------------------------------------------------------- on every device (PlannerSessionSync, 1.4.2)
+
+    /** Told after every change the pilot makes on the card (a box typed, a press): the entries go to the PC. */
+    var onPilotChange: (() -> Unit)? = null
+
+    /** The card has its mission (a briefing or a save's flight): another device's entries can be typed onto it. */
+    internal val hasMission: Boolean get() = lastMission?.let { it.briefing != null || it.flight != null } == true
+
+    /**
+     * The boxes the pilot typed on the card and the Briefing page, by name: "<prose mark>\u001F<text>" (the mark only for
+     * a line of the Briefing page's prose, [proseMarks]), as [PlannerSessionSync] sends them to the other devices.
+     */
+    internal fun typedEntries(): Map<String, String> =
+        typed.sorted().associateWith { n -> (proseMarks[n]?.toString() ?: "") + "\u001F" + plan.text(n) }
+
+    /**
+     * Another device's entry for [box] ([typedEntries]'s form): typed here as it was there — a line of prose set with
+     * its mark, any other box through its own handlers and left, as the card types back what the pilot typed when the
+     * same briefing comes again ([onMission]). False when it could not be taken.
+     */
+    internal fun takeTyped(box: String, entry: String): Boolean {
+        val mark = entry.substringBefore('\u001F', "").toIntOrNull()
+        val text = entry.substringAfter('\u001F', entry)
+        return try {
+            if (proseOf(box) != null) {
+                plan.type(box, text)
+                proseMarks[box] = mark ?: BriefingLines.NEW
+                typed += box
+            } else {
+                handleValue(box, text)
+                plan.leave(box)
+                if (box.startsWith("txt")) typed += box
+                if (box == "txtBingo") fuelStates()
+            }
+            version++
+            true
+        } catch (e: Exception) { false }
+    }
 
     /**
      * The cartridge as a save has just written it ([DtcWiring.onSaved]): the card measures its entries against that

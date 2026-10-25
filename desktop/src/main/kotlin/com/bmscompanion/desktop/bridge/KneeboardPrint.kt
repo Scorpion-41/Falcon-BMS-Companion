@@ -126,7 +126,9 @@ object KneeboardPrint {
         val side = when (req.query["side"]?.uppercase()) { "L" -> 0; "R" -> 1; else -> return error("Which half? side must be L or R.", 400) }
         val w = (req.query["w"]?.toIntOrNull() ?: 256).coerceIn(32, 1024)
         val at = here() ?: return error(NO_BMS, 409)
-        val (jpeg, why) = thumb(at, n, side, w)
+        // twin=1: the page's KoreaObj_HiRes twin, which BMS shows in the cockpit when there is one (the page itself if not)
+        val twin = req.query["twin"].let { it == "1" || it.equals("true", true) }
+        val (jpeg, why) = thumb(at, n, side, w, twin)
         return if (jpeg != null) ApiResponse(200, "image/jpeg", jpeg) else error(why ?: "No picture.", 409)
     }
 
@@ -335,7 +337,11 @@ object KneeboardPrint {
             if (rel != f.name) rel else "${ez.name}\\${f.name}"
         }
         val pages = (1..PAGES).map { n -> slot(at, n, claims) }
+        val since = runCatching { missionSince() }.getOrNull()
         return KbPrintState(
+            since = since?.at ?: 0L,
+            sinceFrom = since?.from,
+            mission = since?.label,
             folder = at.folderLabel,
             theater = at.theater?.name,
             twin = (1..PAGES).any { at.twin(it) != null },
@@ -348,6 +354,54 @@ object KneeboardPrint {
         )
     }
 
+    /** When the mission now planned began ([KbPrintState.since]): the time, which event it was, and the flight's name. */
+    class Since(val at: Long, val from: String, val label: String?)
+
+    /** The printed flight, and the first PRINT of it this program saw (a PRINT of the same flight again keeps it). */
+    private var printedFlight: com.bmscompanion.app.data.mission.LedgerMission? = null
+    private var printedFirst = 0L
+    private val sinceLock = Any()
+
+    /**
+     * When the mission now planned began, on this PC's clock (the page files' times are): what the Kneeboards page's
+     * In the cockpit view marks a page by — written at or after it, this mission's; before it, an earlier mission's.
+     * EZBoards mode: the first PRINT of the flight printed now (EZBoards writes at that PRINT, Upd Kneeboard after it).
+     * WDP mode: the earliest of the Planner's first open of its flight ([ModeSwitchReset.openedFlight]), the Populate of
+     * that flight and a PRINT of that same flight. Null when no mission is known. Never throws.
+     */
+    fun missionSince(): Since? {
+        val theater = Bridge.install.theater
+        val printedAt = runCatching { Bridge.printedAt() }.getOrDefault(0L)
+        val brief = if (printedAt > 0) runCatching {
+            com.bmscompanion.app.data.mission.LedgerMission.ofBriefing(Bridge.currentBriefing(), printedAt, theater)
+        }.getOrNull() else null
+        // (its own lock: the object's is held by a print for seconds, and the state must not wait for it)
+        val firstPrint = synchronized(sinceLock) {
+            if (printedAt <= 0) { printedFlight = null; printedFirst = 0L; 0L }
+            else {
+                val prev = printedFlight
+                if (prev == null || brief == null || !prev.sameFlight(brief) || printedFirst <= 0 || printedAt < printedFirst) printedFirst = printedAt
+                printedFlight = brief
+                printedFirst
+            }
+        }
+        if (MissionSource.mode() != com.bmscompanion.app.data.mission.MissionMode.WDP) {
+            return if (firstPrint > 0) Since(firstPrint, KbPrintState.SINCE_PRINTED, brief?.label) else null
+        }
+        val opened = runCatching { ModeSwitchReset.openedFlight() }.getOrNull()
+        val pop = runCatching { MissionSource.populated() }.getOrNull()
+        val popFlight = com.bmscompanion.app.data.mission.LedgerMission.ofPopulated(pop)
+        // the flight planned now: the Planner's last open, else the last Populate's
+        val now = opened?.first ?: popFlight ?: return null
+        val times = listOfNotNull(
+            opened?.takeIf { it.first.sameFlight(now) }?.let { it.second to KbPrintState.SINCE_OPENED },
+            pop?.takeIf { it.at > 0 && popFlight != null && popFlight.sameFlight(now) }?.let { it.at to KbPrintState.SINCE_POPULATED },
+            brief?.takeIf { firstPrint > 0 && it.sameFlight(now) }?.let { firstPrint to KbPrintState.SINCE_PRINTED },
+        )
+        val first = times.minByOrNull { it.first } ?: return null
+        return Since(first.first, first.second, now.label)
+    }
+
     /** Who made each half of page [n] now, from the file alone; null when there is no such file or it cannot be read. */
     fun ownersOf(at: Place, n: Int): Owners? = runCatching {
         val f = at.page(n)?.takeIf { it.isFile } ?: return@runCatching null
@@ -358,7 +412,13 @@ object KneeboardPrint {
     }.getOrNull()
 
     private fun slot(at: Place, n: Int, claims: Set<String>): KbSlot {
-        val f = at.page(n)
+        val main = slotOf(at, n, at.page(n), claims)
+        // the twin BMS shows instead, as it is (the Kneeboards page's In the cockpit view reads this one)
+        val twin = at.twin(n)?.let { slotOf(at, n, it, claims) }
+        return if (twin == null) main else main.copy(hiRes = twin)
+    }
+
+    private fun slotOf(at: Place, n: Int, f: File?, claims: Set<String>): KbSlot {
         val base = KbSlot(n = n, file = pageName(n), ezLeft = "${n}L" in claims, ezRight = "${n}R" in claims)
         if (f == null || !f.isFile) return base.copy(left = KbOwner.MISSING, right = KbOwner.MISSING, missing = true)
         val head = ByteArray(Dds.HEADER)
@@ -366,7 +426,8 @@ object KneeboardPrint {
         val read = runCatching { RandomAccessFile(f, "r").use { it.readFully(head, 0, minOf(Dds.HEADER.toLong(), length).toInt()) } }
         if (read.isFailure) return base.copy(modified = f.lastModified(), problem = why(read.exceptionOrNull()!!, f, at))
         val info = Dds.header(if (length >= Dds.HEADER) head else head.copyOf(length.toInt()), length)
-        val o = owners(f, info, at.shippedPage(n))
+        // a twin is another size than BMS's shipped copy: judged by the layout BMS's own pages have
+        val o = owners(f, info, at.shippedPage(n)?.takeIf { f == at.page(n) || it.length() == length })
         return base.copy(
             format = info.format, mips = info.levels, size = info.width, left = o.left, right = o.right,
             modified = f.lastModified(), leftKind = o.leftKind, rightKind = o.rightKind,
@@ -396,6 +457,8 @@ object KneeboardPrint {
         KbKind.SCHEDULE, KbKind.ROUTE_MAP_DARK, KbKind.TARGET_PICTURES,
         // 1.4.1: the Noteboard
         KbKind.NOTES, KbKind.NOTES_2,
+        // 1.4.2: the weather map
+        KbKind.WEATHER_MAP,
     )
 
     private val TAG_RE = Regex("""^$TAG(\S*)(?: L([a-z])([0-9a-z-]))?(?: R([a-z])([0-9a-z-]))?""")
@@ -639,24 +702,50 @@ object KneeboardPrint {
 
     // ================================================================ pictures
 
+    /** Up to [THUMB_BYTES] of pictures, by file path, size, time, half and width: a file is decoded again only when it changes. */
+    private const val THUMB_BYTES = 24L shl 20
+    private var thumbBytes = 0L
     private val thumbs = object : LinkedHashMap<String, ByteArray>(64, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ByteArray>?) = size > 64
+    }
+    /** Two files decoded at a time: a page of html_brief's is 16 MB, and a page of thumbnails asks for 32 halves at once. */
+    private val decodeGate = java.util.concurrent.Semaphore(2)
+
+    private fun keepThumb(key: String, jpeg: ByteArray) = synchronized(thumbs) {
+        thumbs.put(key, jpeg)?.let { thumbBytes -= it.size }
+        thumbBytes += jpeg.size
+        val it = thumbs.entries.iterator()
+        while ((thumbBytes > THUMB_BYTES || thumbs.size > 256) && it.hasNext()) {
+            val e = it.next()
+            if (e.key == key) continue
+            thumbBytes -= e.value.size
+            it.remove()
+        }
     }
 
     /**
      * A JPEG of what one half of page [n] holds now ([side] 0 left, 1 right), [w] pixels wide at the page's visible
      * shape (2:3). Decoded from the smallest mip level that is still wide enough. The picture, or null and the reason.
+     * [twin]: the page's `KoreaObj_HiRes` twin when there is one (what BMS shows in the cockpit).
      */
-    fun thumb(at: Place, n: Int, side: Int, w: Int): Pair<ByteArray?, String?> {
+    fun thumb(at: Place, n: Int, side: Int, w: Int, twin: Boolean = false): Pair<ByteArray?, String?> {
         at.error?.let { return null to it }
-        val file = at.page(n)
+        val file = (if (twin) at.twin(n) else null) ?: at.page(n)
         if (file == null || !file.isFile) return null to "Page $n (${pageName(n)}) does not exist in this theater's kneeboard folder."
         val key = "${file.path}|${file.length()}|${file.lastModified()}|$side|$w"
         synchronized(thumbs) { thumbs[key]?.let { return it to null } }
         return try {
-            val img = halfImage(file.readBytes(), side, w) ?: return null to "${file.name} cannot be shown: ${Dds.header(file.readBytes()).unreadable}."
-            val jpeg = jpeg(img)
-            synchronized(thumbs) { thumbs[key] = jpeg }
+            decodeGate.acquire()
+            val jpeg = try {
+                synchronized(thumbs) { thumbs[key] }
+                    ?: run {
+                        val bytes = file.readBytes()
+                        val img = halfImage(bytes, side, w) ?: return null to "${file.name} cannot be shown: ${Dds.header(bytes).unreadable}."
+                        jpeg(img)
+                    }
+            } finally {
+                decodeGate.release()
+            }
+            keepThumb(key, jpeg)
             jpeg to null
         } catch (e: Throwable) {
             null to why(e, file, at)

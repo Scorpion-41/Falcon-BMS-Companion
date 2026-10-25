@@ -145,7 +145,8 @@ var vrBoardsPane: (@Composable () -> Unit)? = null
 /** What the pilot has chosen to see. Kept in the prefs file, which an update never rewrites. */
 object MissionTabPrefs {
     private const val AWACS_KEY = "mission_tab_awacs"
-    private var awacs by mutableStateOf(Repo.getInt(AWACS_KEY, 0))
+    // follows another device's choice (MissionSync); the Config switch below stays this device's (MissionPrefs)
+    private var awacs by com.bmscompanion.app.data.mission.prefState(AWACS_KEY) { Repo.getInt(AWACS_KEY, 0) }
 
     /** The AWACS page: off until it is asked for, on every device and every install. */
     var showAwacs: Boolean

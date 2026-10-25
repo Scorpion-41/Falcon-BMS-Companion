@@ -328,6 +328,7 @@ class HadbWiring(
             p.guard { p.programFlow(true) }
             AttackFocus.touch(WdpPage.HADB)
             changed()
+            pilot()
         }.open()
     }
 
@@ -342,6 +343,7 @@ class HadbWiring(
             q.guard { q.getCoords() }
             AttackFocus.touch(WdpPage.HADB)
             changed()
+            pilot()
         }.open()
     }
 
@@ -409,10 +411,45 @@ class HadbWiring(
     // A change of the attack's inputs, or its Save to DTC, makes this the Planner's current attack (AttackFocus).
     override fun onValue(name: String, value: String) {
         try { handleValue(name, value); if (AttackSelection.countsValue(name)) AttackFocus.touch(WdpPage.HADB) } catch (e: Exception) { wdpError("HADB", e) }
+        pilot()
     }
     override fun onClick(name: String) {
         try { handleClick(name); AttackSelection.clicked(WdpPage.HADB, name) } catch (e: Exception) { wdpError("HADB", e) }
+        pilot()
     }
+
+    // ---------------------------------------------------------------- on every device (PlannerSessionSync, 1.4.2)
+
+    /** Told after every change the pilot makes on the page: its inputs go to the PC. */
+    var onPilotChange: (() -> Unit)? = null
+    private fun pilot() { onPilotChange?.let { runCatching { it() } } }
+    /** The page has its mission: another device's inputs can be laid on it (else its first mission would reset them). */
+    internal val hasMission: Boolean get() = mission.briefing != null || mission.flight != null
+
+    /** The page's inputs as [PlannerSessionSync] sends them: its `[HADB]` section, the IP STPT picked, the typed ELEVs. */
+    internal fun session(): Triple<String, Int?, String> =
+        Triple(plan.iniValues().entries.filter { it.value != null }.joinToString("\n") { "${it.key}=${it.value}" }, plan.ipStpt, plan.elev.export())
+
+    /** Another device's inputs ([session]): the page made again on them, the mission handed in again. False when it could not be. */
+    internal fun takeSession(ini: String, ip: Int?, elev: String): Boolean = try {
+        val old = plan.main
+        val p = newPlan(ini.split('\n').filter { '=' in it }.map { it.substringBefore('=') to it.substringAfter('=') })
+        if (!p.isLoaded) false else {
+            val m = p.main
+            m.originLat = old.originLat; m.originLong = old.originLong; m.campW = old.campW; m.campH = old.campH
+            m.enableNewTerrain = old.enableNewTerrain; m.tm = old.tm
+            runCatching { p.setCoordData() }
+            p.elev.import(elev)
+            plan = p
+            tableKey = null
+            defaultFor = mission.key
+            handleMission(mission)
+            if (plan.ipStpt != ip) plan.setIpStpt(ip)
+            plan.guard { plan.getCoords() }
+            changed()
+            true
+        }
+    } catch (e: Exception) { false }
     override fun onMission(mission: WdpMission) { try { handleMission(mission) } catch (e: Exception) { wdpError("HADB", e) } }
 }
 

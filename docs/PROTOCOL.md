@@ -68,8 +68,8 @@ The app sends the UDP datagram `BMSC_DISCOVER` to the broadcast address(es) on p
 | POST | `/api/plan` | before the two modes: on user tap (Send to Mission, now gone) | body: `PlanSend` → `PlanOverlay` |
 | POST | `/api/plan/files[?from=]` | before the two modes: Send to Mission → files on the PC | no body → `PlanOverlay` |
 | POST | `/api/plan/clear`, `/api/plan/undo` | before the two modes | `PlanOverlay` |
-| GET | `/api/kbprint/state` | when the Upd Kneeboard window opens | `KbPrintState` |
-| GET | `/api/kbprint/thumb?n=&side=L\|R&w=` | per page half shown | JPEG of what that half holds now |
+| GET | `/api/kbprint/state` | when the Upd Kneeboard window opens; every 4 s while the Kneeboards page's In the cockpit view or the Dashboard's Kneeboards card shows | `KbPrintState` |
+| GET | `/api/kbprint/thumb?n=&side=L\|R&w=[&twin=1]` | per page half shown (again only when its file changes) | JPEG of what that half holds now |
 | POST | `/api/kbprint/file` | on user tap (Print), one call per page file | body: `KbFileSend` → `KbFileResult` |
 | POST | `/api/kbprint/shipped?n=<n\|all>` | on user tap | `KbFileResult[]` — puts Falcon BMS's own shipped page back |
 | GET | `/api/notes` | when the Noteboard editor or a Kneeboards page opens, every 5 s while the editor is open, every 4 s on a VR Notes board (1.4.1) | `NotesState` (see *The Noteboard*) |
@@ -332,9 +332,14 @@ Added in 1.3.8, all additive:
   zulu date BMS's sky is at, at the file's `clock`; 0 unknown). The page's Sun & Moon is worked out on the device from these.
   `GET /api/weather/mission/map?frame=<id>` → `MissionWxMap` `{id, file, version, cols, rows, moveHeading, moveKt,
   stratusFt[], contrailFt[], type[], pressureMb[], tempC[], cloudBaseFt[], cover[], towering[], shower[], visKm[],
-  windKt[], windDeg[]}`: one value per cell row-major from the north-west, the wind ten levels per cell
-  (`cell * 10 + level`, knots and degrees from; levels 0, 3,000 … 50,000 ft), `cover` BMS's code, `shower` only from a
-  version 8 map; a frame that is not one of the last answer's is 404.
+  windKt[], windDeg[], cloudSize[], fogFt[]}`: one value per cell row-major from the north-west, the wind ten levels per cell
+  (`cell * 10 + level`, knots and degrees from; levels 0, 3,000 … 50,000 ft), `cover` BMS's code, `shower` and `fogFt`
+  (the fog layer's height, array 29) only from a version 8 map, `cloudSize` the cumulus size (array 25, 0-5; both
+  added after 1.4.1, empty from an older PC); a frame that is not one of the last answer's is 404.
+  Added after 1.4.1 (Upd Kneeboard's Weather map page): both routes take `theater=&save=&flight=` (a flight the Planner
+  has open, populated or not; `flight` "num/creator" as `/api/campaign/flight` takes it) and `printed=1` (WDP mode with
+  nothing populated: the printed briefing's save, as EZBoards mode reads it); `map` resolves `frame` against the answer to
+  the same query. Without them both answer as before.
 
 - `rwr[]`: `{sym, brg (true°), lethality (0..1), launch, lock, selected, new}`. `sym` is the BMS `RWRsymbol` id (see `Tools/RwrEmulator/Source/ScopeRenderer.cs`). The scope radius follows `clamp(lethality, 0.25, 0.8)`, like the BMS RWR emulator.
 - `navPoints[]`: `{i, type, x, y, altFt, name?, rangeNm?}`, where `type` ∈ `WP GM PO MK DL CB L1-L4 PT` (StringData `NavPoint`). PPTs (`PT`) carry `name` and `rangeNm`. From 1.3.8 (additive) the line points (`L1`-`L4`) and the bullseye (`CB`) are sent rather than dropped, and a steerpoint with offset aimpoints carries them as `oa1Brg`, `oa1RngFt`, `oa1ElevFt`, `oa2Brg`, `oa2RngFt`, `oa2ElevFt` (true degrees, feet; absent when it has none).
@@ -910,7 +915,22 @@ entering the cockpit. EZBoards, html_brief and WDP write the same files.
   `SET KNEEBOARD[F16_<n><L|R>]=` lines. `mode` (1.3.8, additive) is the Mission section's mode on the PC, `ezboards`
   or `wdp`: in WDP mode EZBoards does not run at PRINT, so the window's Mission set takes pages 1 and 2 whatever it
   claims (in EZBoards mode, the first pair it does not claim).
-- `GET /api/kbprint/thumb?n=<1-16>&side=L|R&w=<px>` → `image/jpeg`: what that half holds now.
+  For the Kneeboards page's **In the cockpit** view (1.4.1, additive): `since` (ms, the PC's clock, as the files'
+  times are; 0 = no mission known) is when the mission now planned began — EZBoards mode: the first PRINT of the flight
+  printed now (a PRINT of the same flight again keeps it); WDP mode: the earliest of the Planner's first open of its
+  flight (`POST /api/mission/opened`, or the switch into WDP mode), the Populate of that flight and a PRINT of that same
+  flight — with `sinceFrom` (`printed` / `opened` / `populated`) and `mission`, the flight's name; a page file written at
+  or after `since` is this mission's, one before it an earlier mission's (judged per file: one half printed now makes
+  the whole file this mission's). Each page's `hiRes` (additive) is the same page's `KoreaObj_HiRes` twin as it is
+  (its own owners, format and time), present only when the twin exists: BMS shows the twin in the cockpit, so the view
+  reads it (`KbCockpit.shown`). Asked every 4 s while the view or the Dashboard's Kneeboards card is on screen, and at
+  once when `/api/info` says EZBoards ran, html_brief exported, BMS printed or the Planner populated; it costs a few
+  header reads.
+- `GET /api/kbprint/thumb?n=<1-16>&side=L|R&w=<px>[&twin=1][&t=<file time>]` → `image/jpeg`: what that half holds now,
+  `w` up to 1024 (the half's full width in a 2048-pixel file; the In the cockpit viewer asks for 1024, the page cards
+  for 360, the Dashboard card for 512). `twin=1` (1.4.1, additive) reads the page's `KoreaObj_HiRes` twin when there
+  is one (else the page itself); `t` is ignored by the PC and only makes the address change with the file. The PC
+  keeps up to 24 MB of pictures by file path, size, time, half and width, and decodes two files at a time.
 - `POST /api/kbprint/file` with a body of `KbFileSend` → `KbFileResult`, one call per file. Each printed half is a
   1024×1536 PNG drawn on the device that runs the Planner, as base64; the PC scales it by 4/3 vertically into the
   file's half (1024×2048 in a 2048-pixel file). A half not sent is left as it is: its compressed blocks are copied,
@@ -979,8 +999,97 @@ the last 12 missions).
 NotesState   {key, mission?, doc?: NotesDoc, carried, error?}
 NotesDoc     {key, boards[Noteboard], keep, modified}               boards: Noteboard 1, Noteboard 2
 Noteboard    {title, blocks[NoteBlock]}
-NoteBlock    {id, type: text|laser|figures|comms|steerpoints, title, text, rows[NoteRow], max}   max: rows a comms/steerpoints block shows, 0 = all
+NoteBlock    {id, type: text|laser|figures|comms|steerpoints|fuel, title, text, rows[NoteRow], max}   max: rows a comms/steerpoints/fuel block shows, 0 = all
+             fuel (added after 1.4.1): the fuel plan, worked out on the drawing device from the mission and its own Fuel plan settings; holds nothing of its own
 NoteRow      {label, value}
+```
+
+### Planning on the PC (`/api/planner/state`, 1.4.2)
+What a pilot sets up once per mission belongs to the PC, not the device: plan on the PC, fly with a tablet, and the
+tablet finds the Planner's flight, the Upd Kneeboard plan and the Steps already there. The PC keeps the latest of each
+piece, whichever device made it, in `%APPDATA%\BMS Companion\planner-state.json` (never in the BMS folder; a temporary
+file and an atomic move); it never reads a piece's value. Pieces now: `planner.flight` (`PlannerMissionState.Shared`:
+source, theater, the save and flight as the PC names them, seat, the Precision STPT answer, the Open mission row — never
+the flight's data, which a device reads with `/api/campaign/flight`), `kneeboard.plan` (the device's `kb_print_plan`
+JSON: plan, pictures, the Target pictures choices, laidFor/madeIn, the other mode's plan), `planner.steps` (the Steps'
+mission key, ticks, saved/printed keys). Names are `[a-z0-9_.-]{1,40}`; new ones may come.
+
+- `GET /api/planner/state` → `PlannerStateAll` with every entry.
+- `POST /api/planner/state` with a `PlannerStatePost` → `PlannerStateAll` with that piece as the PC now holds it and
+  `kept`. **Which is newer is the PC's clock**: the entry's `at` is the PC's now less the post's `age` (ms by the
+  device's steady clock since the change; up to a week), so a device clock that is wrong changes nothing. A strong post
+  is kept when it is the newer or when the PC holds nothing the device has not `seen`; a `weak` one (a default the
+  device laid by itself, a mission followed) only in the second case. Not kept: `kept` false and the PC's entry, which
+  the device takes, keeping its own aside when it was the pilot's (Upd Kneeboard then offers **Use this device's
+  plan**). 400 for a body that is not one or a bad name.
+- Devices (`PlannerSync`, `PlannerShared`) post each change 0.6 s after it and sync when they link, when the Planner is
+  shown and when Upd Kneeboard reads its pages; the PC's own window is a client like the others (in-process). The first
+  sync of a run takes the PC's piece wherever the device's differs and it changed nothing yet (after a restart or a
+  reload the Planner's flight is back on its default even though the PC holds the one the device last had). A flight
+  taken from the PC is planned without asking the Precision STPT question again and without `POST /api/mission/opened`.
+  Since the Mission section syncs ([below](#the-mission-section-on-every-device-apisync-142)), a device also syncs these
+  pieces when `/api/sync` names a newer `plannerAt` (not while it types in a Planner box) and whenever it becomes active.
+
+```
+PlannerStateEntry {name, value, at, by}
+PlannerStatePost  {name, value, by, age, seen, weak}
+PlannerStateAll   {entries[PlannerStateEntry], kept, now, error?}
+```
+
+### The Mission section on every device (`/api/sync`, 1.4.2)
+Everything in the Mission section carries on from device to device by its last change: change the map's style on the
+PC, pick up the tablet, and the tablet has it; type on the DataCard in the browser and the PC's card has it. The PC
+keeps the latest value of each **key**, whichever device made it, in `%APPDATA%\BMS Companion\mission-sync.json` (never
+in the BMS folder; written at most every 2 s, a temporary file and an atomic move); it never reads a value. Two kinds of
+key:
+
+- **A preference of the Mission section**, by its own key (`map_style`, `m_route`, `own_jet_size`, `fuel_plan`,
+  `taxi_chart_night`, `wdpmap_*`, `open_<fold>` …): every key a device writes, **except** `MissionPrefs` in
+  `MissionSync.kt` — the device's hardware and display (`perf_easy`, `small_tiles`, `mfd_live`, `mfd_fps`, the VR
+  board's `kneeboard*`, `bridge_host`/`bridge_port`, `pc_*`, `files_text_size`, `taxi_sheet_pct`, `planner_steps_open`),
+  **the Dashboard** (`dash_*`, `mfd_arrange`: each device lays out its own), what a device keeps for itself
+  (`mission_epoch`, `bms_install_seen`, the sync's own `mission_sync*`/`planner_sync*`), what travels another way
+  (`kb_print_plan`, `planner_steps_state` through `/api/planner/state`; the attack and Performance pages' sections, the
+  current attack, per flight below) and other sections (Reference, Checklists, Bullseye, Config, Command). `type` is
+  `i`, `s` or `S` (a set as a JSON list); "" from a PC or browser that has not written the key this run (Android keeps
+  the type it has). `value` null = removed.
+- **A Planner page's entries, per flight** (`@…`, `flight` = a short hash every device works out alike from the
+  Planner's flight — callsign, package, flight, theater, save, seat, printed briefing): `@card/<flight>/<box>` (a DataCard
+  or Briefing page box the pilot typed: `"<prose mark>\u001F<text>"`), `@perf/<flight>/<input>`,
+  `@popup|@hadb|@toss/<flight>` (`{ini, ip, elev}`: the page's Setup.ini section, IP STPT, typed ELEVs),
+  `@focus/<flight>` (the current attack's page), `@dtc/<flight>` (`{base, text}`: the hash of the cartridge as loaded and
+  the cartridge as the DTC page would save it now), and `@nav` (`"<page>\n<window>\n<arg>"`: the Planner's page and
+  window). The newest 4,000 are kept (a cartridge's edits for the last 6 flights).
+
+Routes:
+
+- `GET /api/sync?since=<ms>[&prefix=<p>]` → `SyncAnswer` with the items changed after `since` (PC time; 0 = all),
+  only those whose key starts with `prefix` when given, `now`, and `plannerAt` (the newest `/api/planner/state` time, so
+  a device syncs the Planner's flight when it moved).
+- `POST /api/sync` with a `SyncPost` (`by` and the `changes`) → `SyncAnswer` with, for each change, the item the PC now
+  holds and in `kept` the keys whose change is now the PC's. **Which is newer is the PC's clock**, as for
+  `/api/planner/state`: an item's `at` is the PC's now less the change's `age` (up to a week); a change is kept when it
+  is the newer or when the PC holds nothing the device has not `seen`; a `weak` one (a device giving an empty store its
+  own preferences) only then. A change not kept comes back as the PC's item, which the device takes. 400 for a body that
+  is not a `SyncPost`.
+
+Devices (`MissionSync`, `MissionSyncClient`): a change is posted 0.5 s after it; the device asks every 2 s for what
+changed after the last item it had and takes it **at once** — except a box being typed in on that device (it waits
+until the box is left), a Planner entry of another flight (never; taken when the device opens that flight), a page not
+made yet or without its mission (later). **Navigation** — the Mission tab, the Weather tab's page, the Kneeboards view,
+the Files tab's file on show, the Attack tab's page (`MissionPrefs.NAV_KEYS`) and `@nav` — is taken only when the device
+**becomes active**: the app starts or links, an Android app comes to the front, a window takes the focus, a browser tab
+is shown again; the Mission section opens then if the app was elsewhere. The first poll of a run reads everything:
+preferences newer than the device last had are taken, and the Planner's entries wherever they differ (they live only
+while the app runs). A change made while the PC was away is posted with the time of the value it replaced and wins
+unless the PC has had another since. A VR board (`/kneeboard`) neither gives nor takes. The PC's own window is a client
+like the others (in-process). Off in every developer check (SelfTest); `--syncstatetest out.txt` drives three clients.
+
+```
+SyncItem    {key, value?, type, at, by}
+SyncChange  {key, value?, type, age, seen, weak}
+SyncPost    {by, changes[SyncChange]}
+SyncAnswer  {items[SyncItem], kept[key], now, plannerAt, error?}
 ```
 
 ### Files on the BMS PC (`/api/files`, 1.3.8)
@@ -1096,6 +1205,8 @@ guards as above; only `txt log ini cfg md csv json xml lst tdf b` (text), `html 
 | GET | `/api/mfd/keys` | what each of the forty OSBs is bound to in the pilot's key file → `{inFront, blocked, fromKeyFile, keys[{side, n, key}], rockers[{side, which, up, callback, key}]}`; `blocked` (1.3.8, additive): why no press can reach BMS (BMS elevated, the PC program not), else ""; `rockers` (1.3.8, additive): the sixteen rocker halves (`which` gain/sym/con/brt), `callback` the BMS callback (`SimCBEOSB_BRTDOWN_L`, `SimRadarGainUp`; empty for SYM/CON, which BMS has none for), `key` empty when it is not bound (`MfdRockerKey`) |
 | POST | `/api/acmi/clear` | moves the ACMI recordings (never `.vhs`) to the BMS PC's Recycle Bin → `{deleted, bytes}` |
 | GET | `/api/maptile?map=<id>&style=<style>&z=<0-12>&r=<row>&c=<col>` | one 512 px map tile (1.4.0) as `image/jpeg`, for the levels past the ones the apps bundle (z5 and deeper; topographic z4 and deeper): `map` a map id (`korea`, `balkans`, `hellas`, `israel`, `falklands`), `style` `relief`/`satellite`/`dark`/`chart`/`topo`, tile `r`,`c` of the 2^z × 2^z grid counted from the north-west. Drawn on the PC from Falcon BMS's own terrain (`MapTiles.kt`: the height map for every style but satellite, BMS's photoreal textures — `GlobalColorMap`, `4K`, `16K`, `Hires/Day` — for satellite), read only; kept in the PC's memory (64 MB, least recently used dropped) and sent with `Cache-Control: max-age=86400` (the only API answer a browser may cache). 404 `{error}` with the reason when the theater's terrain is not on this PC or a file cannot be read; the map then shows the deepest bundled level enlarged |
+| GET | `/api/maptile?map=<id>&style=bms2d[&theater=<app theater id>]&z=<0-12>&r=&c=` | (additive) the **BMS chart** style: Falcon BMS's own 2D campaign map (`BIG_MAP_ID` of the theater's `CampMap.idx/.rsc`, under its `artdir`, else `Data\Art\Resource`), read at run time and never shipped (`command/CampMap2D.kt`): the whole campaign square, north up, linearly (the same square as every other style); the picture memory-mapped, level `nativeZ` (16,384 px → 5, Korea 2012's 4,096 → 3) copied, coarser ones box-averaged, two finer ones enlarged, deeper 404. `theater` picks the theater's own chart (KTO and Korea 2012 share a terrain, not a chart); without it, the theater BMS is set to when it is on that terrain, else the first of `/api/campmap/info`'s `maps`. JPEG q90, 32 MB in memory, the same caching as the other styles |
+| GET | `/api/campmap/info` | (additive) which theaters have a BMS chart → `BmsChartList` `{maps: [BmsChartMap], theaters: [BmsChartMap]}`, `BmsChartMap` = `{map, theater, name, nativeZ, width}`; `maps` holds one per map id (the chart a map shows when it names no theater). Devices offer the "BMS chart" style (`bms2d`, `MapBase.BmsChart`) only while `maps` is not empty; read once a minute until it answers, then every ten |
 | GET | `/api/radio?since=<seq>` | the radio calls from BMS's debug log after `since` (0 = all kept) → `RadioLog` (see *The radio*) |
 | POST | `/api/radio/cleanup?on=1\|0&keep=<n>&days=1\|0` | the old-debug-log clean-up's settings (`bridge-settings.json` `RadioLogCleanup`, `RadioLogKeep`, `RadioLogKeepDays`; nothing is deleted) → `RadioLogStatus` |
 | POST | `/api/radio/cleanup/now` | moves BMS's old debug logs to the Recycle Bin now (the same rule as the automatic run) → `RadioLogStatus`, its `cleanup.error` the reason when it could not; 409 in a developer run unless the logs folder is a copy |

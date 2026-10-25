@@ -63,7 +63,8 @@ object FilesHtml {
         fun lastChar(): Char? = target().toAnnotatedString().text.lastOrNull()
         fun text(raw: String) {
             if (raw.isEmpty()) return
-            val t = decode(if (pre > 0) raw else raw.replace(Regex("\\s+"), " "))
+            // a tab inside <pre> is four blanks: a font has no glyph for it (the browser drew a box)
+            val t = decode(if (pre > 0) raw else raw.replace(Regex("\\s+"), " ")).let { if (pre > 0) it.replace("\t", "    ") else it.replace('\t', ' ') }
             val s = if (pre == 0 && (lastChar() == null || lastChar() == ' ' || lastChar() == '\n')) t.trimStart() else t
             if (s.isNotEmpty()) target().append(s)
         }

@@ -198,13 +198,38 @@ object Repo {
 
     private fun loadPrefs() {}
 
-    fun getInt(key: String, def: Int = 0) = storageGet(PREFIX + key)?.toIntOrNull() ?: def
-    fun putInt(key: String, v: Int) = storageSet(PREFIX + key, v.toString())
+    fun getInt(key: String, def: Int = 0) = storageGet(PREFIX + key)?.trim()?.toIntOrNull() ?: def
+    fun putInt(key: String, v: Int) = put(key, v.toString(), "i")
     fun getString(key: String): String? = storageGet(PREFIX + key)
-    fun putString(key: String, v: String?) = storageSet(PREFIX + key, v)
+    fun putString(key: String, v: String?) = put(key, v, "s")
     fun getStringSet(key: String): Set<String> =
         getString(key)?.let { runCatching { json.decodeFromString(stringList, it).toSet() }.getOrNull() }.orEmpty()
-    fun putStringSet(key: String, v: Set<String>) = storageSet(PREFIX + key, json.encodeToString(stringList, v.toList()))
+    fun putStringSet(key: String, v: Set<String>) = put(key, json.encodeToString(stringList, v.toList()), "S")
+
+    private fun put(key: String, v: String?, type: String) {
+        storageSet(PREFIX + key, v)
+        types[key] = type
+        com.bmscompanion.app.data.mission.MissionSync.touched(key)
+    }
+
+    // ---------- the Mission section on every device (MissionSync) ----------
+    /** the type each key was last written as in this page's life; "" not known */
+    private val types = HashMap<String, String>()
+
+    /** what kind of device this is, in a word, for the PC's record of who changed what */
+    const val deviceKind = "Browser"
+
+    /** A preference as it is kept here: its type and its text; null when not set. */
+    fun prefRaw(key: String): Pair<String, String>? = storageGet(PREFIX + key)?.let { (types[key] ?: "") to it }
+
+    /** Every preference kept in this browser. */
+    fun prefKeys(): Set<String> = com.bmscompanion.web.storageKeys(PREFIX).split('\n').filter { it.isNotEmpty() }.toSet()
+
+    /** Another device's value, written without telling MissionSync (it is not this device's change). */
+    fun adoptPref(key: String, type: String, value: String?) {
+        storageSet(PREFIX + key, value)
+        if (type.isNotEmpty()) types[key] = type
+    }
 }
 
 object Labels {

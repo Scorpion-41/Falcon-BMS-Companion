@@ -599,11 +599,17 @@ object Bridge {
             // the radio subtitles in BMS's debug log, and deleting its old logs (RadioLog)
             path == "/api/radio" || path.startsWith("/api/radio/") -> return RadioLog.handle(req)
             // the maps' levels past the bundled ones, drawn from BMS's own terrain (MapTiles; read only)
-            path == "/api/maptile" -> return MapTiles.handle(req)
+            // (style bms2d: BMS's own 2D campaign map, read from the theater's art at run time; command.CampMap2D, read only)
+            path == "/api/maptile" -> return if (req.query["style"] == com.bmscompanion.desktop.bridge.command.CampMap2D.STYLE) com.bmscompanion.desktop.bridge.command.CampMap2D.handle(req) else MapTiles.handle(req)
+            path == "/api/campmap/info" -> return com.bmscompanion.desktop.bridge.command.CampMap2D.info()
             // pictures of the mission's targets drawn from BMS's own 3-D models (TargetPictures; read only)
             path.startsWith("/api/targets/") -> return TargetPictures.handle(req)
             // the pilot's noteboards, kept per mission in the settings folder, never in BMS's (NotesStore, 1.4.1)
             path == "/api/notes" -> return NotesStore.handle(req)
+            // the planning every device shares: the Planner's flight, the Upd Kneeboard plan, the Steps (PlannerStateStore)
+            path == "/api/planner/state" -> return PlannerStateStore.handle(req)
+            // the Mission section as every device last left it: its preferences and the Planner's entries (MissionSyncStore, 1.4.2)
+            path == "/api/sync" -> return MissionSyncStore.handle(req)
             // the Falcon BMS installs on this PC and which one is read (Installs, 1.4.1); writes only the settings
             path == "/api/bms/installs" || path.startsWith("/api/bms/installs/") -> return Installs.handle(req)
         }

@@ -107,6 +107,10 @@ data class MissionWxMap(
     val visKm: List<Float> = emptyList(),
     val windKt: List<Int> = emptyList(),
     val windDeg: List<Int> = emptyList(),
+    /** the cumulus size (array 25), a float 0 (congestus) to 5 (humilis); empty from an older PC */
+    val cloudSize: List<Float> = emptyList(),
+    /** a version 8 map's fog layer height, ft (array 29); empty for a version 5 map or from an older PC */
+    val fogFt: List<Int> = emptyList(),
 ) {
     val cells: Int get() = cols * rows
     /** every list the size the grid says (an answer that is not is not drawn) */

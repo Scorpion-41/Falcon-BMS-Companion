@@ -41,8 +41,14 @@ data class NoteBlock(
         const val COMMS = "comms"
         /** the flight plan's steerpoints (number, what, time, altitude), drawn from the mission */
         const val STEERPOINTS = "steerpoints"
+        /**
+         * the fuel plan (Bingo, Joker, playtime, the minimum and expected fuel at each steerpoint), worked out from the
+         * mission with the drawing device's Fuel plan settings (`FuelPlan`, the Mission section's Fuel plan card)
+         */
+        const val FUEL = "fuel"
 
-        val TYPES = listOf(TEXT, LASER, FIGURES, COMMS, STEERPOINTS)
+        // new types go at the end
+        val TYPES = listOf(TEXT, LASER, FIGURES, COMMS, STEERPOINTS, FUEL)
 
         /** The words for a type, in the editor's Add menu and over a block left untitled. */
         fun typeName(type: String): String = when (type) {
@@ -51,6 +57,7 @@ data class NoteBlock(
             FIGURES -> "Figures"
             COMMS -> "Comm ladder"
             STEERPOINTS -> "Steerpoints"
+            FUEL -> "Fuel plan"
             else -> type
         }
     }

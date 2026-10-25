@@ -104,13 +104,18 @@ object PlannerWindows {
         private set
 
     fun show(w: PlannerWindow, arg: String? = null) {
+        val was = open to this.arg
         this.arg = arg
         open = w
+        // where the pilot is: the other devices take it when they become active (PlannerSessionSync, 1.4.2)
+        if (was != (w to arg)) PlannerSessionSync.navChanged()
     }
 
     fun close() {
+        val was = open
         open = null
         arg = null
+        if (was != null) PlannerSessionSync.navChanged()
     }
 
     val isOpen: Boolean get() = open != null

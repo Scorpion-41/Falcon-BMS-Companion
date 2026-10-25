@@ -253,18 +253,45 @@ object Repo {
         }
     }
 
-    private fun set(key: String, v: String?) {
-        synchronized(prefs) { if (v == null) prefs.remove(key) else prefs.setProperty(key, v) }
+    private fun set(key: String, v: String?, type: String = "s") {
+        synchronized(prefs) {
+            if (v == null) prefs.remove(key) else prefs.setProperty(key, v)
+            // the type each key was written as, for another device that keeps types (Android): MissionSync
+            types[key] = type
+        }
         savePrefs()
+        com.bmscompanion.app.data.mission.MissionSync.touched(key)
     }
 
-    fun getInt(key: String, def: Int = 0) = synchronized(prefs) { prefs.getProperty(key) }?.toIntOrNull() ?: def
-    fun putInt(key: String, v: Int) = set(key, v.toString())
+    fun getInt(key: String, def: Int = 0) = synchronized(prefs) { prefs.getProperty(key) }?.trim()?.toIntOrNull() ?: def
+    fun putInt(key: String, v: Int) = set(key, v.toString(), "i")
     fun getString(key: String): String? = synchronized(prefs) { prefs.getProperty(key) }
     fun putString(key: String, v: String?) = set(key, v)
     fun getStringSet(key: String): Set<String> =
         getString(key)?.let { runCatching { json.decodeFromString(stringList, it).toSet() }.getOrNull() }.orEmpty()
-    fun putStringSet(key: String, v: Set<String>) = set(key, json.encodeToString(stringList, v.toList()))
+    fun putStringSet(key: String, v: Set<String>) = set(key, json.encodeToString(stringList, v.toList()), "S")
+
+    // ---------- the Mission section on every device (MissionSync) ----------
+    /** the type each key was last written as in this run ("i", "s", "S"); a key not written yet is "" (not known) */
+    private val types = HashMap<String, String>()
+
+    /** what kind of device this is, in a word, for the PC's record of who changed what */
+    const val deviceKind = "PC"
+
+    /** A preference as it is kept here: its type and its text; null when not set. */
+    fun prefRaw(key: String): Pair<String, String>? = synchronized(prefs) { prefs.getProperty(key)?.let { (types[key] ?: "") to it } }
+
+    /** Every preference kept here. */
+    fun prefKeys(): Set<String> = synchronized(prefs) { prefs.stringPropertyNames().toSet() }
+
+    /** Another device's value, written without telling MissionSync (it is not this device's change). */
+    fun adoptPref(key: String, type: String, value: String?) {
+        synchronized(prefs) {
+            if (value == null) prefs.remove(key) else prefs.setProperty(key, value)
+            if (type.isNotEmpty()) types[key] = type
+        }
+        savePrefs()
+    }
 }
 
 object Labels {

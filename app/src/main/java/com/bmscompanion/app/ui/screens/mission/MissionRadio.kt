@@ -190,7 +190,7 @@ private fun RadioRow(m: RadioMessage) {
 /** Whether the Radio tab shows: by itself while the PC has BMS's debug log, or always when the pilot asks. */
 object RadioTabPrefs {
     private const val KEY = "mission_tab_radio_always"
-    private var always by mutableStateOf(Repo.getInt(KEY, 0))
+    private var always by com.bmscompanion.app.data.mission.prefState(KEY) { Repo.getInt(KEY, 0) }
     var showAlways: Boolean
         get() = always == 1
         set(v) { always = if (v) 1 else 0; Repo.putInt(KEY, always) }

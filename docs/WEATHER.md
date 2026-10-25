@@ -324,6 +324,27 @@ station circles, barbs, isobars and figures are overlays on top (`MissionWxRamps
 | Temperature | −30 to 40 °C, fixed: violet, blue, cyan, green, yellow, orange, red |
 | Visibility | red under 1.6 km, orange, amber under 5, yellow under 8, green fading out past 20 km |
 
+After a second round of feedback ("the pie-chart icons add visual noise; the weather type gives the global picture;
+colour coding is the best approach") the default fill is the **Weather type** (Sunny pale blue, Fair green, Poor yellow,
+Inclement red, as ViperOps colours it; a device that had chosen a fill keeps it), the station circles are an overlay,
+**Cloud circles**, off by default, and every array of the map has a fill of its own:
+
+| Fill | Ramp |
+|---|---|
+| Weather type | the four types' colours (array 0) |
+| Cloud coverage | the Clouds ramp above (array 24); a sunny cell is clear whatever its code, the Technical Manual's rule |
+| Cloud base | ft MSL where there is cloud (array 23): red under 1,000, orange, yellow under 2,500, green about 5,000, blue fading past 9,000 |
+| Cloud size | 0 congestus deep violet to 5 humilis pale (array 25, a float) |
+| Towering cumulus | the flagged cells in orange (array 26) |
+| Shower | the flagged cells teal and hatched (version 8 array 27; a version 5 map has none, and the key says so) |
+| Fog altitude | the fog layer's height, pale haze to violet-grey, 0-12,000 ft (version 8 array 29, WDP's FogLayerZ; units taken as feet like the cloud base — **not checked in the sim**) |
+
+Under the map, the **Vertical profile** shows the weather along the route (or along a line the pilot draws on the map)
+on the map shown: a column per sample in its type's colour, the fog layer from the ground up, the cloud base with the
+cloud drawn above it, towering cumulus, rain, showers or snow under the base, the ground (the PC's height map) and the
+planned altitude. The map gives no cloud tops: the depth drawn above a base follows the cloud size (and is taller for
+towering cumulus) and is indicative only.
+
 **Smooth** (on by default): the fill is blended between the cell centres rather than drawn a block a cell. The 59 x 59
 image is scaled once, when the map, fill or level changes, onto 4 pixels a cell with the platform's best filter (a
 cubic on the PC and in the browser, bilinear on Android), and each frame draws that with a plain bilinear filter. A cubic

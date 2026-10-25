@@ -162,6 +162,8 @@ private fun BarTitle(s: WdpSheet, modifier: Modifier = Modifier) {
 @Composable
 private fun TextBar(s: WdpSheet.Text, narrow: Boolean, done: Array<(() -> Unit)?>) {
     var v by remember(s) { mutableStateOf(TextFieldValue(s.initial, TextRange(0, s.initial.length))) }
+    // the box is being typed in: another device's entry for it waits until it is left (PlannerSessionSync)
+    androidx.compose.runtime.DisposableEffect(s) { PlannerSessionSync.typingIn(s.key); onDispose { PlannerSessionSync.typingIn(null) } }
     fun ok() { WdpTouch.close(); s.commit(v.text) }
     fun next() { s.commit(v.text); WdpTouch.next(s) }
     done[0] = ::ok
@@ -174,6 +176,7 @@ private fun TextBar(s: WdpSheet.Text, narrow: Boolean, done: Array<(() -> Unit)?
 private fun NumberBar(s: WdpSheet.Number, narrow: Boolean, done: Array<(() -> Unit)?>) {
     val shown = s.value()
     var typed by remember(s) { mutableStateOf<TextFieldValue?>(null) }
+    androidx.compose.runtime.DisposableEffect(s) { PlannerSessionSync.typingIn(s.key); onDispose { PlannerSessionSync.typingIn(null) } }
     val v = typed ?: TextFieldValue(shown, TextRange(0, shown.length))
     fun commit() { typed?.text?.trim()?.takeIf { it.isNotEmpty() }?.let { s.commit(it) } }
     fun ok() { WdpTouch.close(); commit() }

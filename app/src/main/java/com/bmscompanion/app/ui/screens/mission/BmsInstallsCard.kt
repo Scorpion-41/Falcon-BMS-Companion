@@ -256,7 +256,7 @@ object BmsInstallSeen {
         if (prev != null && prev.equals(now, ignoreCase = true)) return
         runCatching { Repo.putString(KEY, now) }
         if (prev == null) return
-        runCatching { PlannerMissionState.backToBriefing() }
+        runCatching { PlannerMissionState.backToBriefing(share = false) }
         runCatching { MissionEpoch.reset() }
         // the DTC page's edits and the DataCard's entries belonged to the other install's cartridge: dropped, unasked,
         // and the new install's cartridge read (a later Save to DTC must never write them into this install's file)

@@ -106,6 +106,8 @@ fun MissionBriefingPane(env: MissionEnv, showOnMap: (MapSel, Double, Double) -> 
             PlanCard(merged)
             PackageCard(b)
             LoadoutCard(b, weapons) { w -> env.nav.go("m/weapon/${android.net.Uri.encode(w.key)}") }
+            // Bingo, Joker, playtime and the minimum fuel at each steerpoint, from the flight plan (MissionFuelPlan.kt)
+            FuelPlanCard(merged, env)
             ThreatCard(b, threats, ppts, bull, showPpt, openThreat)
             // the targets and threats drawn by the PC from BMS's own 3-D models (TargetPicturesCard.kt)
             if (!Hud.onPaper) TargetPicturesCard()

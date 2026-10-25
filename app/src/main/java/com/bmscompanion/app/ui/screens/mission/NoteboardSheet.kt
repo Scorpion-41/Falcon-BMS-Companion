@@ -35,6 +35,7 @@ import com.bmscompanion.app.data.mission.NoteBlock
 import com.bmscompanion.app.data.mission.NoteRow
 import com.bmscompanion.app.data.mission.Noteboard
 import com.bmscompanion.app.ui.theme.Hud
+import kotlin.math.roundToInt
 
 /**
  * The inks a noteboard is drawn in: [PAPER] for the cockpit kneeboard (dark ink on white, as the app's other kneeboard
@@ -171,6 +172,41 @@ private fun ColumnScope.NoteBlockView(b: NoteBlock, mission: MissionData?, inks:
                 rows += cells.joinToString(" | ") { it.first }
             }
             return "steerpoints ${list.size} rows"
+        }
+        NoteBlock.FUEL -> {
+            // the fuel plan as the Mission section's Fuel plan card works it out (MissionFuelPlan.kt), with this
+            // device's settings; a print waits for the airports and the jet's load
+            val (plan, ready) = rememberFuelPlanFor(mission)
+            if (!ready) { com.bmscompanion.app.ui.screens.wdp.KneeboardPages.PageLoading(); return null }
+            if (plan == null) return null
+            BlockHead(b, inks)
+            val play = plan.playLb
+            val figures = listOfNotNull(
+                NoteRow("Bingo", com.bmscompanion.app.data.mission.FuelPlan.lb(plan.bingoLb.toDouble())),
+                NoteRow("Joker", com.bmscompanion.app.data.mission.FuelPlan.lb(plan.jokerLb.toDouble())),
+                play?.let { NoteRow("Play" + (plan.targetAt?.let { t -> " STPT $t" } ?: ""), if (it <= 0) "none" else com.bmscompanion.app.data.mission.FuelPlan.oneDecimal(plan.playAbMin!!) + " min AB") },
+            )
+            Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                for (r in figures) FigureBox(r, false, inks, Modifier.weight(1f))
+                repeat(3 - figures.size) { Spacer(Modifier.weight(1f)) }
+            }
+            figures.forEach { rows += "${it.label} | ${it.value}" }
+            val list = if (b.max > 0) plan.rows.take(b.max) else plan.rows
+            TableRow(listOf("#" to 0.4f, "WHAT" to 1.6f, "TO GO" to 0.8f, "MIN" to 0.9f, "EXP" to 0.9f), inks, head = true)
+            list.forEachIndexed { i, r ->
+                val cells = listOf(
+                    "${r.n}" to 0.4f, (r.label + if (r.n == plan.bingoAt) " · BINGO" else "") to 1.6f,
+                    "${r.toGoNm.roundToInt()}" to 0.8f, com.bmscompanion.app.data.mission.FuelPlan.lb(r.minLb) to 0.9f,
+                    (r.expectedLb?.let { com.bmscompanion.app.data.mission.FuelPlan.lb(it) } ?: "") to 0.9f,
+                )
+                TableRow(cells, inks, band = i % 2 == 1)
+                rows += cells.joinToString(" | ") { it.first }
+            }
+            Text(
+                "Minimum at the recovery ${com.bmscompanion.app.data.mission.FuelPlan.lb(plan.recoveryLb)} lb (${if (plan.settings.imc) "IMC" else "VMC"}). Estimate: lb per nm along the route.",
+                color = inks.faint, fontSize = 7.sp, modifier = Modifier.padding(top = 2.dp),
+            )
+            return "fuel plan bingo ${plan.bingoLb} joker ${plan.jokerLb}, ${list.size} rows"
         }
     }
     return null

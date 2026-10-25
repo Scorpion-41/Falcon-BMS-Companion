@@ -189,8 +189,21 @@ object PlannerSteps {
         }
     }
 
-    private fun persist() {
-        runCatching { Repo.putString(STATE_KEY, listOf(key, ticks.joinToString(","), savedKey.orEmpty(), printedKey.orEmpty()).joinToString("\n")) }
+    /** [strong]: the pilot's doing (a tick, a save, a print); a mission followed by itself is not (PlannerSync, 1.4.2). */
+    private fun persist(strong: Boolean = true) {
+        runCatching { Repo.putString(STATE_KEY, sharedValue()) }
+        com.bmscompanion.app.data.mission.PlannerSync.changed(com.bmscompanion.app.data.mission.PlannerSync.STEPS, strong)
+    }
+
+    /** The steps as every device shares them ([com.bmscompanion.app.data.mission.PlannerSync.STEPS]): what is kept in [STATE_KEY]. */
+    fun sharedValue(): String = listOf(key, ticks.joinToString(","), savedKey.orEmpty(), printedKey.orEmpty()).joinToString("\n")
+
+    /** Takes another device's steps ([sharedValue]). */
+    fun adoptShared(v: String): Boolean {
+        runCatching { Repo.putString(STATE_KEY, v) }
+        loaded = false
+        load()
+        return true
     }
 
     /** The panel shown or hidden (the toolbar's Steps where the steps are a panel). */
@@ -213,7 +226,7 @@ object PlannerSteps {
         if (key.isNotEmpty()) { ticks.clear(); savedKey = null; printedKey = null }
         // before any mission was opened, the ticks of steps 1-3 were made for this one: they stay with it
         key = now
-        persist()
+        persist(strong = false)
     }
 
     fun tick(n: Int) {

@@ -74,6 +74,8 @@ import com.bmscompanion.app.ui.KneeboardActionsSlot
 import com.bmscompanion.app.ui.KneeboardButton
 import com.bmscompanion.app.ui.components.MapLookMenuItems
 import com.bmscompanion.app.ui.components.HudChip
+import com.bmscompanion.app.ui.components.OwnJetLook
+import com.bmscompanion.app.ui.components.drawOwnJet
 import com.bmscompanion.app.ui.components.MapProjection
 import com.bmscompanion.app.ui.components.MapState
 import com.bmscompanion.app.ui.components.Tag
@@ -104,42 +106,44 @@ private const val ATTACK_ZOOM = 110f
 // An attack's cues are drawn by the one attack drawing (ui/components/AttackDraw.kt), in its own inks.
 
 object MapLayers {
-    var follow by mutableStateOf(Repo.getInt("m_follow", 1) == 1)
-    var route by mutableStateOf(Repo.getInt("m_route", 1) == 1)
+    // every layer follows another device's change too (MissionSync, PrefWatch)
+    private fun pref(key: String, def: Int = 1) = com.bmscompanion.app.data.mission.prefState(key) { Repo.getInt(key, def) == 1 }
+    var follow by pref("m_follow")
+    var route by pref("m_route")
     /**
      * Air defences, under one switch: the mission's threats ([com.bmscompanion.app.data.mission.MissionGround]: the
      * sites the briefing named, else the spotted ones along the route) with the reach of each system, the rings of
      * the pre-planned threats entered in the DTC, and the live ones of the Tacview feed that are one of those. Nothing
      * else: a site the side has not spotted is never on the map, and there is no switch that would put it there.
      */
-    var sams by mutableStateOf(Repo.getInt("m_sams", 1) == 1 && Repo.getInt("m_threats", 1) == 1)
+    var sams by com.bmscompanion.app.data.mission.prefState("m_sams", "m_threats") { Repo.getInt("m_sams", 1) == 1 && Repo.getInt("m_threats", 1) == 1 }
     /** Friendly, neutral and the rest of your own flight. Independent of [hostiles]. */
-    var traffic by mutableStateOf(Repo.getInt("m_traffic", 1) == 1)
+    var traffic by pref("m_traffic")
     /** The other side, counted by [com.bmscompanion.app.data.mission.Contact.hostile]. Independent of [traffic]. */
-    var hostiles by mutableStateOf(Repo.getInt("m_hostiles", 1) == 1)
-    var labels by mutableStateOf(Repo.getInt("m_labels", 1) == 1)
+    var hostiles by pref("m_hostiles")
+    var labels by pref("m_labels")
     /**
      * Every other airfield of the theater. Off by default: the flight's own — where it takes off, lands and its
      * alternate — are always drawn, and the rest only crowded the map (a key of its own, so the old "m_fields",
      * which was on for everyone, does not turn them all back on).
      */
-    var fields by mutableStateOf(Repo.getInt("m_allfields", 0) == 1)
+    var fields by pref("m_allfields", 0)
     /** The tanker and AWACS tracks the campaign planned, and the stations the briefing describes in words. */
-    var support by mutableStateOf(Repo.getInt("m_support", 1) == 1)
+    var support by pref("m_support")
     /** The attack the plan sent from the Planner carries: VRP or VIP, pull-up point, offsets, the run-in. */
-    var attack by mutableStateOf(Repo.getInt("m_attack", 1) == 1)
+    var attack by pref("m_attack")
     /** The cartridge's lines (LINES STPT 31-54, four groups of six), dashed like the HSD draws them. */
-    var lines by mutableStateOf(Repo.getInt("m_lines", 1) == 1)
+    var lines by pref("m_lines")
     /**
      * Everything a plan puts on the map, at once: its points, PPTs and lines and its attack (WDP mode's populated
      * flight, or a plan an older device still has the PC lay over the briefing). Off, the map is what it would be
      * without it.
      */
-    var plan by mutableStateOf(Repo.getInt("m_plan", 1) == 1)
+    var plan by pref("m_plan")
     /** Your own jet's symbol on the map (Follow still follows it when hidden). */
-    var ownship by mutableStateOf(Repo.getInt("m_ownship", 1) == 1)
+    var ownship by pref("m_ownship")
     /** The OWNSHIP figures beside the map (or the strip under it on a phone). */
-    var ownInfo by mutableStateOf(Repo.getInt("m_owninfo", 1) == 1)
+    var ownInfo by pref("m_owninfo")
     fun save() {
         Repo.putInt("m_ownship", if (ownship) 1 else 0); Repo.putInt("m_owninfo", if (ownInfo) 1 else 0)
         Repo.putInt("m_follow", if (follow) 1 else 0); Repo.putInt("m_route", if (route) 1 else 0)
@@ -705,6 +709,8 @@ fun LiveMap(
                     HudChip("Labels", MapLayers.labels) { MapLayers.labels = !MapLayers.labels; MapLayers.save() }
                     HudChip("All fields", MapLayers.fields) { MapLayers.fields = !MapLayers.fields; MapLayers.save() }
                     HudChip("My jet", MapLayers.ownship) { MapLayers.ownship = !MapLayers.ownship; MapLayers.save() }
+                    // the jet's size on every map of this device: one press steps Small → Medium → Large
+                    if (MapLayers.ownship) HudChip("Jet size ${OwnJetLook.labels[OwnJetLook.size]}", false) { OwnJetLook.cycle() }
                     HudChip("Ownship box", MapLayers.ownInfo) { MapLayers.ownInfo = !MapLayers.ownInfo; MapLayers.save() }
                 }
             }
@@ -748,6 +754,10 @@ private fun MapOptionsButton() {
             LayerRow("Labels", MapLayers.labels) { MapLayers.labels = it }
             LayerRow("All airfields", MapLayers.fields) { MapLayers.fields = it }
             LayerRow("My jet", MapLayers.ownship) { MapLayers.ownship = it }
+            Row(Modifier.padding(start = 16.dp, end = 14.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Jet size", color = Hud.TextDim, fontSize = 13.sp)
+                OwnJetLook.names.forEachIndexed { i, n -> HudChip(n, OwnJetLook.size == i) { OwnJetLook.choose(i) } }
+            }
             LayerRow("Ownship box", MapLayers.ownInfo) { MapLayers.ownInfo = it }
             HorizontalDivider(color = Hud.Outline.copy(alpha = 0.6f))
             MapLookMenuItems()
@@ -821,20 +831,14 @@ fun DrawScope.drawAttack(
     if (warn != null) placeText(tm, warn, p + Offset(-12f, 30f), labelStyle.copy(color = Hud.Amber), placed)
 }
 
-/** Ownship jet symbol with a heading line. */
+/**
+ * Ownship: white, outlined in black, with a cased heading line five miles long — never the route's amber (a pilot
+ * could not tell the two apart) — at the size the device chose ([com.bmscompanion.app.ui.components.OwnJetLook]).
+ */
 fun DrawScope.drawOwnship(p: Offset, hdg: Double, pr: MapProjection) {
-    val len = (pr.pxPerNm * 5).coerceIn(30f, 160f)
-    val rad = Math.toRadians(hdg)
-    drawLine(Hud.Amber.copy(alpha = 0.8f), p, p + Offset((sin(rad) * len).toFloat(), (-cos(rad) * len).toFloat()), 2.5f)
-    rotate(hdg.toFloat(), p) {
-        val jet = Path().apply {
-            moveTo(p.x, p.y - 16f); lineTo(p.x + 3f, p.y - 4f); lineTo(p.x + 13f, p.y + 4f); lineTo(p.x + 13f, p.y + 7f); lineTo(p.x + 3f, p.y + 5f)
-            lineTo(p.x + 3f, p.y + 11f); lineTo(p.x + 7f, p.y + 15f); lineTo(p.x - 7f, p.y + 15f); lineTo(p.x - 3f, p.y + 11f); lineTo(p.x - 3f, p.y + 5f)
-            lineTo(p.x - 13f, p.y + 7f); lineTo(p.x - 13f, p.y + 4f); lineTo(p.x - 3f, p.y - 4f); close()
-        }
-        drawPath(jet, Color.Black, style = Stroke(5f))
-        drawPath(jet, Hud.Amber)
-    }
+    val jet = OwnJetLook.lengthPx(this)
+    val len = (pr.pxPerNm * 5).coerceIn(jet * 1.3f, maxOf(160f, jet * 3f))
+    drawOwnJet(p, hdg, len, Hud.onLightMap || Hud.paperInks)
 }
 
 fun DrawScope.drawContact(c: Contact, p: Offset, col: Color, pr: MapProjection) {

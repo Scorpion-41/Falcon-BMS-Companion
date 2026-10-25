@@ -1139,7 +1139,50 @@ class DtcWiring(private val source: DtcSource = LinkDtcSource) : WdpWiring {
             WdpDialogs.message("Error", "An error has occurred: " + (e.message ?: e::class.simpleName ?: "unknown"))
         }
         version++
+        pilotChanged()
     }
+
+    // ---------------------------------------------------------------- on every device (PlannerSessionSync, 1.4.2)
+
+    /** Told after the pilot changed the page (a press, a box, the Map page's place… calls): its edits go to the PC. */
+    var onPilotChange: (() -> Unit)? = null
+    private fun pilotChanged() { onPilotChange?.let { runCatching { it() } } }
+
+    /**
+     * The page's edits as [PlannerSessionSync] sends them: the cartridge as loaded (a short hash of it, [textHash]) and
+     * as this page would save it now ([cartridgeText]). Null before a cartridge is loaded.
+     */
+    internal fun session(): Pair<String, String>? {
+        val base = loadedText ?: return null
+        val now = cartridgeText() ?: return null
+        return textHash(base) to now
+    }
+
+    /**
+     * Another device's edits ([session]): taken when this page has the same cartridge loaded — the page laid out again
+     * from the edited text, measured against the cartridge as loaded. With another cartridge loaded and no edits of its
+     * own the page reads the cartridge again (the other device may have saved it) and the edits wait: null. False: never.
+     */
+    internal fun takeSession(base: String, text: String): Boolean? {
+        val loaded = loadedText ?: return null
+        val st = state ?: return null
+        if (textHash(loaded) != base) {
+            if (!loading && !hasEdits()) launch { reloadNow(if (cartridgeFile != null) null else st.callsign, quiet = true) }
+            return null
+        }
+        return try {
+            val keep = page.confirmClear
+            page = freshPage(text, st).also { it.confirmClear = keep }
+            pending.clear()
+            pptEdit.clear()
+            recogniseLines()
+            version++
+            true
+        } catch (e: Throwable) { false }
+    }
+
+    /** A short hash of a cartridge's text, to tell two devices' loaded cartridges apart. */
+    private fun textHash(s: String): String = sessionHash(s)
 
     private fun launch(block: suspend () -> Unit) {
         // started on the caller's thread: work that never suspends (a fixture, a message) is done by the time the
@@ -2119,6 +2162,7 @@ class DtcWiring(private val source: DtcSource = LinkDtcSource) : WdpWiring {
         page.getCallsignCoords()
         page.changed()
         version++
+        pilotChanged()
     }
 
     /**

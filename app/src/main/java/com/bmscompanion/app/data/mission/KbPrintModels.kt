@@ -23,6 +23,13 @@ import kotlinx.serialization.Serializable
  * were read from, null when EZBoards is not set up. [error] is a sentence when the folder could not be found or read.
  * [mode] is the Mission section's source on the PC ([MissionMode.EZBOARDS] or [MissionMode.WDP]; null from a PC
  * before 1.3.8): in WDP mode EZBoards does not run at PRINT, so its claims do not keep the Planner off its pages.
+ *
+ * For the Kneeboards page's **In the cockpit** view (1.4.1, [KbCockpit]): [since] is when the mission now planned
+ * began, on the PC's clock as the page files' times are — EZBoards mode: the first PRINT of the printed flight; WDP
+ * mode: the earliest of the Planner's first open of its flight, the Populate of that flight and a PRINT of that same
+ * flight — so a half written at or after it is this mission's, one written before is from an earlier mission; 0 when
+ * no mission is known. [sinceFrom] says which it was ([SINCE_PRINTED], [SINCE_OPENED], [SINCE_POPULATED]) and
+ * [mission] names the flight ("Viper1, package 1234"), both null with it.
  */
 @Serializable
 data class KbPrintState(
@@ -35,7 +42,16 @@ data class KbPrintState(
     val ezConfig: String? = null,
     val error: String? = null,
     val mode: String? = null,
-)
+    val since: Long = 0,
+    val sinceFrom: String? = null,
+    val mission: String? = null,
+) {
+    companion object {
+        const val SINCE_PRINTED = "printed"
+        const val SINCE_OPENED = "opened"
+        const val SINCE_POPULATED = "populated"
+    }
+}
 
 /**
  * One page file, as it is now.
@@ -66,6 +82,12 @@ data class KbSlot(
     val rightKind: String? = null,
     /** why BMS Companion will not print into this file (a format it does not write, a file cut short), or null */
     val problem: String? = null,
+    /**
+     * the same page's `KoreaObj_HiRes` twin as it is now (its own owners, format and time), when the theater has one:
+     * BMS shows the twin in the cockpit (`g_bHiResTextures`, on by default), so the In the cockpit view reads this
+     * one ([KbCockpit.shown]) and asks for its pictures with `twin=1`; null when there is no twin (1.4.1)
+     */
+    val hiRes: KbSlot? = null,
 )
 
 /** Who made a half page, as [KbSlot.left] and [KbSlot.right] say, worked out from the file alone. */
@@ -174,4 +196,45 @@ object KbKind {
     const val NOTES = "notes"
     /** Noteboard 2, so both knees can carry a page of notes */
     const val NOTES_2 = "notes-2"
+    /**
+     * the mission's weather over the route as Mission → Weather → Mission weather shows it (its fill, overlays, level and
+     * map), with the key and the figures at the take-off, target and landing (1.4.2)
+     */
+    const val WEATHER_MAP = "wxmap"
+}
+
+/**
+ * The Kneeboards page's **In the cockpit** view (1.4.1): what Falcon BMS will show on the kneeboard in 3D, read from
+ * [KbPrintState] — pure, so every device judges a page the same way.
+ */
+object KbCockpit {
+    /** The file BMS shows for page [s]: its `KoreaObj_HiRes` twin when there is one, else the page file itself. */
+    fun shown(s: KbSlot): KbSlot = s.hiRes ?: s
+
+    /** The pages BMS has files for, in BMS's order (page 1 first). */
+    fun pages(state: KbPrintState?): List<KbSlot> = state?.pages.orEmpty().filter { !shown(it).missing }.sortedBy { it.n }
+
+    /** Who made half [side] (`L`/`R`) of page [s] as BMS shows it, and what BMS Companion printed there. */
+    fun owner(s: KbSlot, side: Char): String = shown(s).let { if (side == 'L') it.left else it.right }
+    fun kind(s: KbSlot, side: Char): String? = shown(s).let { if (side == 'L') it.leftKind else it.rightKind }
+
+    /** A half of Falcon BMS's own page as it ships (a checklist page, nothing of this mission's). */
+    fun original(s: KbSlot, side: Char) = owner(s, side) == KbOwner.BMS
+
+    /** A page whose two halves are both BMS's own: folded away with the others like it. */
+    fun allOriginal(s: KbSlot) = original(s, 'L') && original(s, 'R')
+
+    /** The file BMS shows was written for the mission now planned ([KbPrintState.since]); false when none is known. */
+    fun current(state: KbPrintState?, s: KbSlot): Boolean = state != null && state.since > 0 && shown(s).modified >= state.since
+
+    /** The file was written before the mission now planned began: what it holds is an earlier mission's. */
+    fun earlier(state: KbPrintState?, s: KbSlot): Boolean = state != null && state.since > 0 && shown(s).modified in 1 until state.since
+
+    /** The halves in cockpit order — page 1 left knee, page 1 right knee, page 2 … — leaving out [skipOriginal] ones. */
+    fun halves(state: KbPrintState?, skipOriginal: Boolean = false): List<Pair<Int, Char>> =
+        pages(state).filter { !skipOriginal || !allOriginal(it) }.flatMap { listOf(it.n to 'L', it.n to 'R') }
+
+    /** Where a picture of half [side] of page [s] as BMS shows it comes from, [w] px wide (at most 1024: the file's half). */
+    fun picturePath(s: KbSlot, side: Char, w: Int): String =
+        "/api/kbprint/thumb?n=${s.n}&side=$side&w=$w" + (if (s.hiRes != null) "&twin=1" else "") + "&t=${shown(s).modified}"
 }

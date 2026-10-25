@@ -48,19 +48,8 @@ object SystemTools {
         }
     }
 
-    private const val RUN_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
-    private const val RUN_NAME = "BMS Companion"
+    // Start with Windows: AutoStart.kt
 
-    fun startsWithWindows(): Boolean = run("reg", "query", RUN_KEY, "/v", RUN_NAME).first == 0
-
-    /** Starts BMS Companion in the tray when Windows starts (only for the installed/unzipped app). */
-    fun setStartWithWindows(on: Boolean): Boolean {
-        val exe = appExe ?: return false
-        return if (on) run("reg", "add", RUN_KEY, "/v", RUN_NAME, "/t", "REG_SZ", "/d", "\"$exe\" --tray", "/f").first == 0
-        else run("reg", "delete", RUN_KEY, "/v", RUN_NAME, "/f").first == 0
-    }
-
-    /** IPv4 addresses other devices on the LAN can reach this PC at (virtual adapters last). */
     /** Puts text on the clipboard, for the addresses a pilot has to paste into another program. */
     fun copyToClipboard(text: String) {
         runCatching {
@@ -68,6 +57,7 @@ object SystemTools {
         }
     }
 
+    /** IPv4 addresses other devices on the LAN can reach this PC at (virtual adapters last). */
     fun lanAddresses(): List<String> = System.getenv("BMSC_SHOW_ADDRESS")?.let { listOf(it) } ?: runCatching { // env: example address for screenshots
         NetworkInterface.getNetworkInterfaces().toList()
             .filter { it.isUp && !it.isLoopback && !it.isPointToPoint }

@@ -43,7 +43,15 @@ object SingleInstance {
         return true
     }
 
+    @Suppress("FunctionName")
+    private interface User : com.sun.jna.win32.StdCallLibrary {
+        fun AllowSetForegroundWindow(pid: Int): Boolean
+    }
+
     private fun signal() {
+        // a start the pilot made may bring a window to the front; this hands that right on to the running copy,
+        // which Windows would otherwise keep behind the program in front (ASFW_ANY)
+        runCatching { com.sun.jna.Native.load("user32", User::class.java).AllowSetForegroundWindow(-1) }
         repeat(10) {
             val port = runCatching { File(dir, "app.port").readText().trim().toInt() }.getOrNull()
             val sent = port != null && runCatching {

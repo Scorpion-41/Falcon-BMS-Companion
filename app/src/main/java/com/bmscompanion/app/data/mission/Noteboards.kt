@@ -146,7 +146,7 @@ object Noteboards {
         NoteBlock.FIGURES -> NoteBlock(newId(), NoteBlock.FIGURES, rows = listOf(
             NoteRow("Joker", ""), NoteRow("Bingo", m?.dtc?.bingoLbs?.takeIf { it > 0 }?.toString().orEmpty()), NoteRow("Push", ""),
         ))
-        NoteBlock.COMMS, NoteBlock.STEERPOINTS -> NoteBlock(newId(), type, max = 12)
+        NoteBlock.COMMS, NoteBlock.STEERPOINTS, NoteBlock.FUEL -> NoteBlock(newId(), type, max = 12)
         else -> NoteBlock(newId(), NoteBlock.TEXT)
     }
 

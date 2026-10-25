@@ -704,8 +704,47 @@ class PerformanceWiring(
 
     // The plan throws only where WDP would stop with its unhandled-exception box (a checked conversion of a
     // nonsense number); the page answers with WDP's box and carries on from where the handler got to.
-    override fun onValue(name: String, value: String) = guard { handleValue(name, value) }
-    override fun onClick(name: String) = guard { handleClick(name) }
+    override fun onValue(name: String, value: String) = guard {
+        handleValue(name, value)
+        if (!name.endsWith(".leave")) noteInput(name, value)
+    }
+    override fun onClick(name: String) = guard {
+        handleClick(name)
+        if (name in RADIOS) noteInput(RADIO, name)
+    }
+
+    // ---------------------------------------------------------------- on every device (PlannerSessionSync, 1.4.2)
+
+    /** What the pilot set on the page this session, by control (the radios as one, [RADIO]): the last value of each. */
+    private val inputs = LinkedHashMap<String, String>()
+
+    /** Told after every input the pilot sets: the page's inputs go to the PC. */
+    var onPilotChange: (() -> Unit)? = null
+
+    /** The page has its mission: another device's inputs can be set on it. */
+    internal val hasMission: Boolean get() = mission != null
+
+    private fun noteInput(name: String, value: String) {
+        if (name !in INPUTS && name != RADIO) return
+        inputs.remove(name)
+        inputs[name] = value
+        onPilotChange?.let { runCatching { it() } }
+    }
+
+    /** The inputs the pilot set ([inputs]), as [PlannerSessionSync] sends them. */
+    internal fun pilotInputs(): Map<String, String> = inputs.toMap()
+
+    /** Another device's input: set through the page's own handler (and left, for a text box). False when it could not be. */
+    internal fun takeInput(name: String, value: String): Boolean = try {
+        if (name == RADIO) { if (value in RADIOS) { plan.check(value); changed() } }
+        else {
+            handleValue(name, value)
+            if (name.startsWith("txt")) handleValue("$name.leave", "")
+        }
+        inputs.remove(name)
+        inputs[name] = value
+        true
+    } catch (e: Exception) { false }
 
     private fun guard(block: () -> Unit) {
         try { block() } catch (e: Exception) {
@@ -717,6 +756,13 @@ class PerformanceWiring(
     companion object {
         /** Where Setup.ini's [Performance] is kept in the app's preferences (the headless checks save and restore it). */
         const val INI_KEY = "wdp_performance_ini"
+        /** the radio buttons' choice, as one input ([pilotInputs]) */
+        internal const val RADIO = "radio"
+        /** the inputs another device's are taken for ([takeInput]): every box and list [handleValue] answers */
+        internal val INPUTS = setOf(
+            "txtTemp", "txtWindDir", "txtWindSpd", "txtCruiseAlt", "txtQNH_Hpa", "txtQNH_In", "numTaxiFuel",
+            "cboType", "cboPitch", "cboPower", "cboRWY", "cboCAS", "cboAltitude", "cboGs", "cboActualTemp",
+        )
         private val RADIOS = listOf("radCruiseAlt", "radOptCruiseAlt", "radCruiseCeiling", "radServiceCeiling")
 
         /** WDP's own words under Climb Explanation, from the form's resources (`cntPerformance.resx`). */

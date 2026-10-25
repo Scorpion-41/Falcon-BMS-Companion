@@ -171,7 +171,7 @@ private fun BlocksEditor(board: Int, modifier: Modifier, probe: String) {
             Hairline()
             BlockEditor(board, block, first = i == 0, last = i == b.blocks.lastIndex, probe = "$probe/Block/$i", briefingRows = when (block.type) {
                 NoteBlock.COMMS -> mission?.briefing?.comms?.count { it.agency.isNotBlank() }
-                NoteBlock.STEERPOINTS -> mission?.briefing?.steerpoints?.count { it.n > 0 }
+                NoteBlock.STEERPOINTS, NoteBlock.FUEL -> mission?.briefing?.steerpoints?.count { it.n > 0 }
                 else -> null
             })
         }
@@ -216,11 +216,11 @@ private fun BlockEditor(board: Int, block: NoteBlock, first: Boolean, last: Bool
                     else Text("A row with no figure is left off the page.", color = Hud.TextFaint, fontSize = 11.sp)
                 }
             }
-            NoteBlock.COMMS, NoteBlock.STEERPOINTS -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            NoteBlock.COMMS, NoteBlock.STEERPOINTS, NoteBlock.FUEL -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
                     when (briefingRows) {
                         null, 0 -> "From the briefing: nothing yet (PRINT in BMS, or Populate in WDP mode)."
-                        else -> "From the briefing: $briefingRows rows."
+                        else -> if (block.type == NoteBlock.FUEL) "Worked out from the flight plan with the Fuel plan card's settings." else "From the briefing: $briefingRows rows."
                     } + " At most:",
                     color = Hud.TextDim, fontSize = fingerSp(12f), modifier = Modifier.weight(1f, fill = false),
                 )

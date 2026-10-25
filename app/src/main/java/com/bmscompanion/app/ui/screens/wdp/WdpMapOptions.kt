@@ -77,7 +77,8 @@ internal fun Modifier.mapControl(name: String): Modifier {
 
 /** One of the Map page's switches, kept per device; [old] is the pre-1.3.8 layer pref it starts from, read once. */
 internal class MapSwitch(private val key: String, old: String?, def: Boolean) {
-    var on by mutableStateOf(Repo.getInt(key, old?.let { Repo.getInt(it, if (def) 1 else 0) } ?: if (def) 1 else 0) == 1)
+    // follows another device's change too (MissionSync, PrefWatch)
+    var on by com.bmscompanion.app.data.mission.prefState(key) { Repo.getInt(key, old?.let { Repo.getInt(it, if (def) 1 else 0) } ?: if (def) 1 else 0) == 1 }
         private set
 
     fun set(v: Boolean) { on = v; Repo.putInt(key, if (v) 1 else 0) }
@@ -101,12 +102,12 @@ internal object WdpMapPrefs {
     val wdpLook = MapSwitch("wdpmap_wdplook", null, false)
 
     /** The Map page's own map style (WDP's "Use white map" is Chart); it starts on the pilot's style for every map. */
-    var style by mutableStateOf(Repo.getString("wdpmap_style")?.takeIf { s -> MapLook.styles.any { it.first == s } } ?: MapLook.style)
+    var style by com.bmscompanion.app.data.mission.prefState("wdpmap_style") { Repo.getString("wdpmap_style")?.takeIf { s -> MapLook.styles.any { it.first == s } } ?: MapLook.style }
         private set
     fun chooseStyle(s: String) { style = s; Repo.putString("wdpmap_style", s) }
 
     /** Label ink of airfields and navaids: 0 Auto, 1 White, 2 Black, 3 ONC (WDP's Text color). */
-    var ink by mutableIntStateOf(Repo.getInt("wdpmap_ink", 0))
+    var ink by com.bmscompanion.app.data.mission.prefIntState("wdpmap_ink") { Repo.getInt("wdpmap_ink", 0) }
         private set
     fun chooseInk(i: Int) { ink = i.coerceIn(0, 3); Repo.putInt("wdpmap_ink", ink) }
 
@@ -120,7 +121,7 @@ internal object WdpMapPrefs {
     val airports = MapSwitch("wdpmap_airports", null, false)
     val airstrips = MapSwitch("wdpmap_airstrips", null, false)
     /** 0 Name & data, 1 ICAO, 2 Off — off at the start, as on the Mission map (WDP starts on ICAO) */
-    var airportLabels by mutableIntStateOf(Repo.getInt("wdpmap_aplabels", 2))
+    var airportLabels by com.bmscompanion.app.data.mission.prefIntState("wdpmap_aplabels") { Repo.getInt("wdpmap_aplabels", 2) }
         private set
     fun chooseAirportLabels(i: Int) { airportLabels = i.coerceIn(0, 2); Repo.putInt("wdpmap_aplabels", airportLabels) }
     val vortac = MapSwitch("wdpmap_vortac", null, false)
@@ -129,7 +130,7 @@ internal object WdpMapPrefs {
     val stpt = MapSwitch("wdpmap_stpt", "wm_route", true)
     val numbers = MapSwitch("wdpmap_numbers", "wm_labels", true)
     val trkDist = MapSwitch("wdpmap_trkdist", null, false)
-    var trkMin by mutableIntStateOf(Repo.getInt("wdpmap_trkmin", 3))
+    var trkMin by com.bmscompanion.app.data.mission.prefIntState("wdpmap_trkmin") { Repo.getInt("wdpmap_trkmin", 3) }
         private set
     fun chooseTrkMin(n: Int) { trkMin = n.coerceIn(0, 20); Repo.putInt("wdpmap_trkmin", trkMin) }
     val ppt = MapSwitch("wdpmap_ppt", "wm_ppts", true)
@@ -157,7 +158,7 @@ internal object WdpMapPrefs {
     // what the flight's side knows, and the PC sends nothing else (MissionPicture).
 
     /** Circle fill, 0-100: alpha value/255 as WDP's slider (at most 39 %); 20 at the start, every map's ring fill. */
-    var fill by mutableIntStateOf(Repo.getInt("wdpmap_fill", 20)) // = RING_FILL × 255
+    var fill by com.bmscompanion.app.data.mission.prefIntState("wdpmap_fill") { Repo.getInt("wdpmap_fill", 20) } // = RING_FILL × 255
         private set
     fun chooseFill(v: Int) { fill = v.coerceIn(0, 100); Repo.putInt("wdpmap_fill", fill) }
     val fillAlpha: Float get() = fill / 255f
@@ -184,6 +185,12 @@ internal object WdpMapPrefs {
 
     private val folds = HashMap<String, Boolean>()
     private var foldVersion by mutableIntStateOf(0)
+
+    init {
+        // another device's types and folds (MissionSync): read again
+        com.bmscompanion.app.data.mission.PrefWatch.onPrefix("wdpmap_typesoff@") { typesOffs.clear(); typesVersion++ }
+        com.bmscompanion.app.data.mission.PrefWatch.onPrefix("open_wdpmap_") { folds.clear(); foldVersion++ }
+    }
 
     fun open(section: String, def: Boolean): Boolean {
         @Suppress("UNUSED_VARIABLE") val v = foldVersion

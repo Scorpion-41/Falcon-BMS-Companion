@@ -79,11 +79,11 @@ object PlannerSettings {
     private const val LAST_KEY = "planner_last_flight"
 
     /** Show tooltips (on by default). */
-    var tooltips: Boolean by mutableStateOf(runCatching { Repo.getInt(TOOLTIPS_KEY, 1) != 0 }.getOrDefault(true))
+    var tooltips: Boolean by com.bmscompanion.app.data.mission.prefState(TOOLTIPS_KEY) { runCatching { Repo.getInt(TOOLTIPS_KEY, 1) != 0 }.getOrDefault(true) }
         private set
 
     /** Auto load last mission on startup (off by default, as WDP's). */
-    var autoLoad: Boolean by mutableStateOf(runCatching { Repo.getInt(AUTOLOAD_KEY, 0) != 0 }.getOrDefault(false))
+    var autoLoad: Boolean by com.bmscompanion.app.data.mission.prefState(AUTOLOAD_KEY) { runCatching { Repo.getInt(AUTOLOAD_KEY, 0) != 0 }.getOrDefault(false) }
         private set
 
     fun chooseTooltips(on: Boolean) {
@@ -244,7 +244,11 @@ object PlannerSettings {
 /** Starts what the Planner does by itself when it first shows ([PlannerSettings.startup]). */
 @Composable
 internal fun PlannerStartup() {
-    LaunchedEffect(Unit) { PlannerSettings.startup() }
+    LaunchedEffect(Unit) {
+        // what another device planned first (PlannerShared, 1.4.2): the flight open on the PC is this device's too
+        PlannerShared.sync()
+        PlannerSettings.startup()
+    }
 }
 
 /** The window's content ([PlannerWindowHost]). */

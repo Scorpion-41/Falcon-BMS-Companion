@@ -62,7 +62,62 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun KneeboardPages(nav: NavHostController, onOpenTab: ((MissionTab) -> Unit)? = null) {
+fun HtmlBriefPages(nav: NavHostController) {
+    val info by MissionLink.info.collectAsState()
+    val link by MissionLink.state.collectAsState()
+    val kb = info?.kneeboard
+    if (link !is com.bmscompanion.app.data.mission.LinkState.Online || kb == null) {
+        Text("Connect this device to BMS Companion on the BMS PC to see the HTML Briefing pages.", color = Hud.TextDim, fontSize = 13.sp)
+        return
+    }
+    if (!kb.configured) {
+        Text(
+            "UOAF's HTML Briefing tool is not set up: its exported pages show here once it is (see HTML Briefing under " +
+                "Making the kneeboards, below). If you do not use it, nothing here needs your attention.",
+            style = MaterialTheme.typography.bodySmall, color = Hud.TextDim,
+        )
+        return
+    }
+    if (!kb.available) {
+        Text(kb.message ?: "Nothing exported yet.", style = MaterialTheme.typography.bodySmall, color = Hud.TextDim)
+        return
+    }
+    if (kb.stale) Box(Modifier.padding(bottom = 8.dp)) { Tag("briefing is newer", Hud.Amber) }
+    FlowRow(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        repeat(kb.pages) { i ->
+            Column(
+                Modifier.width(142.dp).clip(RoundedCornerShape(10.dp)).background(Hud.Surface2)
+                    .clickable { nav.go(chartRoute("$KNEEBOARD_SCHEME:1", "HTML Briefing kneeboard", kb.pages, i + 1)) },
+            ) {
+                Box(Modifier.fillMaxWidth().height(160.dp).background(Color.White)) {
+                    KneeboardThumb(i, kb.exported)
+                }
+                Text("Page ${i + 1}", Modifier.padding(8.dp), fontSize = 12.sp)
+            }
+        }
+    }
+    Text(
+        if (kb.stale) "The briefing has been printed since these were exported" +
+            (if (kb.runSuspended || info.wdpMode) "." else ": export again in HTML Briefing to bring them up to date (Run HTML Briefing, below).")
+        else "Tap a page to open it. html_brief exported these for this mission: its document pages, which its export " +
+            "also puts on the cockpit kneeboard (In the cockpit shows which pages hold them now).",
+        style = MaterialTheme.typography.bodySmall,
+        color = if (kb.stale) Hud.Amber else Hud.TextFaint,
+        modifier = Modifier.padding(top = 6.dp),
+    )
+}
+
+/**
+ * The making half of html_brief, under **Making the kneeboards** (1.4.1): what the tool is when it is not set up, and
+ * **Run HTML Briefing** (greyed in WDP mode); its pages are viewed in the section above ([HtmlBriefPages]).
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun HtmlBriefRun(onOpenTab: ((MissionTab) -> Unit)? = null) {
     val info by MissionLink.info.collectAsState()
     val kb = info?.kneeboard
     var note by remember { mutableStateOf<String?>(null) }
@@ -88,40 +143,15 @@ fun KneeboardPages(nav: NavHostController, onOpenTab: ((MissionTab) -> Unit)? = 
         )
         return
     }
-    if (kb.stale) Box(Modifier.padding(bottom = 8.dp)) { Tag("briefing is newer", Hud.Amber) }
-    if (!kb.available) {
-        Text(kb.message ?: "Nothing exported yet.", style = MaterialTheme.typography.bodySmall, color = Hud.TextDim)
-        RunExporter(true, paused, onOpenTab) { note = it }
-        note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Hud.Green) }
-        return
-    }
-    FlowRow(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        repeat(kb.pages) { i ->
-            Column(
-                Modifier.width(142.dp).clip(RoundedCornerShape(10.dp)).background(Hud.Surface2)
-                    .clickable { nav.go(chartRoute("$KNEEBOARD_SCHEME:1", "HTML Briefing kneeboard", kb.pages, i + 1)) },
-            ) {
-                Box(Modifier.fillMaxWidth().height(160.dp).background(Color.White)) {
-                    KneeboardThumb(i, kb.exported)
-                }
-                Text("Page ${i + 1}", Modifier.padding(8.dp), fontSize = 12.sp)
-            }
-        }
-    }
     Text(
-        if (kb.stale && paused) "The briefing has been printed since these were exported."
-        else if (kb.stale) "The briefing has been printed since these were exported — export again to bring them up to date."
-        else "Tap a page to open it. These were exported by html_brief for this mission; it is a separate tool you run " +
-            "yourself, and if you do not use it nothing here needs your attention.",
-        style = MaterialTheme.typography.bodySmall,
-        color = if (kb.stale) Hud.Amber else Hud.TextFaint,
-        modifier = Modifier.padding(top = 6.dp),
+        when {
+            !kb.available -> kb.message ?: "Nothing exported yet."
+            kb.stale -> "The briefing has been printed since its last export" + if (paused) "." else ": export again to bring its pages up to date."
+            else -> "Its last export is up to date with the printed briefing; its pages are in the section above."
+        } + " html_brief has no headless export: the button puts its window up on the BMS PC for you to export in.",
+        style = MaterialTheme.typography.bodySmall, color = if (kb.stale) Hud.Amber else Hud.TextDim,
     )
-    RunExporter(kb.stale, paused, onOpenTab) { note = it }
+    RunExporter(!kb.available || kb.stale, paused, onOpenTab) { note = it }
     note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Hud.Green) }
 }
 

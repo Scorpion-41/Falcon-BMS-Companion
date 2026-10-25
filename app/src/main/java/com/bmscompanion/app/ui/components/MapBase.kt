@@ -30,6 +30,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import com.bmscompanion.app.data.mission.prefIntState
+import com.bmscompanion.app.data.mission.prefState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -75,16 +77,25 @@ import kotlin.math.roundToInt
 
 /** Map look, shared by every map and remembered across launches. */
 object MapLook {
-    val styles = listOf("relief" to "Relief", "satellite" to "Satellite", "dark" to "Dark", "chart" to "Chart", "topo" to "Topographic")
+    /** the styles every device bundles */
+    private val bundled = listOf("relief" to "Relief", "satellite" to "Satellite", "dark" to "Dark", "chart" to "Chart", "topo" to "Topographic")
 
-    var style by mutableStateOf(Repo.getString("map_style")?.takeIf { s -> styles.any { it.first == s } } ?: "relief")
+    /** The styles offered: the bundled five, and BMS's own 2D chart ([BmsChart]) while the PC reports it has one. */
+    val styles: List<Pair<String, String>>
+        get() = if (BmsChart.offered) bundled + (BmsChart.STYLE to BmsChart.LABEL) else bundled
+
+    // (each follows another device's change too: MissionSync, PrefWatch)
+    var style by prefState("map_style") { Repo.getString("map_style")?.takeIf { s -> bundled.any { it.first == s } || s == BmsChart.STYLE } ?: "relief" }
         private set
-    var borders by mutableStateOf(Repo.getInt("map_borders", 1) == 1)
+
+    /** [s]'s name in a menu ("BMS chart" for any of its theaters). */
+    fun styleName(s: String): String = if (BmsChart.isChart(s)) BmsChart.LABEL else bundled.firstOrNull { it.first == s }?.second ?: s
+    var borders by prefState("map_borders") { Repo.getInt("map_borders", 1) == 1 }
         private set
-    var provinces by mutableStateOf(Repo.getInt("map_provinces", 1) == 1)
+    var provinces by prefState("map_provinces") { Repo.getInt("map_provinces", 1) == 1 }
         private set
     /** 0 = off, 1 = cities, 2 = cities and towns, 3 = all (smaller places appear as you zoom in), [MISSION] = only the mission's towns */
-    var places by mutableIntStateOf(Repo.getInt("map_places", MISSION))
+    var places by prefIntState("map_places") { Repo.getInt("map_places", MISSION) }
         private set
 
     fun chooseStyle(s: String) { style = s; Repo.putString("map_style", s) }
@@ -94,8 +105,8 @@ object MapLook {
 
     /** a paper-light style (Chart, Topographic): the mission's inks are drawn dark over it */
     val light get() = isLight(style)
-    /** [s] is a paper-light style: Chart or Topographic */
-    fun isLight(s: String?) = s == "chart" || s == "topo"
+    /** [s] is a paper-light style: Chart, Topographic or BMS's own chart */
+    fun isLight(s: String?) = s == "chart" || s == "topo" || BmsChart.isChart(s)
     const val MISSION = 4
     /** menu order: value to label */
     val placeOptions = listOf(0 to "Off", MISSION to "Mission", 1 to "Cities", 2 to "Cities and towns", 3 to "All places")
@@ -127,6 +138,66 @@ const val PLACE_TARGET = 2
 
 object MapFocus {
     var mission by mutableStateOf<MapMission?>(null)
+}
+
+/** One theater's BMS chart as the PC reports it (`GET /api/campmap/info`): its terrain's map id, the theater, its native level. */
+@kotlinx.serialization.Serializable
+data class BmsChartMap(val map: String = "", val theater: String = "", val name: String = "", val nativeZ: Int = 0, val width: Int = 0)
+
+/** `GET /api/campmap/info`: per map id the chart a map is drawn with when it names no theater, and every theater's. */
+@kotlinx.serialization.Serializable
+data class BmsChartList(val maps: List<BmsChartMap> = emptyList(), val theaters: List<BmsChartMap> = emptyList())
+
+/**
+ * The "BMS chart" style (`bms2d`): Falcon BMS's own 2D campaign map, which the PC reads from the theater's art at run
+ * time (desktop `CampMap2D`) and serves as tiles of `/api/maptile` — never bundled, so it is offered only while the PC
+ * says it has one ([offered]). Every level comes from the PC; until they do, and without a PC, the bundled Chart is
+ * drawn instead. A style of `bms2d@<theater id>` asks for that theater's chart (theaters on one terrain have their
+ * own: KTO and Korea 2012); plain `bms2d` is the PC's choice for the map (the theater BMS is set to, when it is on it).
+ */
+object BmsChart {
+    const val STYLE = "bms2d"
+    const val LABEL = "BMS chart"
+
+    /** what the PC last said; null before it answered */
+    var list by mutableStateOf<BmsChartList?>(null)
+        private set
+
+    /** the PC has at least one chart */
+    val offered: Boolean get() = list?.maps?.isNotEmpty() == true
+
+    private var asked = -1_000_000L
+
+    fun isChart(style: String?): Boolean {
+        // (the null test kept apart from any comparison with a literal: Kotlin/Wasm's gotcha in CLAUDE.md)
+        if (style == null) return false
+        return style.startsWith(STYLE) && (style.length == STYLE.length || style[STYLE.length] == '@')
+    }
+
+    /** the theater a `bms2d@<id>` style names; null for plain `bms2d` */
+    fun theaterOf(style: String): String? = style.substringAfter('@', "").takeIf { it.isNotEmpty() }
+
+    /** The chart's own level for map [mapId] ([theater]'s when given); null when the PC has none for it. */
+    fun nativeZ(mapId: String, theater: String?): Int? {
+        val l = list ?: return null
+        if (theater != null) return l.theaters.firstOrNull { it.theater == theater }?.nativeZ
+        return l.maps.firstOrNull { it.map == mapId }?.nativeZ
+    }
+
+    /** Asks the PC which charts it has: once a minute until it answers, then every ten. Never throws. */
+    suspend fun refresh() {
+        val now = System.currentTimeMillis()
+        if (now - asked < (if (offered) 600_000L else 60_000L)) return
+        asked = now
+        val bytes = try {
+            MapDeep.fetcher?.invoke(INFO) ?: com.bmscompanion.app.data.mission.MissionLink.fetchBytes(INFO, 8_000)
+        } catch (_: Throwable) { null } ?: return
+        val got = try { json.decodeFromString(BmsChartList.serializer(), bytes.decodeToString()) } catch (_: Throwable) { null }
+        if (got != null) list = got
+    }
+
+    private const val INFO = "/api/campmap/info"
+    private val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
 }
 
 /** "maps/korea/relief.webp" or the older "maps/korea.webp" → "korea". */
@@ -162,7 +233,7 @@ object MapDeep {
     internal const val RETRY_MS = 20_000L
 
     /** The deepest level bundled for [style]: the Topographic style bundles the overview, z2 and z3. */
-    fun bundledMax(style: String) = if (style == "topo") 3 else BUNDLED_MAX_Z
+    fun bundledMax(style: String) = if (BmsChart.isChart(style)) -1 else if (style == "topo") 3 else BUNDLED_MAX_Z
 
     /** The largest zoom for a map whose square is [cover] px at scale 1: the page's own limit, or deeper on a theater map. */
     fun maxScale(imagePath: String?, cover: Float, pageMax: Float): Float =
@@ -184,7 +255,9 @@ object MapDeep {
         val parts = key.removeSuffix(SUFFIX).split('/')
         if (parts.size != 5) return null
         val (r, c) = parts[4].split('_').let { (it.getOrNull(0)?.toIntOrNull() ?: return null) to (it.getOrNull(1)?.toIntOrNull() ?: return null) }
-        val path = "/api/maptile?map=${parts[1]}&style=${parts[2]}&z=${parts[3]}&r=$r&c=$c"
+        // a BMS chart of a named theater ("bms2d@korea-2012") asks for it by name
+        val styleQuery = parts[2].substringBefore('@') + (BmsChart.theaterOf(parts[2])?.let { "&theater=$it" } ?: "")
+        val path = "/api/maptile?map=${parts[1]}&style=$styleQuery&z=${parts[3]}&r=$r&c=$c"
         val bytes = cache.remove(path)?.also { cache[path] = it }
             ?: (fetcher?.invoke(path) ?: com.bmscompanion.app.data.mission.MissionLink.fetchBytes(path, 12_000))?.also { b ->
                 cache[path] = b
@@ -215,6 +288,8 @@ fun rememberMapBase(imagePath: String?): MapBaseState {
     val id = mapIdOf(imagePath)
     val state = remember(id) { MapBaseState(id) }
     LaunchedEffect(state) {
+        // whether the PC has BMS's own chart to offer as a style (BmsChart; asked rarely)
+        launch { BmsChart.refresh() }
         // load what the frames asked for, a few at a time, newest request first
         while (true) {
             // toList().asReversed(), never LinkedHashSet.reversed(): that is Java 21 (SequencedCollection), which
@@ -247,7 +322,13 @@ fun rememberMapBase(imagePath: String?): MapBaseState {
  */
 fun DrawScope.drawMapBase(pr: MapProjection, base: MapBaseState, fallbackImage: ImageBitmap?, styleOverride: String? = null) {
     val id = base.mapId
-    val style = styleOverride?.takeIf { s -> MapLook.styles.any { it.first == s } } ?: MapLook.style
+    val asked = styleOverride?.takeIf { s -> MapLook.styles.any { it.first == s } || BmsChart.isChart(s) } ?: MapLook.style
+    // BMS's own chart where the PC has it for this map, else the bundled Chart in its place
+    if (id != null && BmsChart.isChart(asked)) {
+        val native = BmsChart.nativeZ(id, BmsChart.theaterOf(asked))
+        if (native != null) { drawBmsChart(pr, base, id, asked, native); return }
+    }
+    val style = if (BmsChart.isChart(asked)) "chart" else asked
     val overviewKey = if (id != null) "maps/$id/$style.webp" else null
     val wanted = base.wanted
     wanted.clear()
@@ -286,6 +367,58 @@ fun DrawScope.drawMapBase(pr: MapProjection, base: MapBaseState, fallbackImage: 
             drawImage(img, dstOffset = IntOffset(x0, y0), dstSize = IntSize(x1 - x0, y1 - y0))
         }
     }
+}
+
+/**
+ * BMS's own chart ([BmsChart]): every level from the PC, down to the chart's own ([native]; the device enlarges it
+ * past that), over the bundled Chart overview until they come. Level 0 (the whole theater in one tile) and one three
+ * steps up stay wanted under the target, as [drawMapBase] keeps its backing levels.
+ */
+private fun DrawScope.drawBmsChart(pr: MapProjection, base: MapBaseState, id: String, style: String, native: Int) {
+    val wanted = base.wanted
+    wanted.clear()
+    val under = "maps/$id/chart.webp"
+    val target = ceil(ln(pr.side / TILE.toDouble()) / ln(2.0)).toInt().coerceIn(0, native.coerceIn(0, MapDeep.MAX_Z))
+    fun key(z: Int, r: Int, c: Int) = "maps/$id/$style/$z/${r}_$c.pc"
+    val covered = coveredBy(pr, base, target) { r, c -> key(target, r, c) }
+    if (!covered) {
+        val overview = base.images[under]
+        if (overview == null) wanted += under
+        else drawImage(overview, dstOffset = IntOffset(pr.left.roundToInt(), pr.top.roundToInt()), dstSize = IntSize(pr.side.roundToInt(), pr.side.roundToInt()))
+    }
+    if (pr.left + pr.side < 0 || pr.top + pr.side < 0 || pr.left > size.width || pr.top > size.height) return
+    val backing = setOf(0, target - 3)
+    for (z in (if (covered) target else 0)..target) {
+        val count = 1 shl z
+        val ts = pr.side / count
+        val c0 = floor((-pr.left) / ts).toInt().coerceIn(0, count - 1)
+        val c1 = floor((size.width - pr.left) / ts).toInt().coerceIn(0, count - 1)
+        val r0 = floor((-pr.top) / ts).toInt().coerceIn(0, count - 1)
+        val r1 = floor((size.height - pr.top) / ts).toInt().coerceIn(0, count - 1)
+        val keep = z == target || z in backing
+        for (r in r0..r1) for (c in c0..c1) {
+            val k = key(z, r, c)
+            val img = base.images[k]
+            if (img == null) { if (keep) wanted += k; continue }
+            if (keep) wanted += k
+            val x0 = (pr.left + c * ts).roundToInt(); val x1 = (pr.left + (c + 1) * ts).roundToInt()
+            val y0 = (pr.top + r * ts).roundToInt(); val y1 = (pr.top + (r + 1) * ts).roundToInt()
+            drawImage(img, dstOffset = IntOffset(x0, y0), dstSize = IntSize(x1 - x0, y1 - y0))
+        }
+    }
+}
+
+/** True when every tile of level [z] the view shows is loaded, the tiles named by [key]. */
+private fun DrawScope.coveredBy(pr: MapProjection, base: MapBaseState, z: Int, key: (Int, Int) -> String): Boolean {
+    val count = 1 shl z
+    val ts = pr.side / count
+    if (pr.left > 0f || pr.top > 0f || pr.left + pr.side < size.width || pr.top + pr.side < size.height) return false
+    val c0 = floor((-pr.left) / ts).toInt().coerceIn(0, count - 1)
+    val c1 = floor((size.width - pr.left) / ts).toInt().coerceIn(0, count - 1)
+    val r0 = floor((-pr.top) / ts).toInt().coerceIn(0, count - 1)
+    val r1 = floor((size.height - pr.top) / ts).toInt().coerceIn(0, count - 1)
+    for (r in r0..r1) for (c in c0..c1) if (base.images[key(r, c)] == null) return false
+    return true
 }
 
 /** True when every tile of level [z] that the view shows is loaded. */
@@ -439,12 +572,20 @@ private val labelShadow = Shadow(Color.Black.copy(alpha = 0.85f), blurRadius = 4
  * the pilot picked, which is often not the one they are flying, and the target ring of a briefing for somewhere
  * else is worse than no landmark at all.
  */
-fun DrawScope.drawLandmarks(pr: MapProjection, g: GeoPaths, tm: TextMeasurer, mission: Boolean = true, lineLayer: LandmarkLayer? = null) {
-    val light = MapLook.light
-    val photo = MapLook.style == "satellite" // busy imagery: a little more contrast for the faint layers
+fun DrawScope.drawLandmarks(
+    pr: MapProjection, g: GeoPaths, tm: TextMeasurer, mission: Boolean = true, lineLayer: LandmarkLayer? = null,
+    /** the style the map under them is drawn in, when it is not the pilot's own ([MapLook.style]): Upd Kneeboard's route map */
+    styleOverride: String? = null,
+) {
+    val style = styleOverride ?: MapLook.style
+    // BMS's own chart has its borders, towns and names printed in it
+    val mid = g.mapId
+    if (mid != null && BmsChart.isChart(style) && BmsChart.nativeZ(mid, null) != null) return
+    val light = MapLook.isLight(style)
+    val photo = style == "satellite" // busy imagery: a little more contrast for the faint layers
     val dp = density
     // borders and provinces: from the map's cached layer when it keeps one ([LandmarkLayer]), else stroked here
-    if (lineLayer == null || !lineLayer.draw(this, pr, g)) drawLandmarkLines(pr, g)
+    if (lineLayer == null || !lineLayer.draw(this, pr, g)) drawLandmarkLines(pr, g, style)
     val placed = ArrayList<Rect>()
     /** Draws a label unless it would leave the view or crowd a label already placed (with some breathing room). */
     fun label(text: String, center: Offset, style: TextStyle, maxWidthPx: Int = Int.MAX_VALUE, gapDp: Float = 6f): Boolean {
@@ -564,9 +705,9 @@ fun DrawScope.drawLandmarks(pr: MapProjection, g: GeoPaths, tm: TextMeasurer, mi
 }
 
 /** The province and border lines of [drawLandmarks], stroked (the expensive part of a map's frame on a phone's GPU). */
-internal fun DrawScope.drawLandmarkLines(pr: MapProjection, g: GeoPaths) {
-    val light = MapLook.light
-    val photo = MapLook.style == "satellite"
+internal fun DrawScope.drawLandmarkLines(pr: MapProjection, g: GeoPaths, style: String = MapLook.style) {
+    val light = MapLook.isLight(style)
+    val photo = style == "satellite"
     val hi = pr.side > 3200f
     val unit = 1f / pr.side
     val dp = density
@@ -713,7 +854,7 @@ private fun ZoomKey(text: String, description: String, onClick: () -> Unit) {
 fun MapLookButton() {
     var open by remember { mutableStateOf(false) }
     Box {
-        HudChip("Map: ${MapLook.styles.first { it.first == MapLook.style }.second} ▾", open) { open = !open }
+        HudChip("Map: ${MapLook.styleName(MapLook.style)} ▾", open) { open = !open }
         DropdownMenu(open, onDismissRequest = { open = false }, modifier = Modifier.background(Hud.Surface).widthIn(min = 230.dp)) { MapLookMenuItems() }
     }
 }
@@ -721,6 +862,7 @@ fun MapLookButton() {
 /** The map style and landmark options on their own, for any menu that wants them (the kneeboard's ⋯, for one). */
 @Composable
 fun MapLookMenuItems() {
+    LaunchedEffect(Unit) { BmsChart.refresh() }
     MenuHeader("MAP STYLE")
     MapLook.styles.forEach { (key, name) ->
         MenuRow(onClick = { MapLook.chooseStyle(key) }) {

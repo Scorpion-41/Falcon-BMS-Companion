@@ -123,7 +123,7 @@ private fun Fold(
     trailing: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
-    var open by remember { mutableStateOf(Repo.getInt("open_wx_$key", if (initiallyOpen) 1 else 0) == 1) }
+    var open by com.bmscompanion.app.data.mission.rememberPrefState("open_wx_$key") { Repo.getInt("open_wx_$key", if (initiallyOpen) 1 else 0) == 1 }
     Row(
         Modifier.fillMaxWidth().padding(top = 18.dp, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically,

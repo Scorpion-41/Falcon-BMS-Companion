@@ -55,6 +55,7 @@ internal object DocShotsRender {
 
     private val PC = Size("pc", 1280, 800, 1.25f)
     private val PHONE = Size("phone", 393, 852, 2f)
+    private val TABLET = Size("tablet", 800, 1280, 2f)
 
     fun run(root: File, out: File, only: List<String>): String = buildString {
         out.mkdirs()
@@ -126,6 +127,60 @@ internal object DocShotsRender {
             shot(out, "mission-dash-ded", PC, "mission", MissionTab.DASH, ded)
             shot(out, "phone-dash-ded", PHONE, "mission", MissionTab.DASH, ded)
         }
+        // the Fuel plan card (MissionFuelPlan.kt) on page 5 of the Dashboard: before take-off at PC, tablet and phone
+        // sizes, its settings open, and in flight with the made-up jet; then the Briefing page that carries it too
+        if (want("fuel")) {
+            val cards = listOf(DashItem(DashCard.FUEL_PLAN, DashWidth.L))
+            DashLayouts.state("wide", 4).value = cards
+            DashLayouts.state("narrow", 4).value = cards
+            DashLayouts.choose(4)
+            val open = "open_fuel_settings"
+            com.bmscompanion.app.data.Repo.putInt(open, 0)
+            shot(out, "fuel-dash-pc", PC, "mission", MissionTab.DASH)
+            shot(out, "fuel-dash-tablet", TABLET, "mission", MissionTab.DASH)
+            shot(out, "fuel-dash-phone", PHONE, "mission", MissionTab.DASH)
+            if (live != null) {
+                shot(out, "fuel-dash-flying-pc", PC, "mission", MissionTab.DASH, live)
+                shot(out, "fuel-dash-flying-phone", PHONE, "mission", MissionTab.DASH, live)
+                // short of fuel: the state word, and nothing louder
+                shot(out, "fuel-dash-flying-low", PC, "mission", MissionTab.DASH, live.copy(fuelInternal = 1_800.0, fuelExternal = 0.0))
+            }
+            com.bmscompanion.app.data.Repo.putInt(open, 1)
+            // (tall windows: the settings sit under the table, the card far down the Briefing page)
+            shot(out, "fuel-settings-pc", Size("pc-tall", 1280, 1500, 1.25f), "mission", MissionTab.DASH)
+            shot(out, "fuel-settings-phone", Size("phone-tall", 393, 2300, 2f), "mission", MissionTab.DASH)
+            com.bmscompanion.app.data.Repo.putInt(open, 0)
+            shot(out, "fuel-briefing-pc", Size("pc-tall", 1280, 3000, 1f), "mission", MissionTab.BRIEF)
+            shot(out, "fuel-briefing-tablet", Size("tablet-tall", 800, 4200, 1f), "mission", MissionTab.BRIEF)
+            val plan = com.bmscompanion.app.ui.screens.mission.fuelPlanOf(
+                com.bmscompanion.app.data.mission.PlanMerge.merge(MissionLink.mission.value), null, null, null,
+                com.bmscompanion.app.ui.screens.mission.FuelPrefs.settings,
+            )
+            // the Noteboard's Fuel plan block as Upd Kneeboard prints it (450 x 675 units, paper)
+            runCatching {
+                var said = ""
+                val board = com.bmscompanion.app.data.mission.Noteboard(
+                    "Fuel", listOf(com.bmscompanion.app.data.mission.NoteBlock("f", com.bmscompanion.app.data.mission.NoteBlock.FUEL, max = 12)),
+                )
+                fun <T> edt(f: () -> T): T { var r: Result<T>? = null; javax.swing.SwingUtilities.invokeAndWait { r = runCatching(f) }; return r!!.getOrThrow() }
+                val scene = edt {
+                    ImageComposeScene(900, 1350, Density(2f)) {
+                        BmsTheme {
+                            com.bmscompanion.app.ui.screens.mission.NoteboardSheet(
+                                board, 0, MissionLink.mission.value, com.bmscompanion.app.ui.screens.mission.NoteInks.PAPER, "BMS Companion",
+                                report = { s, _ -> said = s },
+                            )
+                        }
+                    }
+                }
+                var t = 0L
+                repeat(40) { val at = t; edt { androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications(); scene.render(at).close() }; t += 50_000_000; Thread.sleep(50) }
+                val bytes = edt { scene.render(t).encodeToData(EncodedImageFormat.PNG)!!.bytes.also { scene.close() } }
+                File(out, "fuel-noteboard.png").writeBytes(bytes)
+                appendLine("     picture fuel-noteboard.png: $said")
+            }.onFailure { appendLine("FAIL fuel noteboard: $it") }
+            appendLine("     fuel plan: " + (plan?.let { com.bmscompanion.app.data.mission.FuelPlan.summary(it) + ", ${it.rows.size} steerpoints" } ?: "none"))
+        }
         if (want("map")) shot(out, "mission-map", PC, "mission", MissionTab.MAP)
         if (want("map-live")) shot(out, "mission-map-live", PC, "mission", MissionTab.MAP, live)
         if (want("briefing")) shot(out, "mission-briefing", PC, "mission", MissionTab.BRIEF)
@@ -137,6 +192,43 @@ internal object DocShotsRender {
             shot(out, "mission-radio", PC, "mission", MissionTab.RADIO)
         }
         if (want("kneeboards")) shot(out, "mission-kneeboards", PC, "mission", MissionTab.BOARDS)
+        // the Kneeboards page's viewing section (In the cockpit from the copy's page files), and its large viewer, in
+        // both modes and at the three shapes; the Dashboard's Kneeboards card
+        if (want("kneeboards-all")) {
+            for (mode in listOf("ezboards", "wdp")) {
+                Bridge.handle(ApiRequest("POST", "/api/mission/source", mapOf("mode" to mode)))
+                for (s in listOf(PC, TABLET, PHONE)) shot(out, "kneeboards-$mode-${s.name}", s, "mission", MissionTab.BOARDS, then = { MissionTabRequest.open(MissionTab.BOARDS) })
+            }
+            // WDP mode once the Planner has opened the printed flight: the pages are judged by that open
+            m?.briefing?.overview?.flight?.let { cs ->
+                val f = com.bmscompanion.app.data.mission.LedgerMission(callsign = cs, theater = "Korea KTO", opened = System.currentTimeMillis())
+                val r = Bridge.handle(ApiRequest("POST", "/api/mission/opened", mapOf("for" to client.encodeToString(com.bmscompanion.app.data.mission.LedgerMission.serializer(), f))))
+                appendLine("     opened $cs in WDP mode: HTTP ${r.status}; since ${KneeboardPrint.missionSince()?.let { "${it.from} ${it.at}" }}")
+                shot(out, "kneeboards-wdp-opened-pc", PC, "mission", MissionTab.BOARDS, then = { MissionTabRequest.open(MissionTab.BOARDS) })
+            }
+            Bridge.handle(ApiRequest("POST", "/api/mission/source", mapOf("mode" to "ezboards")))
+            shot(out, "kneeboard-viewer-pc", PC, "m/kneeboardview?k=1")
+            shot(out, "kneeboard-viewer-phone", PHONE, "m/kneeboardview?k=0")
+            // the section's other two views
+            for (v in listOf("html", "tables")) {
+                com.bmscompanion.app.data.Repo.putString("kb_view_tab", v)
+                shot(out, "kneeboards-$v-pc", PC, "mission", MissionTab.BOARDS, then = { MissionTabRequest.open(MissionTab.BOARDS) })
+                shot(out, "kneeboards-$v-phone", PHONE, "mission", MissionTab.BOARDS, then = { MissionTabRequest.open(MissionTab.BOARDS) })
+            }
+            com.bmscompanion.app.data.Repo.putString("kb_view_tab", "cockpit")
+        }
+        if (want("dash-kneeboards")) {
+            val cards = listOf(DashItem(DashCard.BOARDS, DashWidth.M), DashItem(DashCard.MISSION), DashItem(DashCard.WEATHER))
+            DashLayouts.state("wide", 4).value = cards
+            DashLayouts.state("narrow", 4).value = cards
+            DashLayouts.choose(4)
+            for (mode in listOf("ezboards", "wdp")) {
+                Bridge.handle(ApiRequest("POST", "/api/mission/source", mapOf("mode" to mode)))
+                // (asked again once up: a switch into EZBoards mode turns the section to Briefing by itself)
+                for (s in listOf(PC, TABLET, PHONE)) shot(out, "dash-kneeboards-$mode-${s.name}", s, "mission", MissionTab.DASH, then = { MissionTabRequest.open(MissionTab.DASH) })
+            }
+            Bridge.handle(ApiRequest("POST", "/api/mission/source", mapOf("mode" to "ezboards")))
+        }
         if (want("planner-locked")) shot(out, "mission-planner-locked", PC, "mission", MissionTab.PLANNER)
         if (want("reference")) shot(out, "reference-airfields", PC, "reference")
         if (want("threats")) shot(out, "reference-threats", PC, "threats")

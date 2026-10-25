@@ -110,6 +110,19 @@ object AttackGeometry {
             if ("${north.roundToInt()},${east.roundToInt()}" == targetKey) typed[line] else null
 
         fun clear() = typed.clear()
+
+        /** What is typed and for which target, as one text ("<target>;<line>=<feet>,…"), for another device ([import]). */
+        fun export(): String = (targetKey ?: "") + ";" + typed.entries.joinToString(",") { "${it.key}=${it.value}" }
+
+        /** Takes another device's [export]. */
+        fun import(s: String) {
+            typed.clear()
+            targetKey = s.substringBefore(';').ifEmpty { null }
+            for (kv in s.substringAfter(';', "").split(',')) {
+                val v = kv.substringAfter('=', "").trim().toIntOrNull() ?: continue
+                typed[kv.substringBefore('=')] = v
+            }
+        }
     }
 
     /** The ElevOverrides key of the ground under the target (typed on the Coordinates box's target Elv). */

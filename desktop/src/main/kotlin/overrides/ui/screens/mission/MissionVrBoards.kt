@@ -423,6 +423,12 @@ private fun MapOptions(options: Map<String, String>, onChange: (Map<String, Stri
             Choice("All airfields", flag("allfields", false)) { set("allfields", if (flag("allfields", false)) "0" else "1") }
             Choice("Follow the jet", flag("follow")) { set("follow", if (flag("follow")) "0" else "1") }
         }
+        Text("YOUR JET", style = LocalExtra.current.overline, color = Hud.TextFaint)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            com.bmscompanion.app.ui.components.OwnJetLook.names.forEachIndexed { i, name ->
+                Choice(name, (options["jet"] ?: "1") == i.toString()) { set("jet", i.toString()) }
+            }
+        }
         Text("TOWNS", style = LocalExtra.current.overline, color = Hud.TextFaint)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             MapLook.placeOptions.forEach { (i, name) ->

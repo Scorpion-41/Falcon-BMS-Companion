@@ -21,7 +21,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,11 +76,24 @@ import com.bmscompanion.app.data.wdp.PopupPlan
 import com.bmscompanion.app.data.wdp.WdpControl
 import com.bmscompanion.app.data.wdp.WdpForm
 import com.bmscompanion.app.data.wdp.WdpValues
+import com.bmscompanion.app.data.mission.MissionData
+import com.bmscompanion.app.data.mission.MissionLink
+import com.bmscompanion.app.data.mission.MissionPicture
+import com.bmscompanion.app.data.wdp.PlannerIntel
 import com.bmscompanion.app.ui.components.AirfieldChart
+import com.bmscompanion.app.ui.components.BmsChart
 import com.bmscompanion.app.ui.components.ChartInks
+import com.bmscompanion.app.ui.components.GeoPaths
+import com.bmscompanion.app.ui.components.MapDeep
+import com.bmscompanion.app.ui.components.MapLook
 import com.bmscompanion.app.ui.components.MapProjection
+import com.bmscompanion.app.ui.components.drawLandmarks
 import com.bmscompanion.app.ui.components.mapIdOf
 import com.bmscompanion.app.ui.components.tileSample
+import com.bmscompanion.app.ui.screens.mission.MapLayers
+import com.bmscompanion.app.ui.screens.mission.receiverTacan
+import com.bmscompanion.app.ui.screens.mission.siteLabel
+import com.bmscompanion.app.ui.screens.mission.siteRingFt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -124,8 +140,9 @@ object KneeboardExtraPages {
         KbPageKind(KbKind.WEATHER, "Weather (the Briefing page's weather list)", "Weather") { CardPanelPage("pnlWx") },
         KbPageKind(KbKind.TARGETS_LEFT, "Target list, left: steerpoints and targets", "Targets L") { TargetListLeft(it) },
         KbPageKind(KbKind.TARGETS_RIGHT, "Target list, right: threats, lines, weapon targets", "Targets R") { TargetListRight(it) },
-        KbPageKind(KbKind.ROUTE_MAP, "Route map", "Route map") { RouteMapPage(it, RouteInks.DAY) },
-        KbPageKind(KbKind.ROUTE_MAP_DARK, "Route map, dark (for the sun's glare)", "Route map (dark)") { RouteMapPage(it, RouteInks.NIGHT) },
+        KbPageKind(KbKind.ROUTE_MAP, "Route map (your map's style and layers)", "Route map") { RouteMapPage(it, dark = false) },
+        KbPageKind(KbKind.ROUTE_MAP_DARK, "Route map, dark (for the sun's glare)", "Route map (dark)") { RouteMapPage(it, dark = true) },
+        KbPageKind(KbKind.WEATHER_MAP, "Weather map (as Mission weather shows it)", "Weather map") { WeatherMapPage(it) },
         KbPageKind(KbKind.ATTACK, "Attack profile (Pop-up, HADB or TOSS)", "Attack") { AttackPage(it) },
         KbPageKind(KbKind.SCHEDULE, "Airport Schedule (departures from your field)", "Apt Schedule") { SchedulePage(it) },
         KbPageKind(KbKind.DEPARTURE, "Departure ground chart", "Dep. chart") { GroundChartPage(it, 0) },
@@ -199,8 +216,14 @@ object KneeboardExtraPages {
             KbKind.TARGETS_LEFT, KbKind.TARGETS_RIGHT -> pptTypes(m.theater)
             KbKind.ROUTE_MAP, KbKind.ROUTE_MAP_DARK -> {
                 pptTypes(m.theater)
-                val style = if (kind == KbKind.ROUTE_MAP_DARK) RouteInks.NIGHT.style else RouteInks.DAY.style
-                routeFrame(planData(), ROUTE_W_PX, ROUTE_H_PX, style)?.let { loadTiles(it.keys) }
+                val look = RouteLook.now(kind == KbKind.ROUTE_MAP_DARK)
+                mapExtras(m.theater, look.style)
+                routeFrame(planData(), ROUTE_W_PX, ROUTE_H_PX, look.style)?.let { loadTiles(it.all) }
+            }
+            KbKind.WEATHER_MAP -> {
+                pptTypes(m.theater)
+                mapExtras(m.theater, MapLook.style)
+                KneeboardWeather.preload()
             }
             KbKind.SCHEDULE -> {
                 // the save that holds the printed briefing's flight, for its whole schedule (as the card's window turns to it)
@@ -239,20 +262,58 @@ object KneeboardExtraPages {
         return rows
     }
 
-    /** Loads every map picture in [keys] that is not here yet, several at once, and lets go of tiles no page wants. */
+    /** the key sets of the last [KEEP_WANTS] [loadTiles] calls, whose pictures are kept */
+    private val recentWants = ArrayList<Set<String>>()
+    private const val KEEP_WANTS = 4
+
+    /**
+     * Loads every map picture in [keys] that is not here yet, several at once, and lets go of tiles no page wants. A key
+     * ending `.pc` is a level the BMS PC draws ([MapDeep], `/api/maptile`: deeper than the bundled ones, and BMS's own
+     * chart); one that cannot come now is simply left out, the bundled level under it drawn instead.
+     */
     internal suspend fun loadTiles(keys: List<String>) {
         val want = keys.toSet()
-        for (k in images.keys.toList()) if (k.startsWith("maps/") && k !in want) images.remove(k)
+        // the pictures the last few calls asked for stay: two map pages drawn at once (the preview and the page being
+        // captured, a page and its preload at another size, the window's warm-up) let go of each other's tiles, and a
+        // page was captured with holes in its map
+        recentWants.add(want)
+        while (recentWants.size > KEEP_WANTS) recentWants.removeAt(0)
+        val keep = HashSet<String>().apply { recentWants.forEach { addAll(it) } }
+        for (k in images.keys.toList()) if (k.startsWith("maps/") && k !in keep) images.remove(k)
         val missing = keys.filter { it !in images }
         if (missing.isEmpty()) return
         coroutineScope {
             missing.map { k ->
                 async {
-                    val b = try { Repo.bitmap(k, sample = tileSample)?.asImageBitmap() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+                    val b = try {
+                        if (MapDeep.isDeep(k)) MapDeep.load(k) else Repo.bitmap(k, sample = tileSample)?.asImageBitmap()
+                    } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
                     if (b != null) images[k] = b
                 }
             }.awaitAll()
         }
+    }
+
+    /** The landmark lines and names of a map ([GeoPaths]), by map id. */
+    internal val geo = mutableStateMapOf<String, GeoPaths>()
+    /** A theater's airfields, by its airport set. */
+    internal val theaterAirports = mutableStateMapOf<String, List<Airport>>()
+    /** The threat reference (each system's reach where the PC gives none). */
+    internal var threatReference: List<com.bmscompanion.app.data.Threat> = emptyList()
+
+    /**
+     * What a map page draws besides the map and the plan: the map's landmarks, the theater's airfields, the threat
+     * reference, and (for BMS's own chart) which charts the PC has.
+     */
+    internal suspend fun mapExtras(theater: Theater?, style: String) {
+        val t = theater ?: return
+        try {
+            if (BmsChart.isChart(style)) BmsChart.refresh()
+            val id = mapIdOf(t.map)
+            if (id != null && geo[id] == null) Repo.geo(id)?.let { geo[id] = GeoPaths(id, it, t.sizeFt) }
+            if (theaterAirports[t.airportSet] == null) theaterAirports[t.airportSet] = Repo.airportSet(t.airportSet).airports
+            if (threatReference.isEmpty()) threatReference = Repo.threats()
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { /* drawn with what there is */ }
     }
 
     /** The airfield the card shows in row [i] (0 departure, 1 arrival, 2 alternate), loaded. */
@@ -463,6 +524,17 @@ internal class RouteInks(
     val style: String, val page: Color, val map: Color, val wash: Color, val ink: Color, val faint: Color,
     val route: Color, val red: Color, val threat: Color, val line: Color, val base: Color, val halo: Color, val stptFill: Color,
 ) {
+    /** These inks over the map drawn in [style] (1.4.2: the Route map follows the pilot's map style). */
+    fun on(style: String) = RouteInks(style, page, map, wash, ink, faint, route, red, threat, line, base, halo, stptFill)
+
+    /** a white page with dark inks ([DAY]'s), else the dark page with light ones */
+    val paper: Boolean get() = page.red > 0.5f
+    /** the bullseye, the tankers' and the AWACS's tracks, the theater's other airfields: the same contrast rule */
+    val bull: Color get() = if (paper) Color(0xFF37474F) else Color(0xFFCFD8DC)
+    val tanker: Color get() = if (paper) Color(0xFF00796B) else Color(0xFF6FE3D6)
+    val awacs: Color get() = if (paper) Color(0xFF8A5A00) else Color(0xFFFFCC66)
+    val field: Color get() = if (paper) Color(0xFF55606A) else Color(0xFFB8C4CC)
+
     companion object {
         val DAY = RouteInks(
             "chart", Color.White, Color(0xFFF4F3EE), Color.White.copy(alpha = 0.30f), INK, FAINT,
@@ -512,6 +584,16 @@ private fun Note(text: String, modifier: Modifier = Modifier) {
         Text(text, color = FAINT, fontSize = 10.sp, lineHeight = 14.sp, textAlign = TextAlign.Center)
     }
 }
+
+/** [Sheet] and [Note] for the pages of other files (the Weather map, KneeboardWeatherPage.kt). */
+@Composable
+internal fun KbSheet(scope: KbPageScope, title: String, sub: String?, inks: RouteInks, body: @Composable ColumnScope.() -> Unit) = Sheet(scope, title, sub, inks, body)
+
+@Composable
+internal fun KbNote(text: String, modifier: Modifier = Modifier) = Note(text, modifier)
+
+/** For the pages of other files: feet a nautical mile. */
+internal const val KB_FT_PER_NM = FT_PER_NM
 
 // ==================================================================================================== Briefing and weather
 
@@ -826,21 +908,39 @@ internal class RouteFrame(
     val keys: List<String>,
     val z: Int,
     val off: List<KbPoint>,
-    /** the map style it is drawn on: "chart" by day, "dark" for the dark page */
+    /** the map style it is drawn on (the pilot's, 1.4.2; "dark" for the dark page; "chart" where BMS's chart is not to be had) */
     val style: String = MAP_STYLE,
+    /** the levels the BMS PC draws (`.pc`, [MapDeep]): sharper than the bundled [keys], drawn over them when they come */
+    val deep: List<String> = emptyList(),
 ) {
+    /** every picture the frame can use, in the order it is drawn */
+    val all: List<String> get() = keys + deep
+
     val projection: MapProjection
         get() {
             val side = (theater.sizeFt * k).toFloat()
-            return MapProjection((-leftE * k).toFloat(), (-(theater.sizeFt - upperN) * k).toFloat(), side, theater.sizeFt, 1f)
+            // the scale as a map would have it (1 = the theater across the box's narrower side): the towns' levels follow it
+            return MapProjection((-leftE * k).toFloat(), (-(theater.sizeFt - upperN) * k).toFloat(), side, theater.sizeFt, side / min(w, h).coerceAtLeast(1))
         }
     fun at(north: Double, east: Double) = Offset(((east - leftE) * k).toFloat(), ((upperN - north) * k).toFloat())
 }
 
 private const val MAP_STYLE = "chart"
 
-/** Frames the route (and the targets near it) in a [w] x [h] pixel box; null with no theater or nothing placed. */
-internal fun routeFrame(d: KbPlanData, w: Int, h: Int, style: String = MAP_STYLE): RouteFrame? {
+/** The whole theater in a [w] x [h] pixel box, centred (a page with nothing placed yet). */
+internal fun theaterFrame(theater: Theater, w: Int, h: Int, style: String = MAP_STYLE): RouteFrame? {
+    if (w <= 0 || h <= 0) return null
+    val k = min(w, h) / theater.sizeFt
+    val spanE = w / k
+    val spanN = h / k
+    return mapFrame(theater, theater.sizeFt / 2 + spanN / 2, theater.sizeFt / 2 - spanE / 2, k, w, h, emptyList(), style)
+}
+
+/**
+ * Frames the route (and the targets near it) in a [w] x [h] pixel box, at least [minSpanNm] across; null with no
+ * theater or nothing placed.
+ */
+internal fun routeFrame(d: KbPlanData, w: Int, h: Int, style: String = MAP_STYLE, minSpanNm: Double = 30.0): RouteFrame? {
     val theater = d.mission.theater ?: return null
     if (w <= 0 || h <= 0) return null
     val core = d.route.ifEmpty { d.stptTargets + d.open }.ifEmpty { d.weapons }
@@ -855,8 +955,8 @@ internal fun routeFrame(d: KbPlanData, w: Int, h: Int, style: String = MAP_STYLE
     val pts = core + near
     var minN = pts.minOf { it.north }; var maxN = pts.maxOf { it.north }
     var minE = pts.minOf { it.east }; var maxE = pts.maxOf { it.east }
-    // at least 30 nm across, and a margin round it
-    val minSpan = 30 * FT_PER_NM
+    // at least [minSpanNm] across, and a margin round it
+    val minSpan = minSpanNm * FT_PER_NM
     if (maxN - minN < minSpan) { val c = (maxN + minN) / 2; minN = c - minSpan / 2; maxN = c + minSpan / 2 }
     if (maxE - minE < minSpan) { val c = (maxE + minE) / 2; minE = c - minSpan / 2; maxE = c + minSpan / 2 }
     val padN = (maxN - minN) * 0.10; val padE = (maxE - minE) * 0.10
@@ -867,27 +967,59 @@ internal fun routeFrame(d: KbPlanData, w: Int, h: Int, style: String = MAP_STYLE
     var spanN = maxN - minN
     if (spanE / spanN < aspect) { val grow = spanN * aspect - spanE; minE -= grow / 2; spanE += grow } else { val grow = spanE / aspect - spanN; maxN += grow / 2; spanN += grow }
     val k = w / spanE
-    val top = maxN
+    return mapFrame(theater, maxN, minE, k, w, h, off, style)
+}
+
+/**
+ * The frame whose top-left corner is ([top], [minE]) at [k] pixels a foot, with the map pictures it needs in [style]:
+ * the style's overview and the bundled level that suits the scale ([RouteFrame.keys]), and, where the scale wants more
+ * than the bundled levels hold, the PC's own level over them ([RouteFrame.deep], as every map asks it, [MapDeep]).
+ * BMS's own chart ([BmsChart]) is only the PC's: its levels down to the chart's own, over the bundled Chart — and the
+ * bundled Chart alone where the PC has none for this theater.
+ */
+private fun mapFrame(theater: Theater, top: Double, minE: Double, k: Double, w: Int, h: Int, off: List<KbPoint>, style: String): RouteFrame {
     val id = mapIdOf(theater.map)
     val keys = ArrayList<String>()
+    val deep = ArrayList<String>()
+    var drawn = style
     var z = 0
     if (id != null) {
-        keys += "maps/$id/$style.webp"
         val side = theater.sizeFt * k
-        if (side >= 1300.0) {
-            z = ceil(ln(side / 512.0) / ln(2.0)).toInt().coerceIn(2, 4)
-            val count = 1 shl z
+        val left = -minE * k
+        val topPx = -(theater.sizeFt - top) * k
+        fun tiles(level: Int, into: MutableList<String>, key: (Int, Int) -> String) {
+            val count = 1 shl level
             val ts = side / count
-            val left = -minE * k
-            val topPx = -(theater.sizeFt - top) * k
             val c0 = floor(-left / ts).toInt().coerceIn(0, count - 1)
             val c1 = floor((w - left) / ts).toInt().coerceIn(0, count - 1)
             val r0 = floor(-topPx / ts).toInt().coerceIn(0, count - 1)
             val r1 = floor((h - topPx) / ts).toInt().coerceIn(0, count - 1)
-            for (r in r0..r1) for (c in c0..c1) keys += "maps/$id/$style/$z/${r}_$c.webp"
+            for (r in r0..r1) for (c in c0..c1) into += key(r, c)
+        }
+        val want = ceil(ln(side / 512.0) / ln(2.0)).toInt()
+        val native = if (BmsChart.isChart(style)) BmsChart.nativeZ(id, BmsChart.theaterOf(style)) else null
+        if (BmsChart.isChart(style) && native == null) drawn = "chart"
+        if (native != null) {
+            keys += "maps/$id/chart.webp"
+            z = want.coerceIn(0, native.coerceIn(0, MapDeep.MAX_Z))
+            if (z > 0) deep += "maps/$id/$style/0/0_0.pc"
+            tiles(z, deep) { r, c -> "maps/$id/$style/$z/${r}_$c.pc" }
+        } else {
+            keys += "maps/$id/$drawn.webp"
+            if (side >= 1300.0) {
+                val bundled = MapDeep.bundledMax(drawn)
+                z = want.coerceIn(2, bundled)
+                val zz = z
+                tiles(zz, keys) { r, c -> "maps/$id/$drawn/$zz/${r}_$c.webp" }
+                if (want > bundled) {
+                    val dz = want.coerceAtMost(MapDeep.MAX_Z)
+                    tiles(dz, deep) { r, c -> "maps/$id/$drawn/$dz/${r}_$c.pc" }
+                    z = dz
+                }
+            }
         }
     }
-    return RouteFrame(theater, id, top, minE, k, w, h, keys, z, off, style)
+    return RouteFrame(theater, id, top, minE, k, w, h, keys, z, off, drawn, deep)
 }
 
 /**
@@ -896,14 +1028,23 @@ internal fun routeFrame(d: KbPlanData, w: Int, h: Int, style: String = MAP_STYLE
  * the DataCard's small map shows, at the size of a page and in paper inks.
  */
 @Composable
-private fun RouteMapPage(scope: KbPageScope, inks: RouteInks) {
+private fun RouteMapPage(scope: KbPageScope, dark: Boolean) {
     // (drawn again when EZBoards mode's mission arrives, KneeboardEzSource)
     val d = remember(KneeboardEzSource.mission) { planData() }
+    val look = RouteLook.now(dark)
+    val theater = d.mission.theater
+    LaunchedEffect(theater, look.style) { KneeboardExtraPages.mapExtras(theater, look.style) }
+    val extras = remember(d, look, KneeboardExtraPages.theaterAirports.size, KneeboardExtraPages.threatReference) { routeExtras(d.mission, look) }
     val flight = d.mission.briefing?.overview?.flight ?: d.mission.flight?.row?.callsign
-    val kind = if (inks === RouteInks.NIGHT) KbKind.ROUTE_MAP_DARK else KbKind.ROUTE_MAP
+    val kind = if (dark) KbKind.ROUTE_MAP_DARK else KbKind.ROUTE_MAP
+    // the inks of the style the map is actually drawn in (BMS's chart falls back on the Chart where the PC has none)
+    val probe = remember(d, look.style) { routeFrame(d, ROUTE_W_PX, ROUTE_H_PX, look.style)?.style ?: look.style }
+    val inks = if (dark) RouteInks.NIGHT else if (MapLook.isLight(probe)) RouteInks.DAY.on(probe) else RouteInks.NIGHT.on(probe)
     Sheet(scope, "ROUTE MAP", listOfNotNull(flight, d.mission.briefing?.overview?.mission, d.mission.theater?.name).joinToString(" · "), inks) {
         BoxWithConstraints(Modifier.fillMaxWidth().weight(1f).border(1.dp, inks.ink)) {
-            val frame = remember(d, constraints.maxWidth, constraints.maxHeight) { routeFrame(d, constraints.maxWidth, constraints.maxHeight, inks.style) }
+            val frame = remember(d, look.style, constraints.maxWidth, constraints.maxHeight, BmsChart.list) {
+                routeFrame(d, constraints.maxWidth, constraints.maxHeight, look.style)
+            }
             if (frame == null) {
                 Note(
                     if (d.mission.theater == null) "Falcon BMS's theater is not known to this copy of the app, so there is no map to draw."
@@ -913,18 +1054,102 @@ private fun RouteMapPage(scope: KbPageScope, inks: RouteInks) {
                 KneeboardExtraPages.drawn[kind] = "no map"
                 return@BoxWithConstraints
             }
-            LaunchedEffect(frame.keys) { KneeboardExtraPages.loadTiles(frame.keys) }
+            // the capture waits while pictures are on their way ([KneeboardPages.PageLoading]); one that cannot come
+            // is left out, and the level under it drawn
+            var busy by remember(frame.all) { mutableStateOf(frame.all.any { it !in KneeboardExtraPages.images }) }
+            LaunchedEffect(frame.all) { KneeboardExtraPages.loadTiles(frame.all); busy = false }
+            if (busy) KneeboardPages.PageLoading()
             val tm = rememberTextMeasurer(cacheSize = 64)
             val have = frame.keys.count { it in KneeboardExtraPages.images }
+            val haveDeep = frame.deep.count { it in KneeboardExtraPages.images }
             val airports = (0..2).map { KneeboardExtraPages.cardAirport(it) }
+            val geo = frame.mapId?.let { KneeboardExtraPages.geo[it] }
             Canvas(Modifier.fillMaxSize().clipToBounds()) {
-                drawRouteMap(frame, d, airports, tm, inks)
+                drawRouteMap(frame, d, airports, tm, inks, look, extras, geo)
             }
             KneeboardExtraPages.drawn[kind] =
-                "${d.route.size} flight-plan steerpoints, ${d.ppts.size} PPTs, ${d.lines.size} lines; map ${frame.mapId}/${frame.style} z${frame.z}: $have of ${frame.keys.size} pictures"
+                "${d.route.size} flight-plan steerpoints, ${d.ppts.size} PPTs, ${d.lines.size} lines; map ${frame.mapId}/${frame.style} z${frame.z}: $have of ${frame.keys.size} pictures" +
+                    (if (frame.deep.isNotEmpty()) "; $haveDeep of ${frame.deep.size} from the PC" else "") +
+                    "; ${extras.tracks.size} tracks, ${extras.sites.size} threat sites, bullseye ${if (extras.bull != null && look.bullseye) "drawn" else "not drawn"}, landmarks ${if (geo != null) "drawn" else "none"}"
         }
-        Legend(d, frameOffNote(d), inks)
+        Legend(d, frameOffNote(d), inks, look, extras)
     }
+}
+
+/**
+ * What a Route map follows (1.4.2): the map choices of the pilot's own map. In WDP mode the Planner's Map page
+ * ([WdpMapPrefs]: its style, label ink and layers), in EZBoards mode — where the Planner is not used — the Mission map's
+ * ([MapLook.style], [MapLayers]); the borders, provinces and towns are every map's own switches ([MapLook]). [dark]
+ * (Route map, dark) keeps the dark style and inks whatever is chosen.
+ */
+internal data class RouteLook(
+    val style: String, val ink: Int, val route: Boolean, val numbers: Boolean, val ppts: Boolean, val threats: Boolean,
+    val lines: Boolean, val airports: Boolean, val airstrips: Boolean, val bullseye: Boolean, val tankers: Boolean, val awacs: Boolean,
+) {
+    companion object {
+        fun now(dark: Boolean): RouteLook {
+            val l = if (KneeboardEzSource.active) RouteLook(
+                MapLook.style, 0, MapLayers.route, MapLayers.labels, MapLayers.sams, MapLayers.sams, MapLayers.lines,
+                MapLayers.fields, MapLayers.fields, true, MapLayers.support, MapLayers.support,
+            ) else WdpMapPrefs.let { p ->
+                RouteLook(
+                    p.style, p.ink, p.stpt.on, p.numbers.on, p.ppt.on, p.threats.on, p.lines.on,
+                    p.airports.on, p.airstrips.on, p.bullseye.on, p.tankers.on, p.awacs.on,
+                )
+            }
+            return if (dark) l.copy(style = "dark") else l
+        }
+    }
+}
+
+/** A tanker's, AWACS's or JSTARS's station leg ([a] to [b]) as the route map draws it: the box about it. */
+internal class KbTrack(val role: String, val label: String, val a: com.bmscompanion.app.data.wdp.DtcFromMission.Pt, val b: com.bmscompanion.app.data.wdp.DtcFromMission.Pt) {
+    val tanker: Boolean get() = role.contains("tank", true)
+}
+
+/** What the route map draws besides the plan: the bullseye, the support tracks, the mission's threats, the theater's other fields. */
+internal class RouteExtras(
+    val bull: Pair<Double, Double>?,
+    val tracks: List<KbTrack>,
+    val sites: List<MissionPicture.Site>,
+    val fields: List<Airport>,
+)
+
+/**
+ * [m]'s extras: a save's flight's own (its bullseye, its side's support stations, its spotted threats near the route),
+ * else the Mission section's (EZBoards mode's mission, or BMS's files in WDP mode: the save header's bullseye, the
+ * planned tracks, the mission's threats). Only what the side knows; nothing unspotted ([MissionPicture]).
+ */
+internal fun routeExtras(m: WdpMission, look: RouteLook): RouteExtras {
+    val data: MissionData? = if (KneeboardEzSource.active) MissionLink.mission.value else MissionLink.bmsFiles.value
+    val f = m.flight
+    fun pair(x: Double?, y: Double?) = if (x != null && y != null && (x != 0.0 || y != 0.0)) x to y else null
+    val bull = f?.let { pair(it.bullseyeX, it.bullseyeY) } ?: m.route?.let { pair(it.bullseyeX, it.bullseyeY) }
+        ?: data?.ground?.let { pair(it.bullseyeX, it.bullseyeY) }
+    val ref = KneeboardExtraPages.threatReference
+    val ringOf: (String) -> Double? = { s -> data?.ground?.rings?.get(s) ?: siteRingFt(s, emptyList(), ref) }
+    val tracks = if (f != null) f.support.mapNotNull { s ->
+        PlannerIntel.station(s)?.let { st -> KbTrack(s.role, listOfNotNull(s.callsign, receiverTacan(s.tacan)?.let { "TCN $it" }).joinToString(" · "), st.a, st.b) }
+    } else data?.tracks.orEmpty().mapNotNull { t ->
+        val legs = t.points.filter { it.station }
+        if (legs.size < 2) null
+        else KbTrack(
+            t.role, listOfNotNull(t.callsign ?: t.role.uppercase(), if (t.yours) "YOURS" else null).joinToString(" · "),
+            com.bmscompanion.app.data.wdp.DtcFromMission.Pt(legs.first().x, legs.first().y),
+            com.bmscompanion.app.data.wdp.DtcFromMission.Pt(legs.last().x, legs.last().y),
+        )
+    }
+    val sites = runCatching {
+        if (f != null) MissionPicture.sites(MissionPicture.ground(f, null, "", "", "", null, ringOf), ringOf)
+        else MissionPicture.sites(data?.ground, ringOf)
+    }.getOrDefault(emptyList())
+    val own = (0..2).mapNotNull { KneeboardExtraPages.cardAirport(it)?.id }.toSet()
+    val fields = m.theater?.let { KneeboardExtraPages.theaterAirports[it.airportSet] }.orEmpty().filter { a ->
+        if (a.id in own || !com.bmscompanion.app.ui.screens.mission.mapsAirfield(a)) return@filter false
+        val layer = airfieldLayer(a)
+        if (layer == "airport") look.airports else if (layer == "airstrip") look.airstrips else false
+    }
+    return RouteExtras(bull, tracks, sites, fields)
 }
 
 /** The target points the map leaves off, as a sentence under it. */
@@ -948,21 +1173,36 @@ private fun frameOffNote(d: KbPlanData): String? {
 private fun compass(brg: Double): String = listOf("north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west")[((brg + 22.5) / 45).toInt() % 8]
 
 @Composable
-private fun Legend(d: KbPlanData, off: String?, inks: RouteInks = RouteInks.DAY) {
+private fun Legend(d: KbPlanData, off: String?, inks: RouteInks = RouteInks.DAY, look: RouteLook? = null, extras: RouteExtras? = null) {
     Column(Modifier.fillMaxWidth().padding(top = 3.dp)) {
+        // one line: the box above it keeps the height its map pictures were chosen for (ROUTE_H_PX)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            LegendMark { drawLine(inks.route, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 2.dp.toPx()) }
-            LegendWord("Flight plan", inks)
-            LegendMark { drawCircle(inks.stptFill, 3.5.dp.toPx()); drawCircle(inks.route, 3.5.dp.toPx(), style = Stroke(1.4.dp.toPx())) }
-            LegendWord("Steerpoint", inks)
+            if (look?.route != false) {
+                LegendMark { drawLine(inks.route, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 2.dp.toPx()) }
+                LegendWord("Flight plan", inks)
+                LegendMark { drawCircle(inks.stptFill, 3.5.dp.toPx()); drawCircle(inks.route, 3.5.dp.toPx(), style = Stroke(1.4.dp.toPx())) }
+                LegendWord("Steerpoint", inks)
+            }
             LegendMark { drawPath(triangle(Offset(size.width / 2, size.height / 2), 4.5.dp.toPx()), inks.red) }
             LegendWord("Target", inks)
-            LegendMark { drawCircle(inks.threat, size.height / 2 - 1f, style = Stroke(1.6.dp.toPx())) }
-            LegendWord("Threat ring", inks)
-            LegendMark { drawLine(inks.line, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 1.8.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f))) }
-            LegendWord("Line", inks)
+            if (look == null || look.ppts || look.threats) {
+                LegendMark { drawCircle(inks.threat, size.height / 2 - 1f, style = Stroke(1.6.dp.toPx())) }
+                LegendWord("Threat", inks)
+            }
+            if (look?.lines != false) {
+                LegendMark { drawLine(inks.line, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), 1.8.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 4f))) }
+                LegendWord("Line", inks)
+            }
             LegendMark { drawRect(inks.base, Offset(size.width / 2 - 3.dp.toPx(), size.height / 2 - 3.dp.toPx()), Size(6.dp.toPx(), 6.dp.toPx())) }
             LegendWord("Airfield", inks)
+            if (look != null && extras != null && extras.tracks.any { if (it.tanker) look.tankers else look.awacs }) {
+                LegendMark { drawRect(inks.tanker, Offset(1.dp.toPx(), 2.dp.toPx()), Size(size.width - 2.dp.toPx(), size.height - 4.dp.toPx()), style = Stroke(1.4.dp.toPx())) }
+                LegendWord("Track", inks)
+            }
+            if (look?.bullseye == true && extras?.bull != null) {
+                LegendMark { drawCircle(inks.bull, 3.dp.toPx(), style = Stroke(1.4.dp.toPx())); drawCircle(inks.bull, 1.2.dp.toPx()) }
+                LegendWord("Bullseye", inks)
+            }
         }
         if (off != null) Text(off, color = inks.faint, fontSize = 7.sp, lineHeight = 9.sp, maxLines = 2)
     }
@@ -993,7 +1233,7 @@ private class Labels(private val tm: TextMeasurer, private val halo: Color = Col
 
     fun block(r: Rect) { taken += r }
 
-    fun DrawScope.put(text: String, at: Offset, color: Color, textSize: TextUnit, bold: Boolean = false, gap: Float = 6f): Boolean {
+    fun DrawScope.put(text: String, at: Offset, color: Color, textSize: TextUnit, bold: Boolean = false, gap: Float = 6f, haloColor: Color = halo): Boolean {
         val layout = tm.measure(text, TextStyle(color = color, fontSize = textSize, fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal))
         val w = layout.size.width.toFloat()
         val h = layout.size.height.toFloat()
@@ -1007,7 +1247,7 @@ private class Labels(private val tm: TextMeasurer, private val halo: Color = Col
             if (r.left < 0 || r.top < 0 || r.right > size.width || r.bottom > size.height) continue
             if (taken.any { it.overlaps(r) }) continue
             taken += r
-            drawText(layout, color = halo, topLeft = p, drawStyle = Stroke(2f * density))
+            drawText(layout, color = haloColor, topLeft = p, drawStyle = Stroke(2f * density))
             drawText(layout, topLeft = p)
             return true
         }
@@ -1015,7 +1255,37 @@ private class Labels(private val tm: TextMeasurer, private val halo: Color = Col
     }
 }
 
-private fun DrawScope.drawRouteMap(f: RouteFrame, d: KbPlanData, airports: List<Airport?>, tm: TextMeasurer, inks: RouteInks = RouteInks.DAY) {
+/**
+ * The map of [f] in its style: each picture in the order the frame lists them (the overview, the bundled level, the
+ * PC's levels over them), each put where its level and place say. Shared by the route map and the weather map.
+ */
+internal fun DrawScope.drawFrameMap(f: RouteFrame) {
+    val pr = f.projection
+    val imgs = KneeboardExtraPages.images
+    val id = f.mapId ?: return
+    for (key in f.all) {
+        val img = imgs[key] ?: continue
+        // "maps/<id>/<style>.webp" is the whole theater; "maps/<id>/<style>/<z>/<r>_<c>.webp|.pc" one tile of level z
+        val parts = key.removePrefix("maps/$id/").split('/')
+        if (parts.size < 3) {
+            drawImage(img, dstOffset = IntOffset(pr.left.roundToInt(), pr.top.roundToInt()), dstSize = IntSize(pr.side.roundToInt(), pr.side.roundToInt()))
+            continue
+        }
+        val z = parts[1].toIntOrNull() ?: continue
+        val rc = parts[2].substringBefore('.').split('_')
+        val r = rc.getOrNull(0)?.toIntOrNull() ?: continue
+        val c = rc.getOrNull(1)?.toIntOrNull() ?: continue
+        val ts = pr.side / (1 shl z)
+        val x0 = (pr.left + c * ts).roundToInt(); val x1 = (pr.left + (c + 1) * ts).roundToInt()
+        val y0 = (pr.top + r * ts).roundToInt(); val y1 = (pr.top + (r + 1) * ts).roundToInt()
+        drawImage(img, dstOffset = IntOffset(x0, y0), dstSize = IntSize(x1 - x0, y1 - y0))
+    }
+}
+
+private fun DrawScope.drawRouteMap(
+    f: RouteFrame, d: KbPlanData, airports: List<Airport?>, tm: TextMeasurer, inks: RouteInks = RouteInks.DAY,
+    look: RouteLook? = null, extras: RouteExtras? = null, geo: GeoPaths? = null,
+) {
     drawRect(inks.map)
     val ROUTE_INK = inks.route
     val RED = inks.red
@@ -1024,37 +1294,64 @@ private fun DrawScope.drawRouteMap(f: RouteFrame, d: KbPlanData, airports: List<
     val BASE_INK = inks.base
     val INK = inks.ink
     val halo = inks.halo
-    // the map: the style's overview, and the sharper tiles over it
+    // the map in the pilot's style: the overview, and the sharper tiles over it
     val pr = f.projection
-    val imgs = KneeboardExtraPages.images
-    val MAP_STYLE = f.style
-    f.mapId?.let { id ->
-        imgs["maps/$id/$MAP_STYLE.webp"]?.let {
-            drawImage(it, dstOffset = IntOffset(pr.left.roundToInt(), pr.top.roundToInt()), dstSize = IntSize(pr.side.roundToInt(), pr.side.roundToInt()))
-        }
-        if (f.z > 0) {
-            val count = 1 shl f.z
-            val ts = pr.side / count
-            for (key in f.keys) {
-                if (!key.contains("/$MAP_STYLE/${f.z}/")) continue
-                val img = imgs[key] ?: continue
-                val rc = key.substringAfterLast('/').removeSuffix(".webp").split('_')
-                val r = rc.getOrNull(0)?.toIntOrNull() ?: continue
-                val c = rc.getOrNull(1)?.toIntOrNull() ?: continue
-                val x0 = (pr.left + c * ts).roundToInt(); val x1 = (pr.left + (c + 1) * ts).roundToInt()
-                val y0 = (pr.top + r * ts).roundToInt(); val y1 = (pr.top + (r + 1) * ts).roundToInt()
-                drawImage(img, dstOffset = IntOffset(x0, y0), dstSize = IntSize(x1 - x0, y1 - y0))
-            }
-        }
-    }
+    drawFrameMap(f)
     // a wash, so the inks stand out from the map
     drawRect(inks.wash)
+    // the borders, provinces and towns every map draws (MapLook's switches), in the inks of this style
+    geo?.let { drawLandmarks(pr, it, tm, mission = true, styleOverride = f.style) }
     // one of the page's units, in pixels
     val px = density
     val labels = Labels(tm, halo)
+    val showRoute = look?.route != false
+    val showPpts = look?.ppts != false
+    val showLines = look?.lines != false
+    // the label ink of airfields (WDP's Text color: Auto, White, Black, ONC)
+    val apInk = if (look == null || look.ink == 0) BASE_INK else labelInk(look.ink, inks.paper)
+    val apHalo = if (0.2126f * apInk.red + 0.7152f * apInk.green + 0.0722f * apInk.blue > 0.5f) Color(0xFF0B0E10) else Color.White
+
+    // the bullseye: its point and rings every 20 nm, faint, under everything
+    if (look?.bullseye == true) extras?.bull?.let { (bx, by) ->
+        val c = f.at(bx, by)
+        val nm = (FT_PER_NM * f.k).toFloat()
+        for (ring in 1..4) drawCircle(inks.bull.copy(alpha = 0.35f), ring * 20 * nm, c, style = Stroke(1f * px))
+        drawCircle(halo, 5.5f * px, c, style = Stroke(3f * px))
+        drawCircle(inks.bull, 5.5f * px, c, style = Stroke(1.6f * px))
+        drawCircle(inks.bull, 1.8f * px, c)
+        labels.block(Rect(c.x - 6 * px, c.y - 6 * px, c.x + 6 * px, c.y + 6 * px))
+    }
+    // the tankers' and AWACS's tracks: the box about the leg they hold on, as every map draws it
+    val tracks = extras?.tracks.orEmpty().filter { if (it.tanker) look?.tankers != false else look?.awacs != false }
+    for (t in tracks) {
+        val ink = if (t.tanker) inks.tanker else inks.awacs
+        val corners = PlannerIntel.orbitBox(t.a, t.b).map { f.at(it.north, it.east) }
+        val box = Path().apply { corners.forEachIndexed { i, c -> if (i == 0) moveTo(c.x, c.y) else lineTo(c.x, c.y) }; close() }
+        drawPath(box, ink.copy(alpha = 0.12f))
+        drawPath(box, halo.copy(alpha = 0.6f), style = Stroke(3.4f * px))
+        drawPath(box, ink, style = Stroke(1.6f * px))
+    }
+    // the mission's threats (the briefing's, else the spotted ones along the route): a dashed ring of each system's reach
+    if (look?.threats == true) for (s in extras?.sites.orEmpty()) {
+        if (d.ppts.any { hypot(it.north - s.x, it.east - s.y) < FT_PER_NM }) continue
+        val c = f.at(s.x, s.y)
+        val r = ((s.ringFt ?: 0.0) * f.k).toFloat()
+        if (r > 2f) {
+            drawCircle(THREAT.copy(alpha = 0.07f), r, c)
+            drawCircle(THREAT, r, c, style = Stroke(1.5f * px, pathEffect = PathEffect.dashPathEffect(floatArrayOf(6f * px, 4f * px))))
+        }
+        drawRect(THREAT, Offset(c.x - 3f * px, c.y - 3f * px), Size(6f * px, 6f * px))
+    }
+    // the theater's other airfields, where the pilot's map shows them
+    for (a in extras?.fields.orEmpty()) {
+        val c = f.at(a.x, a.y)
+        if (c.x < 0 || c.y < 0 || c.x > size.width || c.y > size.height) continue
+        drawRect(halo, Offset(c.x - 3.5f * px, c.y - 3.5f * px), Size(7f * px, 7f * px))
+        drawRect(inks.field, Offset(c.x - 2.5f * px, c.y - 2.5f * px), Size(5f * px, 5f * px), style = Stroke(1.3f * px))
+    }
 
     // threats first, under everything
-    for (p in d.ppts) {
+    if (showPpts) for (p in d.ppts) {
         val c = f.at(p.north, p.east)
         if (p.rangeFt > 0) {
             val r = (p.rangeFt * f.k).toFloat()
@@ -1066,15 +1363,16 @@ private fun DrawScope.drawRouteMap(f: RouteFrame, d: KbPlanData, airports: List<
         drawLine(THREAT, Offset(c.x - 4 * px, c.y + 4 * px), Offset(c.x + 4 * px, c.y - 4 * px), 1.8f * px)
     }
     // the lines, each joined in its own order
-    for ((k, pts) in d.lines) {
+    if (showLines) for ((k, pts) in d.lines) {
         val path = Path()
         pts.forEachIndexed { i, p -> val o = f.at(p.north, p.east); if (i == 0) path.moveTo(o.x, o.y) else path.lineTo(o.x, o.y) }
         drawPath(path, LINE_INK, style = Stroke(1.8f * px, pathEffect = PathEffect.dashPathEffect(floatArrayOf(7f * px, 4f * px))))
         pts.forEach { p -> drawCircle(LINE_INK, 2f * px, f.at(p.north, p.east)) }
     }
     // the flight plan: a leg joins steerpoints next to each other in number only
-    val route = d.route.sortedBy { it.n }
-    for (i in 1 until route.size) if (route[i].n == route[i - 1].n + 1) {
+    // (STPT off: the target points among them only, no legs)
+    val route = (if (showRoute) d.route else d.route.filter { it.n in d.targetStpts }).sortedBy { it.n }
+    if (showRoute) for (i in 1 until route.size) if (route[i].n == route[i - 1].n + 1) {
         val a = f.at(route[i - 1].north, route[i - 1].east)
         val b = f.at(route[i].north, route[i].east)
         drawLine(halo, a, b, 5f * px)
@@ -1114,7 +1412,7 @@ private fun DrawScope.drawRouteMap(f: RouteFrame, d: KbPlanData, airports: List<
     }
     // labels, most important first
     with(labels) {
-        for (p in route) put(p.n.toString(), f.at(p.north, p.east), if (p.n in d.targetStpts) RED else ROUTE_INK, 9.sp, bold = true)
+        if (look?.numbers != false) for (p in route) put(p.n.toString(), f.at(p.north, p.east), if (p.n in d.targetStpts) RED else ROUTE_INK, 9.sp, bold = true)
         // target points close together are named once, by their range ("15-22")
         val groups = ArrayList<MutableList<KbPoint>>()
         for (t in targets) {
@@ -1124,16 +1422,26 @@ private fun DrawScope.drawRouteMap(f: RouteFrame, d: KbPlanData, airports: List<
         for (g in groups) put(DtcPage.ranges(g.map { it.n }), f.at(g.map { it.north }.average(), g.map { it.east }.average()), RED, 8.sp, bold = true, gap = 9f)
         for ((_, rows) in bases) {
             val a = rows.first().value!!
-            put(rows.joinToString("/") { baseWords[it.index] } + " " + a.name, f.at(a.x, a.y), BASE_INK, 7.5.sp, bold = true, gap = 8f)
+            put(rows.joinToString("/") { baseWords[it.index] } + " " + a.name, f.at(a.x, a.y), apInk, 7.5.sp, bold = true, gap = 8f, haloColor = apHalo)
         }
         // a threat is named at the top of its ring, clear of the route that usually runs through the middle of it
-        for (p in d.ppts) {
+        if (showPpts) for (p in d.ppts) {
             val c = f.at(p.north, p.east)
             val r = (p.rangeFt * f.k).toFloat()
             val at = if (r > 12 * px) Offset(c.x, c.y - r) else c
             put("${p.n} ${p.label}" + if (p.rangeFt > 0) " ${one(p.rangeFt / FT_PER_NM)} nm" else "", at, THREAT, 7.sp, bold = true, gap = 4f)
         }
-        for ((k, pts) in d.lines) pts.firstOrNull()?.let { put("L$k", f.at(it.north, it.east), LINE_INK, 7.sp, bold = true) }
+        if (showLines) for ((k, pts) in d.lines) pts.firstOrNull()?.let { put("L$k", f.at(it.north, it.east), LINE_INK, 7.sp, bold = true) }
+        for (t in tracks) {
+            val mid = f.at((t.a.north + t.b.north) / 2, (t.a.east + t.b.east) / 2)
+            put(t.label, mid, if (t.tanker) inks.tanker else inks.awacs, 7.sp, bold = true, gap = 4f)
+        }
+        if (look?.threats == true) for (s in extras?.sites.orEmpty()) {
+            if (d.ppts.any { hypot(it.north - s.x, it.east - s.y) < FT_PER_NM }) continue
+            put(siteLabel(s.system.ifBlank { s.name.orEmpty() }), f.at(s.x, s.y), THREAT, 6.5.sp, bold = true, gap = 5f)
+        }
+        if (look?.bullseye == true) extras?.bull?.let { (bx, by) -> put("BULLSEYE", f.at(bx, by), inks.bull, 6.5.sp, bold = true, gap = 7f) }
+        for (a in extras?.fields.orEmpty()) put(a.icao ?: a.name, f.at(a.x, a.y), if (look?.ink == 0) inks.field else apInk, 6.5.sp, gap = 5f, haloColor = if (look?.ink == 0) halo else apHalo)
     }
     // north, and a scale
     val nx = size.width - 16f * px

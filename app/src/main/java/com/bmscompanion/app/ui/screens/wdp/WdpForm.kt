@@ -282,6 +282,8 @@ fun WdpFormView(
                     androidx.compose.runtime.CompositionLocalProvider(
                         LocalWdpContent provides contentOut, LocalWdpTyping provides typing, LocalWdpFormName provides form.form,
                         LocalWdpMeasurer provides measurer,
+                        // the Planner's face, on whole pixels (WdpType), for what a wiring draws of its own too
+                        androidx.compose.material3.LocalTextStyle provides wdpTextStyle(),
                         // only while the Planner is worked by finger: a mouse's page keeps nothing of this
                         LocalWdpTouchTargets provides (if (WdpTouch.device) fingers else null),
                         // the form's tooltips (WdpTips; tips/<form>.json), none while Settings has them off
@@ -499,7 +501,7 @@ fun WdpPanelView(
             androidx.compose.runtime.CompositionLocalProvider(
                 LocalWdpContent provides content, LocalWdpTyping provides typing, LocalWdpFormName provides form.form,
                 LocalWdpPrint provides print, LocalWdpPrintHide provides (if (print) hide else emptySet()),
-                LocalWdpMeasurer provides measurer,
+                LocalWdpMeasurer provides measurer, androidx.compose.material3.LocalTextStyle provides wdpTextStyle(),
             ) {
                 // drawn at the control's own corner; nothing on it reaches the page's wiring
                 Control(c.copy(x = 0, y = 0), live, scale, p, Inherited(ink, null, page), null, null)
@@ -1012,7 +1014,7 @@ private fun rectKey(k: WdpControl): Long =
 private fun PictureFile(path: String, fit: ContentScale = ContentScale.FillBounds) {
     val bmp by produceState<Bitmap?>(null, path) { value = Repo.bitmap(path) }
     bmp?.let {
-        Image(bitmap = it.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = fit)
+        Image(bitmap = it.asImageBitmap(), contentDescription = null, modifier = Modifier.fillMaxSize(), contentScale = fit, filterQuality = PICTURE_FILTER)
     }
 }
 
@@ -1045,9 +1047,20 @@ private fun Picture(name: String) {
             contentDescription = null,
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.FillBounds,
+            filterQuality = PICTURE_FILTER,
         )
     }
 }
+
+/**
+ * How a designer picture is resampled to the page's scale. Much of WDP's small type is not text but Falcas's artwork:
+ * every caption of the DataCard's two pages ("Drag ind", "Gross Wgt", the column heads) is in one 1600 x 1200 JPEG
+ * that WDP shrinks to 900 x 675 and the Planner draws at 0.8 to 1.2 of its pixels; Compose's default (Low: bilinear,
+ * no mipmaps) dropped source pixels at a shrink and smeared at a stretch. High resamples it with a cubic filter on
+ * the PC and in the browser (Skia), so the strokes of that artwork keep their weight (`--wdpsharp` crops it); one
+ * picture a page, sampled on the GPU, so the cost is not felt.
+ */
+private val PICTURE_FILTER get() = WdpType.pictures
 
 /**
  * A Windows Forms TrackBar: a track with a thumb, dragged or tapped to a value.
@@ -1289,6 +1302,7 @@ private fun TypingField(
                 st.focused = false
                 leave()
                 if (typing.leave === leave) typing.leave = null
+                if (com.bmscompanion.app.data.mission.MissionSync.typing == key) PlannerSessionSync.typingIn(null)
             }
             if (WdpProbe.on && WdpProbe.focused == key) WdpProbe.focused = null
         }
@@ -1387,11 +1401,14 @@ private fun TypingField(
                     st.sent.clear()
                     typing.rect = { st.bounds }
                     typing.leave = leave
+                    // another device's entry for this box waits until it is left (PlannerSessionSync)
+                    PlannerSessionSync.typingIn(key)
                 } else if (!f.isFocused && st.focused) {
                     st.focused = false
                     st.armed = false
                     leave()
                     if (typing.leave === leave) typing.leave = null
+                    if (com.bmscompanion.app.data.mission.MissionSync.typing == key) PlannerSessionSync.typingIn(null)
                 }
             }
             .onPreviewKeyEvent { e ->
@@ -2436,7 +2453,14 @@ private fun style(c: WdpControl, scale: Float, inh: Inherited): TextStyle {
     // No line-height trimming: squeezing the line to the em box cropped the tops of the digits. Windows never
     // clips the top of a label — only whatever runs off the bottom — and with the text top-aligned and the control
     // clipped to its bounds, that is exactly what happens here without any help.
-    return TextStyle(fontSize = size)
+    return TextStyle(fontSize = size, fontFamily = WdpType.face, platformStyle = WdpType.platform)
+}
+
+/** The theme's text style in the Planner's face and rasterisation ([WdpType]): what a form's Material text merges its own over. */
+@Composable
+private fun wdpTextStyle(): TextStyle = androidx.compose.material3.LocalTextStyle.current.let { s ->
+    if (WdpType.platform == null && WdpType.face == null) s
+    else s.copy(fontFamily = WdpType.face ?: s.fontFamily, platformStyle = WdpType.platform ?: s.platformStyle)
 }
 
 /**

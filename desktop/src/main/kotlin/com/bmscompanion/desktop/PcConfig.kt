@@ -110,6 +110,26 @@ object PcConfig {
         trayChoice = if (on) 1 else 0
         Repo.putInt("pc_close_tray", trayChoice)
     }
+
+    /**
+     * Every start opens the window minimized on the taskbar, without taking the focus (off by default; `pc_start_min`,
+     * -1 = never chosen). Not applied to a start asked to show something (`--show`, `--route`); see [AutoStart.launch].
+     */
+    private var startMinChoice by mutableStateOf(Repo.getInt("pc_start_min", -1))
+    val startMinimized: Boolean get() = startMinChoice == 1
+    val startMinimizedChosen: Boolean get() = startMinChoice >= 0
+
+    fun setStartMinimized(on: Boolean) {
+        startMinChoice = if (on) 1 else 0
+        Repo.putInt("pc_start_min", startMinChoice)
+    }
+
+    /** `--autostarttest` only: back to "never chosen" (-1), or to the value it found. */
+    internal fun putStartMinimizedForCheck(choice: Int) {
+        startMinChoice = choice
+        Repo.putInt("pc_start_min", choice)
+    }
+    internal val startMinimizedRaw: Int get() = startMinChoice
 }
 
 /** Keeps reading Falcon BMS and the HTTP server running as the settings say. */

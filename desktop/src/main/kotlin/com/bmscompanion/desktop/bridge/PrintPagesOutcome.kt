@@ -142,6 +142,8 @@ object PrintPagesOutcome {
             b
         }
         val before = Bridge.settings.value
+        // the Map page's style, which the Route map follows (1.4.2): the checks set it, and it is put back after
+        val wdpStyleBefore = com.bmscompanion.app.ui.screens.wdp.WdpMapPrefs.style
         val wasRunning = Bridge.running
         val wasProbe = WdpProbe.on
         var acquired = 0
@@ -195,6 +197,8 @@ object PrintPagesOutcome {
 
             // ---------------------------------------------------------------- 1. each kind drawn
             line("== 1. Each kind drawn at 1024 x 1536 and captured, as the Print window captures a page")
+            // the Route map follows the Planner's Map page style (1.4.2): on the Chart here, which the checks below read
+            com.bmscompanion.app.ui.screens.wdp.WdpMapPrefs.chooseStyle("chart")
             check(ORDER.all { k -> KneeboardPages.of(k) != null }, "the Print window offers all ${ORDER.size} kinds after the card pages",
                 KneeboardPages.kinds.joinToString { it.id })
             val drawnPng = HashMap<String, ByteArray>()
@@ -276,6 +280,63 @@ object PrintPagesOutcome {
                     }
                 }
             } finally { spike.close() }
+            line("")
+
+            // ---------------------------------------------------------------- 1b. the map pages follow the pilot's choices
+            line("== 1b. The Route map in the Map page's style, and the Weather map (1.4.2)")
+            val spike2 = Spike()
+            try {
+                fun shot(kind: String, name: String): BufferedImage? {
+                    val k = KneeboardPages.of(kind) ?: return null.also { check(false, "$name: the kind is offered", kind) }
+                    val png = spike2.capture(k)
+                    val img = png?.let { runCatching { ImageIO.read(ByteArrayInputStream(it)) }.getOrNull() }
+                    if (png != null) File(pics, "drawn-$name.png").writeBytes(png)
+                    line("    $name: ${KneeboardExtraPages.drawn[kind] ?: "(nothing said)"}" + (spike2.error?.let { "; $it" } ?: ""))
+                    return img
+                }
+                val all = 512 * 768
+                for (style in listOf("satellite", "topo")) {
+                    com.bmscompanion.app.ui.screens.wdp.WdpMapPrefs.chooseStyle(style)
+                    val img = shot(KbKind.ROUTE_MAP, "routemap-$style") ?: continue
+                    val said = KneeboardExtraPages.drawn[KbKind.ROUTE_MAP].orEmpty()
+                    val m = Regex("(\\d+) of (\\d+) pictures").find(said)
+                    check(said.contains("/$style ") && m != null && m.groupValues[1] == m.groupValues[2], "routemap on $style: drawn in the Map page's style, every bundled picture there", said)
+                    val dark = count(img) { r, g, b -> maxOf(r, g, b) < 70 } * 100 / all
+                    // a light style keeps the paper page and its inks; a dark one (satellite) the dark page and light inks
+                    if (style == "topo") check(dark < 40, "routemap on topo: a paper page ($dark% dark)", "$dark%")
+                    else check(dark >= 30, "routemap on satellite: the dark page with light inks ($dark% dark)", "$dark%")
+                }
+            } finally { com.bmscompanion.app.ui.screens.wdp.WdpMapPrefs.chooseStyle("chart") }
+            // the Weather map reads the PC: the bridge on the copy, in EZBoards mode (the printed flight's weather)
+            try {
+                Bridge.update { it.copy(BmsDirOverride = root.path, AutoEzBoardsOnPrint = false, MissionSource = com.bmscompanion.app.data.mission.MissionMode.EZBOARDS) }
+                Bridge.startForCheck()
+                MissionLink.useThisPc()
+                MissionLink.acquire(); acquired++
+                waitFor(20_000) { MissionLink.state.value is LinkState.Online && MissionLink.info.value?.mission?.mode == com.bmscompanion.app.data.mission.MissionMode.EZBOARDS && MissionLink.mission.value?.briefing != null }
+                val img = spike2.let { _ ->
+                    val k = KneeboardPages.of(KbKind.WEATHER_MAP)
+                    check(k != null, "weather map: the kind is offered", KneeboardPages.kinds.joinToString { it.id })
+                    k?.let { spike2.capture(it) }?.also { File(pics, "drawn-wxmap.png").writeBytes(it) }?.let { runCatching { ImageIO.read(ByteArrayInputStream(it)) }.getOrNull() }
+                }
+                val said = KneeboardExtraPages.drawn[KbKind.WEATHER_MAP].orEmpty()
+                line("    wxmap: $said" + (spike2.error?.let { "; $it" } ?: ""))
+                check(img != null && img.width == 1024, "weather map: drawn at 1024 x 1536", said)
+                check(said.startsWith("model ") && Regex("(\\d+) of (\\d+) pictures").find(said)?.let { it.groupValues[1] == it.groupValues[2] } == true,
+                    "weather map: the mission's weather over the map, every picture there", said)
+                check(KneeboardPrintSession.EZ_KINDS.contains(KbKind.WEATHER_MAP), "weather map: offered in EZBoards mode too")
+                // the Route map in EZBoards mode: the Mission map's style
+                val k = KneeboardPages.of(KbKind.ROUTE_MAP)
+                if (k != null) {
+                    k.let { spike2.capture(it) }?.let { File(pics, "drawn-routemap-ez.png").writeBytes(it) }
+                    val s = KneeboardExtraPages.drawn[KbKind.ROUTE_MAP].orEmpty()
+                    line("    routemap (EZBoards mode): $s")
+                    val st = com.bmscompanion.app.ui.components.MapLook.style
+                    check(s.contains("/${if (com.bmscompanion.app.ui.components.BmsChart.isChart(st)) "" else st}"), "routemap in EZBoards mode: on the Mission map's style ($st)", s)
+                }
+                Bridge.update { it.copy(MissionSource = com.bmscompanion.app.data.mission.MissionMode.WDP) }
+                waitFor(20_000) { MissionLink.info.value?.mission?.mode == com.bmscompanion.app.data.mission.MissionMode.WDP }
+            } finally { spike2.close() }
             line("")
 
             // ---------------------------------------------------------------- 2. each kind printed
@@ -377,6 +438,7 @@ object PrintPagesOutcome {
             repeat(acquired) { runCatching { MissionLink.release() } }
             Platform.encodePng = oldEncode
             WdpProbe.on = wasProbe
+            com.bmscompanion.app.ui.screens.wdp.WdpMapPrefs.chooseStyle(wdpStyleBefore)
             Bridge.update { before }
             if (!wasRunning) Bridge.stop()
         }
@@ -722,7 +784,12 @@ object PrintPagesOutcome {
     private fun sha(b: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
 
     private fun shaTree(root: File): Map<String, String> =
-        root.walkTopDown().filter { it.isFile }.associate { it.relativeTo(root).invariantSeparatorsPath to sha(it.readBytes()) }
+        root.walkTopDown().filter { it.isFile }.associate { f ->
+            // streamed: a copy holding BMS's 2 GB HeightMap.raw does not fit in a byte array
+            val md = MessageDigest.getInstance("SHA-256")
+            f.inputStream().use { s -> val buf = ByteArray(1 shl 16); while (true) { val n = s.read(buf); if (n < 0) break; md.update(buf, 0, n) } }
+            f.relativeTo(root).invariantSeparatorsPath to md.digest().joinToString("") { "%02x".format(it) }
+        }
 
     /** A scene of its own, whose composition, frames and coroutines all run on one thread, as a window's do. */
     private open class Scene(val w: Int, val h: Int, val density: Float = 1f) : AutoCloseable {

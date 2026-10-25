@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.RocketLaunch
 import androidx.compose.material.icons.filled.FlightLand
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.LocalContentColor
@@ -106,6 +107,7 @@ object Routes {
     const val MEDIA = "media"
     const val SETUP = "setup"
     const val CONFIG = "config"
+    const val COMMAND = "command"
     fun aircraft(key: String) = "aircraft/${Uri.encode(key)}"
     fun weapon(key: String) = "weapon/${Uri.encode(key)}"
     fun threat(id: String) = "threat/${Uri.encode(id)}"
@@ -133,11 +135,22 @@ object Routes {
 var railTop: (@Composable () -> Unit)? = null
 var railBottom: (@Composable () -> Unit)? = null
 
+/**
+ * The Command section (the campaign and TE editor), set by the PC entry point only. It reads and writes the BMS PC's
+ * own files in-process, so Android and the browser never set it and never list the section.
+ */
+var commandSection: (@Composable (NavHostController) -> Unit)? = null
+
+/** Whether the Command section is listed now: the PC sets it while its window reads Falcon BMS on this PC ("This PC"). */
+val commandShown = androidx.compose.runtime.mutableStateOf(true)
+
 private data class Tab(val route: String, val label: String, val icon: ImageVector)
 
 private val allTabs = listOf(
     Tab(Routes.HOME, "Home", Icons.Default.Home),
     Tab(Routes.MISSION, "Mission", Icons.Default.MyLocation),
+    // the campaign editor: listed only where the platform set commandSection (the PC's own window)
+    Tab(Routes.COMMAND, "Command", Icons.Default.Flag),
     // Arsenal, Threats and Airfields are one section: all three are reference rather than anything live, and three
     // rail entries for them crowded out the sections that do change. See ReferenceScreen.
     Tab(Routes.REFERENCE, "Reference", Icons.Default.MenuBook),
@@ -153,7 +166,10 @@ private val allTabs = listOf(
  * Mission section's Editor tab instead, each behind its own backup.)
  */
 private val tabs: List<Tab>
-    get() = allTabs.filter { it.route != Routes.CONFIG || com.bmscompanion.app.ui.screens.mission.MissionTabPrefs.showConfig }
+    get() = allTabs.filter {
+        (it.route != Routes.CONFIG || com.bmscompanion.app.ui.screens.mission.MissionTabPrefs.showConfig) &&
+            (it.route != Routes.COMMAND || (commandSection != null && commandShown.value))
+    }
 
 private val tabOwner = mapOf(
     "aircraft" to Routes.REFERENCE, "weapon" to Routes.REFERENCE, "arsenal" to Routes.REFERENCE,
@@ -176,6 +192,9 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
     androidx.compose.runtime.LaunchedEffect(Unit) { runCatching { com.bmscompanion.app.data.update.Updates.check() } }
     // a new mission or a switch of mode starts this device's view of the mission afresh (MissionEpoch)
     com.bmscompanion.app.ui.screens.mission.MissionEpochWatcher()
+    // the planning made on another device (the Planner's flight, the Upd Kneeboard plan, the Steps), taken from the PC
+    // as this device links (PlannerShared, 1.4.2)
+    com.bmscompanion.app.ui.screens.wdp.PlannerSharedWatcher()
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: Routes.HOME
     val head = route.substringBefore('/').substringBefore('?')
@@ -220,6 +239,10 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
 
     // What the kneeboard's â° offers: the reference sections. The Home hub only leads to them, and nobody browses
     // screenshots from the cockpit, so both are left out.
+    // the Mission section as the pilot left it on another device: its settings and the Planner's entries live, where the
+    // pilot was when this device becomes active (MissionSync, 1.4.2)
+    com.bmscompanion.app.ui.screens.mission.MissionSyncWatcher(currentTab == Routes.MISSION) { onTab(Routes.MISSION) }
+
     val kneeSections = tabs.filter { it.route != Routes.HOME && it.route != Routes.MEDIA && it.route != Routes.CONFIG && it.route != Routes.SETUP }
         .map { t -> KneeboardSection(t.route, t.label, t.icon) { onTab(t.route) } }
 
@@ -345,6 +368,7 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
                     composable(Routes.MEDIA) { com.bmscompanion.app.ui.screens.MediaScreen(nav) }
                     composable(Routes.SETUP) { com.bmscompanion.app.ui.screens.SetupScreen(nav) }
                     composable(Routes.CONFIG) { com.bmscompanion.app.ui.screens.ConfigScreen(nav) }
+                    composable(Routes.COMMAND) { commandSection?.invoke(nav) }
                     composable("media/view?name={name}", arguments = listOf(navArgument("name") { defaultValue = "" })) {
                         com.bmscompanion.app.ui.screens.MediaViewerScreen(nav, it.arguments?.getString("name").orEmpty())
                     }
@@ -358,6 +382,10 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
                     ) { GroundChartRoute(nav, it.arguments?.getString("theater").orEmpty(), it.arguments?.getInt("id") ?: 0) }
                     composable("m/weapon/{key}") { WeaponDetailRoute(nav, it.arguments?.getString("key").orEmpty()) }
                     composable("m/threat/{id}") { ThreatDetailRoute(nav, it.arguments?.getString("id").orEmpty()) }
+                    // one half of the cockpit kneeboard, large (the Kneeboards page and the Dashboard's card open it)
+                    composable("m/kneeboardview?k={k}", arguments = listOf(navArgument("k") { defaultValue = "0" })) {
+                        com.bmscompanion.app.ui.screens.mission.CockpitKneeboardViewer(nav, it.arguments?.getString("k")?.toIntOrNull() ?: 0)
+                    }
                     composable("aircraft/{key}") { AircraftDetailRoute(nav, it.arguments?.getString("key").orEmpty()) }
                     composable("weapon/{key}") { WeaponDetailRoute(nav, it.arguments?.getString("key").orEmpty()) }
                     composable("threat/{id}") { ThreatDetailRoute(nav, it.arguments?.getString("id").orEmpty()) }

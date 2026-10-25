@@ -155,8 +155,34 @@ class TossWiring : WdpWiring, WdpControlContent {
             p.chooseRef(true)
             saveIni()
             version++
+            pilot()
         }
     }
+
+    // ---------------------------------------------------------------- on every device (PlannerSessionSync, 1.4.2)
+
+    /** Told after every change the pilot makes on the page: its inputs go to the PC. */
+    var onPilotChange: (() -> Unit)? = null
+    private fun pilot() { onPilotChange?.let { runCatching { it() } } }
+    /** The page has its mission: another device's inputs can be laid on it (else its first mission would reset them). */
+    internal val hasMission: Boolean get() = mission.briefing != null || mission.flight != null
+
+    /** The page's inputs as [PlannerSessionSync] sends them: its `[TOSS]` section, the IP STPT picked, the typed ELEVs. */
+    internal fun session(): Triple<String, Int?, String> = Triple(iniText(), plan.ipStpt, plan.elev.export())
+
+    /** Another device's inputs ([session]): the section read into the plan and its Load run again, the targets fetched again. */
+    internal fun takeSession(ini: String, ip: Int?, elev: String): Boolean = try {
+        val p = plan
+        readIni(p, ini)
+        p.load()
+        p.elev.import(elev)
+        p.ipStpt = ip
+        defaultFor = mission.key
+        loadTargets()
+        saveIni()
+        version++
+        true
+    } catch (e: Exception) { false }
 
     /**
      * Which of the three stacked right-hand panels is up. WDP's knob steps forward on a left click and back on a
@@ -242,6 +268,7 @@ class TossWiring : WdpWiring, WdpControlContent {
             AttackFocus.touch(WdpPage.TOSS)
             saveIni()
             version++
+            pilot()
         }.open()
     }
 
@@ -313,6 +340,7 @@ class TossWiring : WdpWiring, WdpControlContent {
     override fun onValue(name: String, value: String) {
         // a change of the attack's inputs makes this the Planner's current attack (AttackFocus)
         try { handleValue(name, value); if (AttackSelection.countsValue(name)) AttackFocus.touch(WdpPage.TOSS) } catch (e: Exception) { wdpError("TOSS", e) }
+        pilot()
     }
 
     private fun handleValue(name: String, value: String) {
@@ -348,6 +376,7 @@ class TossWiring : WdpWiring, WdpControlContent {
     override fun onClick(name: String) {
         // a change of the attack's inputs, or its Save to DTC, makes this the Planner's current attack (AttackFocus)
         try { handleClick(name); AttackSelection.clicked(WdpPage.TOSS, name) } catch (e: Exception) { wdpError("TOSS", e) }
+        pilot()
     }
 
     private fun handleClick(name: String) {
@@ -414,6 +443,7 @@ class TossWiring : WdpWiring, WdpControlContent {
             AttackFocus.touch(WdpPage.TOSS)
             saveIni()
             version++
+            pilot()
         }.open()
     }
 
@@ -459,8 +489,8 @@ class TossWiring : WdpWiring, WdpControlContent {
      * only "Right", and compares the release CAS in knots with a slider in tens of knots, so its angle off, a right turn
      * and its release CAS never came back.
      */
-    private fun readIni(p: TossPlan) {
-        val saved = runCatching { Repo.getString(INI_KEY) }.getOrNull() ?: return
+    private fun readIni(p: TossPlan, text: String? = runCatching { Repo.getString(INI_KEY) }.getOrNull()) {
+        val saved = text ?: return
         val ini = saved.split('\n').filter { '=' in it }.associate { it.substringBefore('=').trim() to it.substringAfter('=').trim() }
         fun bar(key: String, unit: Int, min: Int, max: Int, outside: Int? = null): Int? {
             val v = ini[key]?.toDoubleOrNull() ?: return null

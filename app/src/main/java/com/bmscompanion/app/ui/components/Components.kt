@@ -312,6 +312,13 @@ fun CollapsibleCard(
         open = !open
         if (rememberKey != null) Repo.putInt("open_$rememberKey", if (open) 1 else 0)
     }
+    // a fold another device opened or closed (MissionSync; the Mission section's folds only, MissionPrefs)
+    if (rememberKey != null) androidx.compose.runtime.DisposableEffect(rememberKey) {
+        val k = "open_$rememberKey"
+        val r: () -> Unit = { open = Repo.getInt(k, if (initiallyOpen) 1 else 0) == 1 }
+        com.bmscompanion.app.data.mission.PrefWatch.on(k, r)
+        onDispose { com.bmscompanion.app.data.mission.PrefWatch.off(k, r) }
+    }
     Surface(
         modifier = Modifier.fillMaxWidth().animateContentSize(),
         color = Hud.Surface,

@@ -247,14 +247,22 @@ object WdpFocus {
  * also while the link to the PC is down (the note says so), so the work comes back with the link (R3-PLAN A18).
  */
 object WdpSession {
-    private val tossMade = lazy { TossWiring() }
-    private val popupMade = lazy { PopupWiring() }
-    private val dataCardMade = lazy { DataCardWiring() }
-    private val hadbMade = lazy { HadbWiring() }
+    // each page tells PlannerSessionSync of the pilot's changes, so the other devices take them (1.4.2)
+    private val tossMade = lazy { TossWiring().also { PlannerSessionSync.hook(it) } }
+    private val popupMade = lazy { PopupWiring().also { PlannerSessionSync.hook(it) } }
+    private val dataCardMade = lazy { DataCardWiring().also { PlannerSessionSync.hook(it) } }
+    private val hadbMade = lazy { HadbWiring().also { PlannerSessionSync.hook(it) } }
     val toss by tossMade
     val popup by popupMade
     val dataCard by dataCardMade
     val hadb by hadbMade
+    /** the DataCard page has been made (the Planner showed it or a page fed it): the Fuel plan card may fill its boxes */
+    val dataCardMadeYet: Boolean get() = dataCardMade.isInitialized()
+    internal val tossMadeYet: Boolean get() = tossMade.isInitialized()
+    internal val popupMadeYet: Boolean get() = popupMade.isInitialized()
+    internal val hadbMadeYet: Boolean get() = hadbMade.isInitialized()
+    internal val dtcMadeYet: Boolean get() = dtcMade.isInitialized()
+    internal val performanceMadeYet: Boolean get() = performanceMade.isInitialized()
 
     /**
      * A new mission or a switch of mode ([com.bmscompanion.app.ui.screens.mission.MissionEpoch]): the attack and the
@@ -291,15 +299,19 @@ object WdpSession {
     }
     // made with the Planner, not with its tab: the attack pages' Save to DTC and the toolbar's reach the cartridge
     // through it (WdpCartridge) before the DTC tab has ever been opened
-    private val dtcMade = lazy { DtcWiring(dtcSource) }
+    private val dtcMade = lazy { DtcWiring(dtcSource).also { PlannerSessionSync.hook(it) } }
     val dtc by dtcMade
     /** where [dtc] reads and saves the cartridge: the PC; the headless renders set a copy on disk before it is made */
     internal var dtcSource: DtcSource = LinkDtcSource
     // what it fetches on a pick (another field's runway widths) outlives the tab, as the page itself does
-    val performance by lazy { PerformanceWiring(CoroutineScope(SupervisorJob() + Dispatchers.Main)) }
+    private val performanceMade = lazy { PerformanceWiring(CoroutineScope(SupervisorJob() + Dispatchers.Main)).also { PlannerSessionSync.hook(it) } }
+    val performance by performanceMade
 
-    /** The page on show. */
-    var page by mutableStateOf(WdpPage.DATACARD.name)
+    private var pageShown by mutableStateOf(WdpPage.DATACARD.name)
+    /** The page on show (where the pilot is: the other devices take it when they become active, PlannerSessionSync). */
+    var page: String
+        get() = pageShown
+        set(v) { if (v != pageShown) { pageShown = v; PlannerSessionSync.navChanged() } }
     // (1.3.8: which attack Populate and the maps take is AttackFocus's — the attack page last changed or applied — and
     // never the page last looked at)
     /**

@@ -29,6 +29,9 @@ Thumbs.db
 # Announcement drafts for Reddit / forums (local only)
 posts/
 
+# Progress reports for the owner (local only)
+reports/
+
 # Downloaded open data used by the extractor (Natural Earth, OurAirports)
 tools/extractor/cache/
 

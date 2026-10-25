@@ -57,13 +57,18 @@ object SelfTest {
     @Volatile var exitCode = 0
 
     /** Arguments the program itself takes; they are not developer checks. */
-    private val APP_FLAGS = setOf("--tray", "--route")
+    private val APP_FLAGS = setOf("--tray", "--route", "--autostart", "--minimized", "--show")
 
     /** The round-3 checks and how to call them, for the usage line when they are called with too few arguments. */
     private val ROUND3 = mapOf(
         "--theatertest" to "--theatertest out.txt <root>",
         "--contracttest" to "--contracttest out.txt <fixture copy>",
         "--camtest" to "--camtest out.txt <fixture root>",
+        "--cmdreadtest" to "--cmdreadtest <a BMS folder> out.txt",
+        "--cmdroundtrip" to "--cmdroundtrip <a copy of a BMS folder> out.txt",
+        "--cmdrender" to "--cmdrender <a copy of a BMS folder> <out folder>",
+        "--campmaprender" to "--campmaprender <a BMS folder> <out folder>",
+        "--cmdverify" to "--cmdverify <a copy of a BMS folder the section never opened> <out folder>",
         "--camdump" to "--camdump <file> out.txt",
         "--supportsidetest" to "--supportsidetest out.txt <a BMS folder>",
         "--atotargettest" to "--atotargettest <a copy of a BMS folder> out.txt [save] [theater]",
@@ -83,6 +88,10 @@ object SelfTest {
         "--radiotest" to "--radiotest out.txt <a copy of the BMS folder>",
         "--hostiletest" to "--hostiletest out.txt",
         "--installstest" to "--installstest out.txt",
+        "--plannerstatetest" to "--plannerstatetest out.txt",
+        "--syncstatetest" to "--syncstatetest out.txt",
+        "--ownjetrender" to "--ownjetrender <out folder>",
+        "--autostarttest" to "--autostarttest out.txt",
         "--installsrender" to "--installsrender <out folder>",
         "--wxbrieftest" to "--wxbrieftest out.txt",
         "--targetrender" to "--targetrender <a copy of the BMS folder> <out folder>",
@@ -90,6 +99,7 @@ object SelfTest {
         "--targetsidetest" to "--targetsidetest out.txt <a BMS folder>",
         "--wxviewrender" to "--wxviewrender <a copy of the BMS folder> <out folder>",
         "--astrotest" to "--astrotest out.txt",
+        "--fuelplantest" to "--fuelplantest out.txt [briefing.txt]",
     )
 
     /** Writes a check's report, and marks the run failed when a line of it starts with FAIL. */
@@ -112,6 +122,10 @@ object SelfTest {
         // no check stops on the Planner's one-time question about an opened mission's leftovers: Clear them, as before
         // 1.4.1 (a check of the question sets its own answer; PlannerLeftovers.testAnswer)
         com.bmscompanion.app.ui.screens.wdp.PlannerLeftovers.testAnswer = com.bmscompanion.app.data.mission.PlannerPcSettings.CLEAN
+        // nor does one take the planning another run left in its scratch APPDATA (PlannerSync, 1.4.2; --plannerstatetest turns it on)
+        com.bmscompanion.app.data.mission.PlannerSync.enabled = false
+        // nor the Mission section's values (MissionSync, 1.4.2; --syncstatetest drives its own clients)
+        com.bmscompanion.app.data.mission.MissionSync.enabled = false
         val json = Bridge.json
         when {
             args.size == 2 && args[0] == "--selftest" -> {
@@ -594,12 +608,27 @@ object SelfTest {
             args.size == 2 && args[0] == "--zoomtest" -> report(File(args[1]), ZoomTest.run())
             // --astrotest out.txt : the Mission weather page's Sun & Moon against an almanac and BMS's printed briefings (AstroTest.kt)
             args.size == 2 && args[0] == "--astrotest" -> report(File(args[1]), AstroTest.run())
+            // --fuelplantest out.txt [briefing.txt] : the fuel plan's arithmetic on the method's own example, a low leg, a
+            // tanker and the jet against the plan; with a briefing, BMS's printed one through the merge (FuelPlanTest.kt)
+            args.size in 2..3 && args[0] == "--fuelplantest" -> report(File(args[1]), FuelPlanTest.run(args.getOrNull(2)?.let(::File)))
             // --hostiletest out.txt : hostile contacts off by default and kept back at the source; the setting, its route and
             // its migration (HostileTest.kt; run it with a scratch APPDATA, whose settings it changes and puts back)
             args.size == 2 && args[0] == "--hostiletest" -> report(File(args[1]), HostileTest.run())
             // --installstest out.txt : the list of Falcon BMS installs, the quick switch, its routes, the migration and DevGuard
             // over every registry install (InstallsTest.kt; run it with a scratch APPDATA, whose settings it changes and puts back)
             args.size == 2 && args[0] == "--installstest" -> report(File(args[1]), InstallsTest.run())
+            // --plannerstatetest out.txt : planning made on one device taken by another through the PC (/api/planner/state, PlannerStateTest.kt; a scratch folder only)
+            args.size == 2 && args[0] == "--plannerstatetest" -> report(File(args[1]), PlannerStateTest.run())
+            // --syncstatetest out.txt : the Mission section on every device by last change (/api/sync, MissionSyncStore,
+            // MissionSyncClient, PlannerSessionSource; SyncStateTest.kt): three devices in-process over pages of their own,
+            // the store in a scratch folder (run it with a scratch APPDATA: the attack pages keep their section there)
+            args.size == 2 && args[0] == "--syncstatetest" -> report(File(args[1]), SyncStateTest.run())
+            // --ownjetrender <out folder> : your jet Small/Medium/Large over each map style at two densities (OwnJetRender.kt; bundled tiles only)
+            args.size == 2 && args[0] == "--ownjetrender" -> { val t = OwnJetRender.run(File(args[1])); File(args[1], "ownjet.txt").writeText(t); println(t) }
+            // --autostarttest out.txt : Start with Windows and Start minimized — how each kind of start shows the window, the
+            // Run value on/off, Task Manager's off, the value written again at start (AutoStartTest.kt; needs BMSC_RUN_NAME
+            // naming a test value, which it removes again; run from the launcher with a scratch APPDATA)
+            args.size == 2 && args[0] == "--autostarttest" -> report(File(args[1]), com.bmscompanion.desktop.AutoStartTest.run())
             // --installsrender <out folder> : the Falcon BMS installs card at phone, tablet, PC and server-page widths, from a
             // made-up list (InstallsRender.kt; reads nothing of this PC)
             args.size == 2 && args[0] == "--installsrender" -> report(File(args[1], "installsrender.txt"), InstallsRender.run(File(args[1])))
@@ -633,6 +662,12 @@ object SelfTest {
                 val dir = File(args[1])
                 val report = WdpRender.run(dir, args.getOrNull(2)?.let(::File), args.getOrNull(3)?.let(::File))
                 File(dir, "wdprender.txt").writeText(report)
+            }
+            // --wdpsharp <folder> [briefing.txt] [cartridge.ini] : the Planner's type before and after WdpType, crops and counts (WdpSharpRender.kt)
+            args.size >= 2 && args[0] == "--wdpsharp" -> File(args[1]).let { d ->
+                // `specimen`: one line of type under each of Skia's rasterisations, nothing else
+                if (args.getOrNull(2) == "specimen") WdpSharpRender.specimen(d)
+                else { d.mkdirs(); report(File(d, "wdpsharp.txt"), WdpSharpRender.run(d, args.getOrNull(2)?.let(::File), args.getOrNull(3)?.let(::File))) }
             }
             // --wxrender <folder> : the Weather page's generator drawn headless at three widths and four times (WxRender.kt)
             args.size >= 2 && args[0] == "--wxrender" -> {
@@ -680,6 +715,16 @@ object SelfTest {
             args.size >= 3 && args[0] == "--theatertest" -> report(File(args[1]), TheaterTest.run(File(args[2]), args.drop(3)))
             args.size >= 3 && args[0] == "--contracttest" -> report(File(args[1]), ContractTest.run(File(args[2]), args.drop(3)))
             args.size >= 3 && args[0] == "--camtest" -> report(File(args[1]), CampTest.run(File(args[2]), args.drop(3)))
+            // the Command section's data layer: every save read whole (read only), and the writer on a copy
+            args.size == 3 && args[0] == "--cmdreadtest" -> report(File(args[2]), com.bmscompanion.desktop.bridge.command.CommandReadTest.run(File(args[1])))
+            args.size == 3 && args[0] == "--cmdroundtrip" -> report(File(args[2]), com.bmscompanion.desktop.bridge.command.CommandRoundTrip.run(File(args[1])))
+            // --cmdrender <a copy> <out> : the Command section headless at 1600 x 1000 and 2560 x 1440 with a save open
+            // (map with layers, BMS chart and icons, Units, Teams, the Open window); --campmaprender <a BMS folder> <out> :
+            // BMS's own 2D chart of every theater, tiles at three levels and their times (read only)
+            args.size == 3 && args[0] == "--cmdrender" -> report(File(args[2], "cmdrender.txt"), com.bmscompanion.desktop.bridge.command.CommandRender.run(File(args[1]), File(args[2])))
+            args.size == 3 && args[0] == "--campmaprender" -> report(File(args[2], "campmaprender.txt"), com.bmscompanion.desktop.bridge.command.CampMapRender.run(File(args[1]), File(args[2])))
+            // --cmdverify <a copy never opened by the section> <out> : the section walked as a pilot works it (CommandVerify.kt)
+            args.size == 3 && args[0] == "--cmdverify" -> report(File(args[2], "cmdverify.txt"), com.bmscompanion.desktop.bridge.command.CommandVerify.run(File(args[1]), File(args[2])))
             args.size >= 3 && args[0] == "--camdump" -> report(File(args[2]), CampTest.dump(File(args[1]), args.drop(3)))
             args.size == 3 && args[0] == "--supportsidetest" -> report(File(args[1]), SupportSideTest.run(File(args[2])))
             // --atotargettest <a copy of a BMS folder> out.txt [save] [theater] : the ATO Target List from a save (AtoTargetsTest.kt)
@@ -736,6 +781,8 @@ object SelfTest {
             else -> {
                 System.clearProperty(DevGuard.PROPERTY)
                 com.bmscompanion.app.ui.screens.wdp.PlannerLeftovers.testAnswer = null
+                com.bmscompanion.app.data.mission.PlannerSync.enabled = true
+                com.bmscompanion.app.data.mission.MissionSync.enabled = true
                 return false
             }
         }

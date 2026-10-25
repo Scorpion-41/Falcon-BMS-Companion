@@ -392,6 +392,7 @@ class PopupWiring(
             p.setIpStpt(n)
             p.chooseRef(true)
             changed()
+            pilot()
         }
     }
 
@@ -411,6 +412,7 @@ class PopupWiring(
             p.guard { p.programFlow(true) }
             AttackFocus.touch(WdpPage.POPUP)
             changed()
+            pilot()
         }.open()
     }
 
@@ -431,6 +433,7 @@ class PopupWiring(
             p.guard { p.getCoords() }
             AttackFocus.touch(WdpPage.POPUP)
             changed()
+            pilot()
         }.open()
     }
 
@@ -507,10 +510,38 @@ class PopupWiring(
     // A change of the attack's inputs, or its Save to DTC, makes this the Planner's current attack (AttackFocus).
     override fun onValue(name: String, value: String) {
         try { handleValue(name, value); if (AttackSelection.countsValue(name)) AttackFocus.touch(WdpPage.POPUP) } catch (e: Exception) { wdpError("Pop-up", e) }
+        pilot()
     }
     override fun onClick(name: String) {
         try { handleClick(name); AttackSelection.clicked(WdpPage.POPUP, name) } catch (e: Exception) { wdpError("Pop-up", e) }
+        pilot()
     }
+
+    // ---------------------------------------------------------------- on every device (PlannerSessionSync, 1.4.2)
+
+    /** Told after every change the pilot makes on the page: its inputs go to the PC. */
+    var onPilotChange: (() -> Unit)? = null
+    private fun pilot() { onPilotChange?.let { runCatching { it() } } }
+    /** The page has its mission: another device's inputs can be laid on it (else its first mission would reset them). */
+    internal val hasMission: Boolean get() = mission.briefing != null || mission.flight != null
+
+    /** The page's inputs as [PlannerSessionSync] sends them: its `[PopUp]` section, the IP STPT picked, the typed ELEVs. */
+    internal fun session(): Triple<String, Int?, String> =
+        Triple(plan.iniValues().entries.joinToString("\n") { "${it.key}=${it.value}" }, plan.ipStpt, plan.elev.export())
+
+    /** Another device's inputs ([session]): the page loaded on them, the mission handed in again. False when it could not be. */
+    internal fun takeSession(ini: String, ip: Int?, elev: String): Boolean = try {
+        plan.reloadIni(ini.split('\n').filter { '=' in it }.map { it.substringBefore('=') to it.substringAfter('=') })
+        plan.elev.import(elev)
+        // the mission again (its tables into the plan), its default TGT STPT not laid over the section's
+        tableKey = null
+        defaultFor = mission.key
+        handleMission(mission)
+        if (plan.ipStpt != ip) plan.setIpStpt(ip)
+        plan.guard { plan.getCoords() }
+        changed()
+        true
+    } catch (e: Exception) { false }
     override fun onMission(mission: WdpMission) { try { handleMission(mission) } catch (e: Exception) { wdpError("Pop-up", e) } }
 
 }

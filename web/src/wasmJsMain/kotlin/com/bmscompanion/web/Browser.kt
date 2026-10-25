@@ -220,6 +220,18 @@ external fun storageGet(key: String): String?
 @JsFun("(k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }")
 external fun storageSet(key: String, value: String?)
 
+/** Every localStorage key starting with [prefix], joined by newlines (MissionSync gives an empty PC store this browser's). */
+@JsFun("(p) => { try { const out = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(p)) out.push(k.substring(p.length)); } return out.join('\\n'); } catch (e) { return ''; } }")
+external fun storageKeys(prefix: String): String
+
+/** Counts the times the tab was shown again (the page hidden, then visible): MissionSync takes where the pilot was then. */
+@JsFun("() => { try { if (window.__bmscShownHooked) return true; window.__bmscShownHooked = true; window.__bmscShown = 0; document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') window.__bmscShown++; }); window.addEventListener('focus', () => { window.__bmscShown++; }); return true; } catch (e) { return false; } }")
+external fun hookTabShown(): Boolean
+
+/** How many times the tab was shown again ([hookTabShown]). */
+@JsFun("() => { const n = window.__bmscShown; return (typeof n === 'number') ? n : 0; }")
+external fun tabShownCount(): Int
+
 @JsFun("(s) => encodeURIComponent(s)")
 external fun encodeUriComponent(s: String): String
 

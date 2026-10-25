@@ -162,8 +162,10 @@ fun TargetPicturesCard() {
         value = TargetPics.json("/api/targets/mission", TargetSet.serializer()) ?: TargetSet(error = "The BMS PC did not answer (an older BMS Companion draws no target pictures).")
     }
     val intel = TargetPics.intel()
-    val added = remember(missionKey) { mutableStateListOf<TargetItem>().also { it.addAll(TargetPics.added(missionKey)) } }
-    val removed = remember(missionKey) { mutableStateListOf<String>().also { it.addAll(TargetPics.removed(missionKey)) } }
+    // read again when another device removed or added one (MissionSync: PrefWatch.stamp moves)
+    val synced = com.bmscompanion.app.data.mission.PrefWatch.stamp
+    val added = remember(missionKey, synced) { mutableStateListOf<TargetItem>().also { it.addAll(TargetPics.added(missionKey)) } }
+    val removed = remember(missionKey, synced) { mutableStateListOf<String>().also { it.addAll(TargetPics.removed(missionKey)) } }
     var adding by remember { mutableStateOf(false) }
     SectionCard("Target pictures", accent = Hostile, trailing = {
         Row(verticalAlignment = Alignment.CenterVertically) {

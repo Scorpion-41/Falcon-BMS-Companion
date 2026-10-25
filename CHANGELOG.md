@@ -1,5 +1,148 @@
 # Changelog
 
+## 1.4.2 (BMS 4.38) — October 2026
+
+**Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install**; existing settings are kept.
+
+This release adds the **Command section**, a new section of BMS Companion for editing campaigns, TEs and their
+theater data on the PC. The Mission section now follows you between the PC, the browser and Android; Mission weather
+gains a weather-type map and a vertical profile; kneeboards are shown first on their page and can follow the map
+style; the fuel plan works out Bingo, Joker and playtime; and the PC program can start with Windows.
+
+### Command section (PC window)
+
+A new section for editing Falcon BMS campaigns, TEs and trainings, and the theater data they use. It is a rail entry
+between **Mission** and **Reference** in the PC window (while it reads Falcon BMS on that PC) and opens any campaign,
+TE or training save of every theater: **Open…** lists each theater's campaign folder with BMS's own files marked, the
+recent files, Windows' file dialog, or a file dropped on the window.
+
+This is the first release of the Command section; some issues may still turn up. Keep a copy of a campaign you value
+before editing it. If you find a bug, please report it on GitHub
+(https://github.com/Scorpion-41/Falcon-BMS-Companion/issues) or in the forum thread, with the save and what you did.
+
+- **Workspace.** A map of the theater with every side's objectives, units, routes, links, front lines and air-defence
+  rings; layers and filters on the left, each with its legend; the inspector of whatever is selected on the right;
+  the page's table in a drawer below. Side panels and the drawer fold and resize, and every row of buttons wraps on a
+  small window. Pages: Map, Units, ATO, Objectives, Teams, Campaign, Pilots, Checks, Stats and Files.
+- **Map.** BMS's own icons or the app's symbols (a shape per objective type and aircraft role, battalion, brigade and
+  division marks), with fewer symbols when zoomed out. Tools: Select, Area, Move, Clone, Link +, Link −, Owner and
+  Ruler, plus Find (name or CampId) and **Save picture…**; a hover box and a right-click menu for every kind of item.
+- **BMS chart.** Falcon BMS's own 2D campaign map, read from the install (nothing shipped), is a map style here and on
+  every map of the app while the PC can read it.
+- **Tables.** Units with BMS's squadron patches, team flags, callsigns, home base, elements, times, UHF/VHF and state;
+  the ATO as a package and flight tree; Objectives with their changes in the save. Sortable, with key columns kept in
+  place, a right-click menu per row, and **Export CSV…** of units and objectives. Team and country flags are from
+  flag-icons (MIT licence), credited under About → Credits.
+- **Flights.** Callsign, mission, aircraft, seats and pilots, laser code, fuel, skins; waypoints with times
+  recalculated from locked points; loadouts per hardpoint limited to the aircraft's legal stores.
+- **Packages, squadrons and ground units.** Packages; squadrons with base moves (their flights follow), roster,
+  aircraft type, the 48 pilots and stores; battalions, brigades and task forces (a carrier's move takes its
+  squadrons). Add, clone and delete with new ids, free callsigns and free pilots, and every reference cleaned up.
+  Bulk operations: resupply all, full rosters, reset spotting, move a team's units to another, change every unit of a
+  class, and air defences on every objective of a type.
+- **Objectives.** In a save, what BMS records: owner, supply, fuel, losses and building damage. A campaign start can
+  be edited in full after **Edit BMS's campaign start**, which backs the file up once: name, class, owner, priority,
+  position, links (costs fitted to the theater's own, auto-link), radar coverage worked out from the terrain, and
+  adding or deleting objectives, with a warning naming the saves that use that start.
+- **Teams.** Stances between teams, name, colour and flag, experience, priorities, ground and air actions, the air
+  tasking requests and airbase schedules; adding a team.
+- **Campaign.** The header: clock, start and end, campaign period, bullseye, TE settings; **Shift Times** for every
+  time in the save; the squadron list; the territory (occupation) map, shown and painted; events; primary objectives.
+- **Pilots and callsigns** checked against the squadrons and flights, with recount and clear.
+- **Checks.** One report of ids, references, rosters, objective changes BMS would not read, links, air-defence spots,
+  callsign usage and team settings, each with a **Fix** button, and **Fix all**.
+- **Stats** per team and type.
+- **Files.** The theater's campaign database files, one table each: `Stations+Ils.dat` (out-of-band frequencies in
+  red, each ILS slot named by the runway end it serves), `RadioMap.dat`, `TePlanes.lst`, `TeUnits.lst`,
+  `TeNavalUnits.lst`, `InvalidAcTypes.XML`, every `MissionData_*.xml` and `CampObjData.XML`. Unedited rows are
+  written back unchanged; each file is backed up once before its first write, with **Restore BMS's original**.
+- **Saving safely.**
+  - **Save as** a copy is the default; **Overwrite** is a separate choice that always asks first and is refused when
+    the file changed on disk since it was read.
+  - BMS's own files — campaign starts, the TEs and trainings that ship with BMS, add-on missions — are recognised
+    from the install itself and only ever saved as a copy (**This file is mine** marks a file of your own that was
+    taken for BMS's).
+  - The first time a theater's campaign folder is opened, BMS's files there are copied once into
+    `BMS Companion Backup\Command\` in the BMS folder, with a README on restoring them by hand.
+  - Every file is written the way Falcon BMS's own save writes it, then read back and verified before it replaces
+    the old one; a file saved without edits is identical to the original.
+  - Every edit can be undone and redone.
+
+### Mission section on every device
+
+- **Follows you between devices.** The Mission section's settings and choices (map style and layers, weather, Taxi,
+  fuel plan, kneeboard view, target pictures, Files tab), the Planner's work on the flight (DataCard boxes, Briefing
+  text, Performance, attack inputs, unsaved DTC edits) and where you were (tab, Planner page, open window) are kept
+  on the PC and taken over by the PC window, the browser and Android, the last change winning. The page you were on
+  is taken over when you switch to a device, never while you use it, and a box being typed in is never overwritten.
+  The Dashboard keeps its own layout on each device.
+- **Planning on the PC carries over.** The Planner's open flight and seat, the Upd Kneeboard plan and the Steps are
+  kept on the PC, so a tablet or browser opened after planning on the PC continues the same flight.
+
+### Mission weather
+
+- **Weather type** is the default fill: Sunny, Fair, Poor and Inclement in their own colours. New fills: Cloud base,
+  Cloud size, Towering cumulus, Shower and Fog altitude (Clouds is now **Cloud coverage**). The cloud circles are an
+  optional overlay, off by default.
+- **Vertical profile.** A strip under the map along the route from take-off to landing, 0-40,000 ft: the weather
+  type, fog, cloud base, towering cumulus, precipitation, the ground and the planned altitude; a tap or drag sets a
+  cursor ringed on the map. **Draw line** draws the profile along a line of your own.
+- On short windows the fill choices take one line and the profile starts folded, so the map keeps most of the height.
+
+### Kneeboards
+
+- **Viewing first.** Mission → Kneeboards opens on **Kneeboards for this mission**: **In the cockpit** shows what BMS
+  will show in 3D, read from the page files themselves, each half with who wrote it and whether it belongs to this
+  mission or an earlier one; html_brief's pages and the EZBoards tables are views beside it. A tap opens a large
+  viewer (zoom, swipe or arrow keys through the pages). Making the kneeboards follows below.
+- **Kneeboards Dashboard card** showing the cockpit pages one at a time.
+- **Route map in your map style.** Upd Kneeboard's route map follows the map's style, labels and layers (the
+  Planner's Map page in WDP mode, the Mission map in EZBoards mode), including Satellite, Topographic and BMS chart.
+- **Weather map page.** A new Upd Kneeboard page: the Mission weather map with your fill and overlays, its legend,
+  and the take-off, target and landing figures.
+- Upd Kneeboard's pages work from the flight open in the Planner, without Populate from Planner.
+
+### Maps
+
+- **Your own jet** is larger and white with a dark outline and a heading line on every map and style, so it is no
+  longer confused with the route. **Jet size** Small, Medium or Large (Mission map chip, kneeboard menu, VR map board
+  option).
+
+### Fuel plan
+
+- **Bingo, Joker and playtime** worked out from the route: burns per nautical mile (higher on low legs), the divert
+  to the alternate, a VMC or IMC allowance and a reserve, worked back from the landing to give the minimum fuel at
+  every steerpoint. Before a tanker the plan keeps enough to come home if the tanker is not there. Playtime over the
+  target in minutes of afterburner and at 350 kt. In 3D the jet's fuel is held against the minimum where it is (on
+  plan, Joker, Bingo, below minimum). On the Briefing page, as a Dashboard card and as a Noteboard block; every
+  figure can be set.
+- **Fill Bingo/Joker on the DataCard** when the Planner has the same flight open.
+
+### PC program
+
+- **Start with Windows** and **Start minimized** (Start-up and closing card, server page and Setup; both off by
+  default). A shortcut set to start minimized, `start /min` and `--minimized` now open the window minimized on the
+  taskbar, and a second start brings the running window to the front.
+
+### Planner
+
+- **Sharper text.** On the PC the Planner draws its text in Arial, WDP's own font, fully hinted and placed on whole
+  pixels, so letters are crisp instead of soft; nothing moves on the pages. The browser gets the same pixel placing.
+
+### Fixed
+
+- The browser's Mission weather page froze on "Reading the mission's weather on the PC…" with a Map Model save, and
+  the Files tab and Upd Kneeboard's preview caption could freeze it the same way (a compiler fault in the browser
+  version, worked around).
+- Tab characters in text files showed as boxes in the browser's Files tab.
+- The Home page's header picture was missing since 1.4.0.
+- The Planner's Map page read building damage four to a byte, so a destroyed radar building could show as working;
+  each building is one byte in 4.38.
+- After a reload of the browser or a restart of the app, a tablet went back to the briefing instead of the flight
+  open on the PC.
+- Kneeboard map pages could print with missing tiles when two were drawn at once.
+- The kneeboard weather map's legend could cover the target.
+
 ## 1.4.1 (BMS 4.38) — October 2026
 
 **Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install**; existing settings are kept.

@@ -759,7 +759,7 @@ object CampaignArchive {
         val at: Int, val type: Int, val id: VuId, val entityType: Int, val x: Int, val y: Int, val z: Float,
         val owner: Int, val campId: Int, val flags: Long, val nameId: Int, val parent: VuId, val firstOwner: Int,
         val links: Int, val simNorth: Double?, val simEast: Double?, val heading: Float?, val name: String,
-        /** its buildings' states as the start file has them: two bits each ([featureStatus]); the Map page's radars */
+        /** its buildings' states as the start file has them: one byte each ([featureStatus]); the Map page's radars */
         val status: ByteArray = ByteArray(0),
         /** the record carries radar data (WDP's `hasRadarData`, one of the tests of `ObjHasWorkingRadar`) */
         val hasRadarData: Boolean = false,
@@ -860,7 +860,7 @@ object CampaignArchive {
 
     /**
      * How one objective differs from its start file in a save (WDP's `BMSUtils.ObjectiveDeltas`): the team holding it
-     * now, its supply, fuel and losses, and its buildings' states, two bits each ([featureStatus]).
+     * now, its supply, fuel and losses, and its buildings' states, one byte each ([featureStatus]).
      */
     class ObjDelta(
         val id: VuId, val lastRepair: Long, val owner: Int, val supply: Int, val fuel: Int, val losses: Int, val status: ByteArray,
@@ -910,11 +910,12 @@ object CampaignArchive {
         return ObdWalk(records, unpacked, r.p, out, stop)
     }
 
-    /** The state of building [i] of an objective (0 intact … 3 destroyed; WDP's `GetFeatureStatus`), 0 past the end. */
-    fun featureStatus(status: ByteArray, i: Int): Int {
-        val b = status.getOrNull(i / 4)?.toInt() ?: return 0
-        return ((b and 0xFF) shr ((i % 4) * 2)) and 3
-    }
+    /**
+     * The state of building [i] of an objective (0 intact, 1 repaired, 2 damaged, 3 destroyed), 0 past the end. Falcon
+     * BMS 4.38.1 keeps one byte a building, in the start's record and in a save's delta alike (every delta of the saves
+     * at hand is exactly as long as its class's feature list); WDP's `GetFeatureStatus` read four to a byte (D102).
+     */
+    fun featureStatus(status: ByteArray, i: Int): Int = (status.getOrNull(i)?.toInt() ?: 0) and 0xFF
 
     private val obdCache = object : LinkedHashMap<String, ObdWalk?>(16, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ObdWalk?>?) = size > 24

@@ -66,6 +66,7 @@ import com.bmscompanion.app.ui.components.SectionCard
 import com.bmscompanion.app.ui.screens.mission.SmallButton
 import com.bmscompanion.app.ui.theme.Hud
 import com.bmscompanion.app.ui.theme.LocalExtra
+import com.bmscompanion.desktop.AutoStart
 import com.bmscompanion.desktop.Device
 import com.bmscompanion.desktop.PcConfig
 import com.bmscompanion.desktop.PcRenderer
@@ -690,17 +691,34 @@ fun ActivityCard(status: PcStatus) {
 
 @Composable
 fun StartupCard() {
-    val exe = SystemTools.appExe
-    var withWindows by remember { mutableStateOf<Boolean?>(null) }
+    val exe = AutoStart.exe
+    // the registry is the record (Task Manager → Startup apps can turn it off too), read again whenever the card shows
+    var withWindows by remember { mutableStateOf<AutoStart.State?>(null) }
+    var problem by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { withWindows = withContext(Dispatchers.IO) { SystemTools.startsWithWindows() } }
+    LaunchedEffect(Unit) { withWindows = withContext(Dispatchers.IO) { AutoStart.state() } }
     SectionCard("Start-up and closing", accent = Hud.TextDim) {
         Toggle("Keep running in the tray when the window is closed", "Phones, tablets and browsers stay connected. Exit from the tray icon.", PcConfig.closeToTray) { PcConfig.keepInTray(it) }
         Toggle(
-            "Start with Windows (in the tray)",
-            if (exe == null) "Available in the installed or unzipped app" else "Handy when this PC serves your other devices",
-            withWindows == true, enabled = exe != null && withWindows != null,
-        ) { on -> scope.launch { withContext(Dispatchers.IO) { SystemTools.setStartWithWindows(on) }; withWindows = withContext(Dispatchers.IO) { SystemTools.startsWithWindows() } } }
+            "Start with Windows",
+            when {
+                exe == null -> "Only the installed or unzipped program can do this, not one started from source."
+                withWindows?.disabledInWindows == true -> "Turned off in Task Manager's Startup apps. Switch it on here to turn it back on."
+                else -> "BMS Companion starts when you sign in to Windows, so your devices find it."
+            },
+            withWindows?.on == true, enabled = exe != null && withWindows != null,
+        ) { on ->
+            scope.launch {
+                problem = withContext(Dispatchers.IO) { AutoStart.set(on) }
+                withWindows = withContext(Dispatchers.IO) { AutoStart.state() }
+            }
+        }
+        Toggle(
+            "Start minimized",
+            "The window opens minimized on the taskbar, every time BMS Companion starts. It serves your devices all the same.",
+            PcConfig.startMinimized,
+        ) { PcConfig.setStartMinimized(it) }
+        problem?.let { Text(it, fontSize = 12.sp, color = Hud.Red) }
     }
 }
 

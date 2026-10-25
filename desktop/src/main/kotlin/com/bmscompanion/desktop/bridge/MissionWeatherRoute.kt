@@ -27,6 +27,11 @@ import kotlin.math.roundToInt
  * with `save=` and `clock=`, as the Planner's card and Populate read it ([SaveWeather]), so another save's `.twx` (the
  * shared `Auto Save.twx`) is refused in the same sentence.
  *
+ * **Another flight** (1.4.1, Upd Kneeboard's Weather map page): `?theater=&save=&flight=` gives the weather of that
+ * save and flight, the flight open in the Planner whether or not it was populated; `?printed=1` falls back in WDP mode
+ * with nothing populated on the printed briefing's save, as EZBoards mode reads it. The map route takes the same query,
+ * so its `frame` is resolved against the answer the page was given. Without them the answer is as before.
+ *
  * **Which maps** (Map Model only; [frames]): with MAPS AUTO UPDATE off, the save's own `<save>.fmap` (BMS's copy of
  * the map picked, version 8). With it on, the theater's `WeatherMapsUpdates/DHHMM.fmap`: the one in force at the save's
  * clock (the newest named at or before it, as [PcFileRoutes] picks it; the save's own map when none is), and every later
@@ -44,17 +49,28 @@ internal object MissionWeatherRoute {
 
     /** The last answer and the frame files it named, so `map?frame=` is resolved against what the page was told. */
     private class Last(val at: Long, val answer: MissionWeather, val files: Map<String, File>)
-    @Volatile private var last: Last? = null
+    /** The last answer for each query (the page's own, "", and the Planner flights' a kneeboard asked for). */
+    private val lastBy = LinkedHashMap<Ask, Last>()
     private val mapCache = object : LinkedHashMap<String, MissionWxMap>(8, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, MissionWxMap>?): Boolean = size > 6
     }
 
+    /** What was asked: a save's flight ([save] and [flight] both given), and the printed briefing as the last resort. */
+    private data class Ask(val theater: String = "", val save: String = "", val flight: String = "", val printed: Boolean = false) {
+        val planner get() = save.isNotEmpty() && flight.isNotEmpty()
+    }
+
+    private fun askOf(req: ApiRequest) = Ask(
+        req.query["theater"]?.trim().orEmpty(), req.query["save"]?.trim().orEmpty(), req.query["flight"]?.trim().orEmpty(),
+        req.query["printed"] == "1",
+    ).let { if (it.planner) it else Ask(printed = it.printed) }
+
     fun handle(req: ApiRequest): ApiResponse = try {
         when (req.path.trimEnd('/')) {
-            "/api/weather/mission" -> ApiResponse.json(Bridge.json.encodeToString(MissionWeather.serializer(), current()))
+            "/api/weather/mission" -> ApiResponse.json(Bridge.json.encodeToString(MissionWeather.serializer(), current(askOf(req))))
             "/api/weather/mission/map" -> {
                 val id = req.query["frame"]?.trim().orEmpty()
-                val file = files()[id]
+                val file = files(askOf(req))[id]
                 val m = file?.let { mapOf(id, it) }
                 if (m == null) ApiResponse.json(
                     """{"error":${Bridge.json.encodeToString(String.serializer(), if (file == null) "That map is not one of the mission's: read the mission's weather again." else "${file.name} could not be read as a weather map.")}}""",
@@ -69,31 +85,48 @@ internal object MissionWeatherRoute {
 
     /** The mission's weather now; worked out again at most every few seconds. */
     @Synchronized
-    fun current(): MissionWeather {
+    fun current(): MissionWeather = current(Ask())
+
+    @Synchronized
+    private fun current(ask: Ask): MissionWeather {
         val now = System.currentTimeMillis()
-        last?.let { if (now - it.at < 3_000L) return it.answer }
-        val (answer, files) = safe(MissionWeather(why = "The mission's weather could not be read on the PC.") to emptyMap<String, File>()) { compute() }
-        last = Last(now, answer, files)
+        lastBy[ask]?.let { if (now - it.at < 3_000L) return it.answer }
+        val (answer, files) = safe(MissionWeather(why = "The mission's weather could not be read on the PC.") to emptyMap<String, File>()) { compute(ask) }
+        lastBy.remove(ask)
+        lastBy[ask] = Last(now, answer, files)
+        while (lastBy.size > 4) lastBy.remove(lastBy.keys.first())
         return answer
     }
 
-    /** The frame files of the last answer (worked out now if there is none). */
-    private fun files(): Map<String, File> {
-        if (last == null) current()
-        return last?.files.orEmpty()
+    /** The frame files of the last answer to [ask] (worked out now if there is none). */
+    @Synchronized
+    private fun files(ask: Ask): Map<String, File> {
+        if (lastBy[ask] == null) current(ask)
+        return lastBy[ask]?.files.orEmpty()
     }
 
-    /** Forgets the cached answer (a check that changes the files between two looks). */
+    /** Forgets the cached answers (a check that changes the files between two looks). */
     @Synchronized
-    fun forget() { last = null; synchronized(mapCache) { mapCache.clear() } }
+    fun forget() { lastBy.clear(); synchronized(mapCache) { mapCache.clear() } }
 
-    private fun compute(): Pair<MissionWeather, Map<String, File>> {
+    private fun compute(ask: Ask): Pair<MissionWeather, Map<String, File>> {
         val install = Bridge.install
         if (install.baseDir == null) return MissionWeather(why = "Falcon BMS was not found on this PC.") to emptyMap()
         val set = Theaters.of(install) ?: return MissionWeather(why = "Falcon BMS's theater definitions could not be read.") to emptyMap()
         val wdp = MissionSource.wdp
         val mode = if (wdp) MissionMode.WDP else MissionMode.EZBOARDS
-        if (wdp) {
+        if (ask.planner) {
+            // the Planner's flight, populated or not
+            val t = ask.theater.takeIf { it.isNotEmpty() }?.let { n -> set.all.firstOrNull { it.name.equals(n, ignoreCase = true) } ?: set.byName(n) }
+                ?: set.current(install.theater)
+                ?: return MissionWeather(mode = mode, why = "There is no theater \"${ask.theater}\" in this Falcon BMS.") to emptyMap()
+            val saveFile = safe(null) { set.saves(t).firstOrNull { it.name.equals(ask.save, ignoreCase = true) } }
+                ?: return MissionWeather(mode = mode, theater = t.name, why = "${ask.save} is no longer in the campaign folder of ${t.name}. Open the mission again in the Planner.") to emptyMap()
+            val flight = (CampaignFiles.flight(CampaignFiles.context(), t.name, saveFile.name, ask.flight) as? CampaignFiles.Answer.Ok)?.value
+            val archive = safe(null) { CampaignArchive.cached(saveFile, CampaignArchive.names(set, t)) }
+            return of(mode, t, saveFile, flight, ask.flight.takeIf { flight != null }, archive)
+        }
+        if (wdp && !(ask.printed && MissionSource.populated() == null)) {
             val p = MissionSource.populated()
                 ?: return MissionWeather(mode = mode, why = "WDP mode: nothing is populated yet. Open the mission in the Planner and press Populate from Planner.") to emptyMap()
             val t = set.all.firstOrNull { it.name.equals(p.theater.trim(), ignoreCase = true) } ?: set.byName(p.theater)
@@ -276,6 +309,9 @@ internal object MissionWeatherRoute {
             visKm = List(n) { r1(m.visibilityKm(it)) },
             windKt = List(n * levels) { k -> i((m.windSpeed(k / levels, k % levels) / Fmap.KMH_PER_KT).toFloat()) },
             windDeg = List(n * levels) { k -> i(m.windDir(k / levels, k % levels)).mod(360) },
+            cloudSize = List(n) { r1(m.float(Fmap.Field.CLOUD_SIZE, it)) },
+            // a version 8 map's array 29 is its fog layer height (WDP's FogLayerZ); a version 5 map has none
+            fogFt = if (m.version == Fmap.VERSION_8) List(n) { i(m.float(Fmap.Field.VISIBILITY + 2, it)) } else emptyList(),
         )
     }
 

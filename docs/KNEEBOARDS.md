@@ -23,6 +23,31 @@ Mission section (and in Setup):
 Everything else — the VR boards, Map, Taxi, Briefing, Comms, Weather — works the same in both modes; only who writes
 the cockpit pages differs.
 
+## Seeing them: the Kneeboards page
+
+**Mission → Kneeboards** opens on **Kneeboards for this mission**, the kneeboards to look at, and under it **Making the
+kneeboards** (EZBoards, Upd Kneeboard and Edit notes, HTML Briefing, the VR boards, and this page's explanation, folded
+at the foot). The top section folds too, and each device remembers it. It has three views:
+
+- **In the cockpit** (the default): what Falcon BMS will show on the kneeboard in 3D, read from the page files
+  themselves — whoever wrote them (EZBoards, the Planner's or the Kneeboards page's Upd Kneeboard with its Noteboard,
+  target pictures, maps and charts, html_brief, WDP, or nothing since BMS shipped them). The theater's pages in BMS's
+  order, each page as its two halves side by side, the left knee's and the right knee's, with who made each half, what
+  BMS Companion put there, and when the file was written. A page written since this mission began — the PRINT in
+  EZBoards mode; in WDP mode the Planner's open or Populate of the flight — is marked **this mission**; an older one
+  **earlier mission**, greyed, because it is still what the cockpit shows. Pages that are BMS's own on both knees (the
+  shipped checklists) are folded into one line, **Show pages …**. Where a theater has a `KoreaObj_HiRes` twin of a page,
+  the twin is shown, as BMS shows it. A tap opens the half large: zoom and pan, a swipe or ← → through the halves in
+  cockpit order (1L, 1R, 2L …), Escape to close. The view follows the files by itself while it is on screen.
+- **HTML Briefing**: the document pages html_brief exported, with the line saying when the briefing has been printed
+  since. Run HTML Briefing itself is under Making the kneeboards.
+- **EZBoards tables**: what EZBoards' `xbrief.exe` read from the printed briefing and the cartridge, as tables (only
+  when there are any).
+
+The Dashboard's **Kneeboards** card is the same In the cockpit view in small: one page at a time, its two halves, a
+row of page numbers (this mission's in green, an earlier mission's in amber; BMS's own pages left out unless that is
+all there is), a tap opening the large viewer.
+
 ## What they are
 
 | What | Where you see it | What makes it | What it reads |

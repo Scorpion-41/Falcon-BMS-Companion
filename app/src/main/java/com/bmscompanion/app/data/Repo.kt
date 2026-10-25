@@ -187,12 +187,49 @@ object Repo {
         prefs.edit().putString("theater", id).apply()
     }
 
-    fun getInt(key: String, def: Int = 0) = prefs.getInt(key, def)
-    fun putInt(key: String, v: Int) = prefs.edit().putInt(key, v).apply()
-    fun getString(key: String): String? = prefs.getString(key, null)
-    fun putString(key: String, v: String?) = prefs.edit().putString(key, v).apply()
-    fun getStringSet(key: String): Set<String> = prefs.getStringSet(key, emptySet())!!.toSet()
-    fun putStringSet(key: String, v: Set<String>) = prefs.edit().putStringSet(key, v).apply()
+    // a value another device sent (MissionSync) may have come as another type than this device kept it: read tolerantly
+    fun getInt(key: String, def: Int = 0): Int = try { prefs.getInt(key, def) } catch (e: ClassCastException) { prefs.all[key]?.toString()?.trim()?.toIntOrNull() ?: def }
+    fun putInt(key: String, v: Int) { prefs.edit().putInt(key, v).apply(); com.bmscompanion.app.data.mission.MissionSync.touched(key) }
+    fun getString(key: String): String? = try { prefs.getString(key, null) } catch (e: ClassCastException) { prefs.all[key]?.let { if (it is Set<*>) json.encodeToString(stringList, it.map { s -> s.toString() }) else it.toString() } }
+    fun putString(key: String, v: String?) { prefs.edit().putString(key, v).apply(); com.bmscompanion.app.data.mission.MissionSync.touched(key) }
+    fun getStringSet(key: String): Set<String> = try { prefs.getStringSet(key, emptySet())!!.toSet() } catch (e: ClassCastException) {
+        prefs.all[key]?.toString()?.let { runCatching { json.decodeFromString(stringList, it).toSet() }.getOrNull() }.orEmpty()
+    }
+    fun putStringSet(key: String, v: Set<String>) { prefs.edit().putStringSet(key, v).apply(); com.bmscompanion.app.data.mission.MissionSync.touched(key) }
+
+    // ---------- the Mission section on every device (MissionSync) ----------
+    private val stringList = kotlinx.serialization.builtins.ListSerializer(serializer<String>())
+
+    /** what kind of device this is, in a word, for the PC's record of who changed what */
+    const val deviceKind = "Android"
+
+    /** A preference as it is kept here: its type ("i", "s", "S" a set as a JSON list) and its text; null when not set. */
+    fun prefRaw(key: String): Pair<String, String>? = when (val v = prefs.all[key]) {
+        null -> null
+        is Int -> "i" to v.toString()
+        is Set<*> -> "S" to json.encodeToString(stringList, v.map { it.toString() })
+        else -> "s" to v.toString()
+    }
+
+    /** Every preference kept on this device. */
+    fun prefKeys(): Set<String> = prefs.all.keys.toSet()
+
+    /**
+     * Another device's value, written without telling [com.bmscompanion.app.data.mission.MissionSync] (it is not this
+     * device's change). Kept in the type this device keeps the key in, else the type it came as.
+     */
+    fun adoptPref(key: String, type: String, value: String?) {
+        val e = prefs.edit()
+        if (value == null) { e.remove(key).apply(); return }
+        val here = prefs.all[key]
+        val t = when (here) { null -> type; is Int -> "i"; is Set<*> -> "S"; else -> "s" }
+        when (t) {
+            "i" -> value.trim().toIntOrNull()?.let { e.putInt(key, it) } ?: e.putString(key, value)
+            "S" -> runCatching { json.decodeFromString(stringList, value).toSet() }.getOrNull()?.let { e.putStringSet(key, it) } ?: e.putString(key, value)
+            else -> e.putString(key, value)
+        }
+        e.apply()
+    }
 }
 
 object Labels {

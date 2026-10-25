@@ -138,10 +138,19 @@ object AttackFocus {
     init { restore() }
 
     /** The pilot changed an input of [page]. */
-    fun touch(page: WdpPage) { if (page in WdpAttackOverlay.ATTACK_PAGES) { set(page); stamp++ } }
+    fun touch(page: WdpPage) { if (page in WdpAttackOverlay.ATTACK_PAGES) { set(page); stamp++; onPilotChange?.let { runCatching { it() } } } }
 
     /** [page]'s attack was applied (sent to the card, saved to the cartridge). */
-    fun apply(page: WdpPage) { if (page in WdpAttackOverlay.ATTACK_PAGES) { set(page); stamp++ } }
+    fun apply(page: WdpPage) { if (page in WdpAttackOverlay.ATTACK_PAGES) { set(page); stamp++; onPilotChange?.let { runCatching { it() } } } }
+
+    /** Told when the pilot made another page current ([touch], [apply]): the other devices take it (PlannerSessionSync, 1.4.2). */
+    var onPilotChange: (() -> Unit)? = null
+
+    /** Another device's current attack, for the same flight (PlannerSessionSync). */
+    fun take(page: WdpPage?) {
+        if (page == null) { if (profile != null) clear(); return }
+        if (page in WdpAttackOverlay.ATTACK_PAGES && page != profile) { set(page); stamp++ }
+    }
 
     /** A new mission or flight, Re-read DTC, the delivery cleared: no attack is current. */
     fun clear() { profile = null; stamp++; runCatching { Repo.putString(KEY, null) } }

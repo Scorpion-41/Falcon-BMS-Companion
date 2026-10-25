@@ -159,6 +159,8 @@ object MissionWeatherRender {
             appendLine(shot("mapmodel-phone", 400, 860, 2f, 0))
             appendLine(shot("mapmodel-tablet", 1280, 800, 1.5f, 0))
             appendLine(shot("mapmodel-pc", 1600, 1000, 1f, 0))
+            // what a 1400 x 900 browser leaves the page under the Mission header: the chips on one line, the profile folded
+            appendLine(shot("mapmodel-short-pc", 1400, 560, 1f, 0))
             setLook(WxFill.PRECIP, wind = true, level = 7, isobars = true)
             appendLine(shot("mapmodel-pc-precip-isobars-fl300", 1600, 1000, 1f, minOf(3, w.frames.size - 1)))
             setLook(WxFill.VISIBILITY, wind = false, level = 0, isobars = true)
@@ -177,6 +179,38 @@ object MissionWeatherRender {
             appendLine(shot("ramp-pressure-phone", 400, 860, 2f, 0))
             setLook(WxFill.PRECIP, wind = false, level = 0, isobars = false, smooth = true)
             appendLine(shot("ramp-precip-tablet", 1280, 800, 1.5f, 0))
+            // the weather type (the default fill), the cloud circles as an overlay, and the vertical profile: along the
+            // route, then along a line drawn across the theater with the cursor set, on a PC and a phone
+            val stationsWas = MissionWxLook.stations
+            setLook(WxFill.TYPE, wind = true, level = 0, isobars = false, smooth = true)
+            com.bmscompanion.app.ui.screens.editor.WxProfile.setOpen(true)
+            com.bmscompanion.app.ui.screens.editor.WxProfile.clear()
+            appendLine(shot("type-profile-route-pc", 1600, 1000, 1f, 0))
+            MissionWxLook.stations(true)
+            setLook(WxFill.CLOUD_BASE, wind = false, level = 0, isobars = false, smooth = true)
+            appendLine(shot("cloudbase-circles-tablet", 1280, 800, 1.5f, 0))
+            MissionWxLook.stations(false)
+            th?.let { theater ->
+                val s = theater.sizeFt
+                val p = com.bmscompanion.app.ui.screens.editor.WxProfile
+                p.startLine()
+                p.add(s * 0.80, s * 0.15); p.add(s * 0.55, s * 0.45); p.add(s * 0.30, s * 0.80)
+                p.done()
+                check(p.useLine && p.line.size == 3, "a drawn line of three points is shown")
+                val path = com.bmscompanion.app.ui.screens.editor.profilePath(p.line.mapIndexed { j, (x, y) -> com.bmscompanion.app.ui.screens.editor.WxProfilePoint("$j", x, y) })
+                check(path != null && path.samples.size == 161 && path.totalNm > 10, "the line sampled: ${path?.samples?.size} samples over ${path?.totalNm?.toInt()} nm")
+                path?.let { p.cursor(it.totalNm * 0.4, it.at(it.totalNm * 0.4)) }
+                setLook(WxFill.FOG, wind = false, level = 0, isobars = false, smooth = true)
+                appendLine(shot("fog-profile-line-pc", 1600, 1000, 1f, 0))
+                setLook(WxFill.TYPE, wind = false, level = 0, isobars = false, smooth = true)
+                appendLine(shot("type-profile-line-phone", 400, 860, 2f, 0))
+                check(p.escape() && !p.useLine, "Escape takes the line away")
+            }
+            maps.values.firstOrNull()?.let { mm ->
+                check(mm.cloudSize.size == mm.cells, "cloud size served (${mm.cloudSize.size} cells)")
+                check(mm.version != 8 || mm.fogFt.size == mm.cells, "fog layer served for a version 8 map (version ${mm.version}, ${mm.fogFt.size} cells, max ${mm.fogFt.maxOrNull()} ft)")
+            }
+            MissionWxLook.stations(stationsWas)
             // the three kinds side by side on a made-up copy of the first map (the copy's maps hold rain only): showers
             // over the west, rain in the middle, snow (inclement at or below 0 °C) in the east
             w.frames.firstOrNull()?.let { fr -> maps[fr.id]?.let { mm ->
@@ -337,7 +371,7 @@ object MissionWeatherRender {
         val land = near(flight.landing?.x, flight.landing?.y)
         return WxPicture(
             route = flight.route.filter { it.x != 0.0 || it.y != 0.0 }.mapIndexed { i, wp ->
-                WxRoutePt(wp.x, wp.y, i + 1, target = wp.action == 17 || wp.action == 16, land = wp.action == 7, refuel = wp.action == 4)
+                WxRoutePt(wp.x, wp.y, i + 1, target = wp.action == 17 || wp.action == 16, land = wp.action == 7, refuel = wp.action == 4, alt = wp.altFt.takeIf { it > 0 })
             },
             fields = listOfNotNull(home?.let { it to (if (it == land) "HOME" else "DEP") }, land?.takeIf { it != home }?.let { it to "ARR" }),
         )

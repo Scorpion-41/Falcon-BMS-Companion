@@ -81,7 +81,8 @@ import kotlin.math.roundToInt
 /** Day or night inks for the ground chart, remembered between launches. */
 object TaxiPrefs {
     private const val NIGHT_KEY = "taxi_chart_night"
-    private var night by mutableStateOf(Repo.getInt(NIGHT_KEY, 1))
+    // these follow another device's change too (MissionSync, PrefWatch); the stacked page's sheet share is this device's
+    private var night by com.bmscompanion.app.data.mission.prefState(NIGHT_KEY) { Repo.getInt(NIGHT_KEY, 1) }
 
     var darkChart: Boolean
         get() = night != 0
@@ -91,14 +92,14 @@ object TaxiPrefs {
 
     private const val TURN_KEY = "taxi_chart_turn"
     private const val TURN_TALL_KEY = "taxi_chart_turn_tall"
-    private var turnPref by mutableStateOf(Repo.getInt(TURN_KEY, 0))
+    private var turnPref by com.bmscompanion.app.data.mission.prefState(TURN_KEY) { Repo.getInt(TURN_KEY, 0) }
     // an upright chart (a tablet or phone held upright) opens turned to fit: a field drawn north up there filled a third
-    private var turnTallPref by mutableStateOf(Repo.getInt(TURN_TALL_KEY, TURN_FIT))
+    private var turnTallPref by com.bmscompanion.app.data.mission.prefState(TURN_TALL_KEY) { Repo.getInt(TURN_TALL_KEY, TURN_FIT) }
 
     // a carrier's deck always opens turned to fit: its "north" is the bow, so north up has no meaning there and a long
     // deck drawn upright in a wide box filled a sliver of it
     private const val TURN_DECK_KEY = "taxi_chart_turn_deck"
-    private var turnDeckPref by mutableStateOf(Repo.getInt(TURN_DECK_KEY, TURN_FIT))
+    private var turnDeckPref by com.bmscompanion.app.data.mission.prefState(TURN_DECK_KEY) { Repo.getInt(TURN_DECK_KEY, TURN_FIT) }
 
     /** The chart box is taller than wide: set after each layout by the chart (SideEffect), never during composition. */
     var tall by mutableStateOf(false)
@@ -125,7 +126,7 @@ object TaxiPrefs {
     const val TURN_FIT = -1
 
     private const val JET_KEY = "taxi_show_jet"
-    private var jetPref by mutableStateOf(Repo.getInt(JET_KEY, 1))
+    private var jetPref by com.bmscompanion.app.data.mission.prefState(JET_KEY) { Repo.getInt(JET_KEY, 1) }
 
     /** Your own jet's symbol on the chart (the page still works out the spot and route from where it stands). */
     var showJet: Boolean

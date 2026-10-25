@@ -1,8 +1,10 @@
 # Falcon BMS Companion
 
-A companion for **Falcon BMS 4.38** on **Windows PCs, Android phones and tablets, and iPhone, iPad or any browser**: the live mission, a mission planner, ground charts for every airfield, a weather generator, VR kneeboards and an offline reference, so the sim never has to be left for a second window.
+A companion for **Falcon BMS 4.38** on **Windows PCs, Android phones and tablets, and iPhone, iPad or any browser**: the live mission, a mission planner, a campaign editor, ground charts for every airfield, a weather generator, VR kneeboards and an offline reference, so the sim never has to be left for a second window.
 
 Everything it shows about the game — airfields, charts, aircraft, weapons, threats — is **generated from the Falcon BMS install's own files**. The install is read only, except where a feature writes on request; see [What it writes to the BMS folder](#what-it-writes-to-the-bms-folder).
+
+**New in 1.4.2:** the **Command section**, a new section of the PC window for editing campaigns, TEs and trainings and their theater data: every side on the map with BMS's own 2D chart and icons, flights, packages, squadrons, ground units, objectives, teams and the campaign header, a Checks page with fixes, and the theater's database files, saved as a copy by default with BMS's own files backed up once. Also the Mission section following you between PC, browser and Android; a weather-type map and a vertical profile on Mission weather; kneeboards shown first on their page, a route map in your map style and a weather map page; a fuel plan with Bingo, Joker and playtime; a larger own-jet symbol; and Start with Windows. Full list: [CHANGELOG.md](CHANGELOG.md).
 
 **New in 1.4.1:** a **Noteboard** page for the cockpit kneeboard (notes, laser codes, figures) and **Upd Kneeboard** in EZBoards mode too; quick switching between several Falcon BMS installs; runway lengths in feet and metres in every airfield's Info box; colour scales and a **Sun & Moon** block on Mission weather; Open mission… asks before it clears lines and PPTs; and ILS frequencies on the right runway ends, thanks to **Havhingstor**. Full list: [CHANGELOG.md](CHANGELOG.md).
 
@@ -36,6 +38,7 @@ All pictures: [docs/screenshots](docs/screenshots). They are drawn by the app fr
 - [Mission section](#mission-section) — Dashboard and MFDs, Map, Taxi, Briefing and Comms, Radio, Kneeboards, Weather
 - [Two modes: EZBoards or WDP](#two-modes-ezboards-or-wdp)
 - [Planner: WDP for Falcon BMS 4.38.1](#planner-wdp-for-falcon-bms-4381)
+- [Command section: campaigns, TEs and theater data](#command-section-campaigns-tes-and-theater-data)
 - [Maps](#maps)
 - [Which kneeboard is which](#which-kneeboard-is-which)
 - [VR kneeboards](#vr-kneeboards)
@@ -382,6 +385,18 @@ Calculations are compared with WDP itself and agree, except where WDP was wrong.
 
 **Setting it up:** switch the Mission section to **WDP**, and link the device to the PC.
 
+## Command section: campaigns, TEs and theater data
+
+A section of the PC window (a rail entry between **Mission** and **Reference**, while the window reads Falcon BMS on that PC) for editing Falcon BMS campaigns, TEs and trainings and the theater data they use. **Open…** lists every theater's campaign folder with BMS's own files marked.
+
+- **Map** of every side: objectives by type and owner, units with their routes, links, front lines and air-defence rings; BMS's own icons or the app's symbols; **BMS chart**, Falcon BMS's own 2D campaign map read from the install (also a style on every map of the app); the tools Select, Area, Move, Clone, Link, Owner, Ruler, Find and Save picture; a right-click menu for everything.
+- **Units and ATO:** flights (waypoints with re-timing, loadouts limited to legal stores, pilots, callsigns), packages, squadrons (base, roster, pilots, stores, aircraft type), battalions, brigades and task forces; add, clone, delete and bulk operations; tables with squadron patches, flags and callsigns, and CSV export.
+- **Objectives:** owner and damage in a save; full editing of a campaign start (links, radar coverage from the terrain, add and delete) after a one-time backup.
+- **Teams, Campaign, Pilots:** stances, priorities, actions and tasking; clock, Shift Times, squadron list, territory map, events, primary objectives; pilot and callsign usage.
+- **Checks** with a Fix button for each finding, **Stats**, and **Files**: `Stations+Ils.dat`, `RadioMap.dat`, the TE lists, `InvalidAcTypes.XML`, `MissionData_*.xml` and `CampObjData.XML` as tables.
+
+**Saving safely:** Save as a copy is the default and Overwrite always asks; BMS's own files (campaign starts, shipped TEs and trainings, add-on missions) are recognised from the install and only saved as a copy, and are backed up once into the BMS folder with a README; every file is verified before it replaces the old one, and every edit can be undone. This is the section's first release: keep a copy of a campaign you value, and report anything unexpected on [GitHub](https://github.com/Scorpion-41/Falcon-BMS-Companion/issues) or in the forum thread.
+
 ## Config: Falcon BMS's own settings
 
 Falcon BMS keeps several hundred settings in a text file its own screens never show you. This section lists all of them, says what each one does, and writes only the ones you change.
@@ -495,9 +510,10 @@ BMS Companion reads the Falcon BMS install. It writes only these, each on a pres
 | **Planner: file buttons** | WDP's own files (DataCards, codewords, DTC backups, pictures) in `User\BMS Companion Planner`, or where saved | only WDP's file types; an existing file only after Replace |
 | **New mission / mode switch** | removes what the Planner saved for an earlier flight from the cartridge and the TE's mission file, if unchanged since; a mode switch also restores BMS's own cockpit pages the other mode's tool wrote | values BMS or the pilot changed since are kept |
 | **EZBoards** (EZBoards mode) | the cockpit kneeboard pages EZBoards writes | EZBoards' own behaviour |
+| **Command section** (PC window) | campaign, TE and training saves (`.cam`, `.tac`, `.trn`) and the theater's campaign database files | Save as a copy by default, Overwrite asks; BMS's own files only as a copy, except a campaign start under **Edit BMS's campaign start**; BMS's files copied once into `Campaign\BMS Companion Backup\Command` with a README, **Restore BMS's original**; every file verified before it replaces the old one |
 | **Media / ACMI / debug logs** | moves deleted screenshots, cleared ACMI recordings and, when enabled, old debug logs to the Recycle Bin | recoverable from the Recycle Bin |
 
-Every file is written beside itself first and then moved into place, so a failed write never leaves half a file. BMS's campaign starts (`Save0`…, `Te_New`, `Instant`) are never opened or written. [docs/DATA-STORES.md](docs/DATA-STORES.md) lists what each mode reads and resets.
+Every file is written beside itself first and then moved into place, so a failed write never leaves half a file. BMS's campaign starts (`Save0`…, `Te_New`, `Instant`) are never opened or written outside the Command section. [docs/DATA-STORES.md](docs/DATA-STORES.md) lists what each mode reads and resets.
 
 ## How it works
 
@@ -622,5 +638,6 @@ See **[docs/UPDATING.md](docs/UPDATING.md)** — a checklist written so it can b
 - Borders, provinces and country/region names: **[Natural Earth](https://www.naturalearthdata.com)** 1:10m data, public domain.
 - Carrier decks are drawn from the ship models Falcon BMS ships, checked against published figures for each real ship.
 - The browser version's symbols font is a subset of **DejaVu Sans** (Bitstream Vera licence, and public-domain DejaVu changes); the licence is beside it in `web/src/wasmJsMain/resources/fonts/SymbolsFallback-LICENSE.txt`.
+- Team and country flags in the Command section: **[flag-icons](https://github.com/lipis/flag-icons)**, MIT licence.
 - Tacview real-time telemetry is a protocol by Raia Software, implemented natively by BMS.
 - App, PC program and browser version: written by **LoneWolf-41** with Claude Code.

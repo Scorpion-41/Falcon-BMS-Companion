@@ -70,7 +70,7 @@ object MapIntelTest {
             appendLine(rosterEvidence(set, t, file))
             CampaignArchive.deltas(file)?.let { d ->
                 val objs = CampaignArchive.startFile(save)?.let { CampaignArchive.objectives(it) }
-                val damaged = d.deltas.count { dl -> (0 until dl.status.size * 4).any { CampaignArchive.featureStatus(dl.status, it) >= 2 } }
+                val damaged = d.deltas.count { dl -> (0 until dl.status.size).any { CampaignArchive.featureStatus(dl.status, it) >= 2 } }
                 val owners = d.deltas.count { dl -> objs?.get(dl.id)?.let { it.owner != dl.owner } == true }
                 ok("the objective changes (.obd) read whole", d.exact, "${d.deltas.size} of ${d.records}, ${d.end} of ${d.unpacked} bytes${d.stop?.let { ", $it" } ?: ""}")
                 appendLine("objective changes: ${d.deltas.size}; with a building damaged or destroyed $damaged; with another owner than the start's $owners; " +
