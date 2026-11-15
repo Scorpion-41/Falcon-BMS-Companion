@@ -45,11 +45,14 @@ import com.bmscompanion.desktop.ui.command.inspectors.basesFor
 import com.bmscompanion.desktop.ui.command.inspectors.nameOfAny
 import com.bmscompanion.desktop.ui.command.inspectors.near
 import com.bmscompanion.desktop.ui.command.inspectors.teamOptions
+import com.bmscompanion.desktop.ui.command.inspectors.unitOf
 
 /** The unit editor's dialogs: adding a unit (its class, team and place) and the bulk operations. */
 object UnitDialogs {
     sealed class Req
     object Bulk : Req()
+    /** The Units page's Add…: which kind to add, where (the selection, else the middle of the theater). */
+    object AddAny : Req()
     /** Add a unit of [kind] at cell [gx]/[gy]; [at] the objective (or carrier) it was asked on. */
     class Add(val kind: UnitKind, val gx: Int, val gy: Int, val at: Any?, val owner: Int) : Req()
 
@@ -64,8 +67,69 @@ object UnitDialogs {
         when (val r = req) {
             is Add -> AddDialog(ctx, r)
             Bulk -> BulkDialog(ctx)
+            AddAny -> AddAnyDialog(ctx)
             null -> Unit
         }
+    }
+
+    /**
+     * Add…: a squadron (at the selected airbase or carrier, else one picked in the next window), a flight of a
+     * squadron, a battalion, brigade or task force where the selection is (else the middle of the theater). Units
+     * live in the save, so every file takes them — a played save as well as a campaign start.
+     */
+    @Composable
+    private fun AddAnyDialog(ctx: CmdContext) {
+        val doc = ctx.core
+        val cls = UnitClasses.of(doc)
+        val selRef = ctx.selection.primary
+        val selObj = selRef?.takeIf { it.kind == com.bmscompanion.desktop.ui.command.CmdKind.OBJECTIVE }?.let { doc.objective(com.bmscompanion.desktop.bridge.CampaignArchive.VuId.parse(it.id)) }
+        val selUnit = selRef?.takeIf { it.kind != com.bmscompanion.desktop.ui.command.CmdKind.OBJECTIVE }?.let { ctx.unitOf(it) }
+        val mid = (ctx.world.sizeFt / 2 / com.bmscompanion.desktop.bridge.CampaignArchive.FEET_PER_CELL).toInt()
+        val (gx, gy) = selObj?.let { GroundOps.objCell(it) } ?: selUnit?.let { it.x to it.y } ?: (mid to mid)
+        val place = selObj?.let { GroundOps.objName(doc, it) } ?: selUnit?.let { com.bmscompanion.desktop.bridge.command.AirOps.nameOf(doc, it) } ?: "the middle of the theater"
+        val owner = selObj?.let { doc.ownerNow(it) } ?: selUnit?.owner ?: com.bmscompanion.desktop.ui.command.CommandSession.ownerTeam
+        val airfield = selObj?.takeIf { cls.clsOfType(it.type)?.type in setOf(1, 2) }
+        val carrier = (selUnit as? CmdTaskForce)?.takeIf { cls.clsOfType(it.type)?.sub == 3 }
+        val sqs = remember(doc.revision) { doc.squadrons.filter { cls.flightTypeFor(it.type) != null }.sortedBy { ctx.world.unit(it.id.toString())?.name ?: "" } }
+        val start = (selUnit as? com.bmscompanion.desktop.bridge.command.CmdSquadron) ?: (selUnit as? com.bmscompanion.desktop.bridge.command.CmdFlight)?.let { f -> doc.unit(f.squadronId) as? com.bmscompanion.desktop.bridge.command.CmdSquadron }
+        var sq by remember { mutableStateOf(start ?: sqs.firstOrNull()) }
+        val editable = doc.uni?.editable == true
+        AlertDialog(
+            onDismissRequest = { close() },
+            confirmButton = { DeskButton("Close") { close() } },
+            title = { Text("Add a unit", color = Hud.Text, fontSize = 15.sp) },
+            text = {
+                Column(Modifier.width(500.dp)) {
+                    Hint(if (editable) "Units live in the save, so any file takes new ones — a played save as well as a campaign start. Each addition is one step the toolbar's Undo takes back."
+                        else "This file's units could not be read exactly, so none can be added to it.")
+                    Section("Squadron")
+                    Hint(when {
+                        airfield != null -> "At ${GroundOps.objName(doc, airfield)} (the selected airbase)."
+                        carrier != null -> "On ${place} (the selected carrier)."
+                        else -> "Its airbase or carrier is picked in the next window (or select an airbase first; its inspector and the map's right-click offer the same)."
+                    })
+                    MiniWrap { SmallButton("Add a squadron…", enabled = editable) { open(Add(UnitKind.SQUADRON, gx, gy, airfield ?: carrier, owner)) } }
+                    Section("Flight")
+                    ChoiceLine<com.bmscompanion.desktop.bridge.command.CmdSquadron?>("Squadron", sq, sqs.map { it to (ctx.world.unit(it.id.toString())?.name ?: com.bmscompanion.desktop.bridge.command.AirOps.nameOf(doc, it)) }) { sq = it }
+                    MiniWrap {
+                        SmallButton("Add a two-ship", enabled = editable && sq != null, tip = "In a package of its own, an hour from the campaign's clock; draw its route afterwards") {
+                            val s = sq ?: return@SmallButton
+                            val mission = doc.flights.firstOrNull { it.squadronId == s.id }?.mission ?: 0
+                            close()
+                            ctx.applyAndSelectNew(UnitLife.addFlight(doc, s, 2, mission, (doc.cmp?.currentTime ?: 0L) + com.bmscompanion.desktop.bridge.command.AirOps.HOUR_MS), UnitKind.FLIGHT)
+                        }
+                    }
+                    Section("Ground and naval units")
+                    Hint("At $place; move it afterwards with the map's Move tool.")
+                    MiniWrap {
+                        SmallButton("Battalion…", enabled = editable) { open(Add(UnitKind.BATTALION, gx, gy, selObj, owner)) }
+                        SmallButton("Brigade…", enabled = editable) { open(Add(UnitKind.BRIGADE, gx, gy, selObj, owner)) }
+                        SmallButton("Task force…", enabled = editable) { open(Add(UnitKind.TASKFORCE, gx, gy, selObj, owner)) }
+                    }
+                }
+            },
+            containerColor = Hud.Surface,
+        )
     }
 
     @Composable
@@ -187,6 +251,19 @@ object UnitDialogs {
                     val plan = remember(doc.revision, adOwner, objType, chosen.toList(), siteCheck) { UnitBulk.planAirDefence(doc, adOwner, objType, chosen.toList(), siteCheck) }
                     Hint("${plan.place.size} objective${if (plan.place.size == 1) "" else "s"} get a battalion; ${plan.skipped.size} left out" + (plan.skipped.firstOrNull()?.let { " (${GroundOps.objName(doc, it.first)}: ${it.second}${if (plan.skipped.size > 1) " …" else ""})" } ?: "") + ".")
                     MiniWrap { SmallButton("Place them", enabled = plan.place.isNotEmpty()) { ctx.apply(UnitBulk.addAirDefence(doc, adOwner, plan)) } }
+
+                    Section("NoPlan for ground units")
+                    var npOwner by remember { mutableStateOf(-1) }
+                    var npOff by remember { mutableStateOf(false) }
+                    ChoiceLine("Team", npOwner, listOf(-1 to "Every team") + teams) { npOwner = it }
+                    CheckLine("Take NoPlan off them instead", npOff) { npOff = it }
+                    val ad = UnitBulk.battalionsOfRole(doc, npOwner, artillery = false)
+                    val art = UnitBulk.battalionsOfRole(doc, npOwner, artillery = true)
+                    Hint("With NoPlan BMS's planners leave a battalion where it is: an air-defence site (HAWK, Patriot, a mobile SA-x) stops moving round, an artillery battery holds its station, ready to fire on call.")
+                    MiniWrap {
+                        SmallButton("Air-defence battalions (${ad.count { (it.unitFlags and GroundOps.U_NO_PLANNING != 0) == npOff }} of ${ad.size})", enabled = ad.isNotEmpty()) { ctx.apply(UnitBulk.noPlanFor(doc, npOwner, artillery = false, on = !npOff)) }
+                        SmallButton("Artillery, rockets, missiles (${art.count { (it.unitFlags and GroundOps.U_NO_PLANNING != 0) == npOff }} of ${art.size})", enabled = art.isNotEmpty()) { ctx.apply(UnitBulk.noPlanFor(doc, npOwner, artillery = true, on = !npOff)) }
+                    }
 
                     Section("Fix every unit issue")
                     val issues = com.bmscompanion.desktop.ui.command.inspectors.UnitIssues.of(doc)

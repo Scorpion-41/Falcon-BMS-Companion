@@ -576,6 +576,8 @@ fun DrawScope.drawLandmarks(
     pr: MapProjection, g: GeoPaths, tm: TextMeasurer, mission: Boolean = true, lineLayer: LandmarkLayer? = null,
     /** the style the map under them is drawn in, when it is not the pilot's own ([MapLook.style]): Upd Kneeboard's route map */
     styleOverride: String? = null,
+    /** which towns ([MapLook.places]'s values), when not the pilot's own: the Planner's DataCard and attack maps */
+    places: Int = MapLook.places,
 ) {
     val style = styleOverride ?: MapLook.style
     // BMS's own chart has its borders, towns and names printed in it
@@ -632,11 +634,11 @@ fun DrawScope.drawLandmarks(
             shadow = if (light) null else labelShadow,
         )
     }
-    if (MapLook.places > 0) {
+    if (places > 0) {
         var labels = 0
         val maxLabels = 90
-        val relevant = if (mission && MapLook.places == MapLook.MISSION) MapFocus.mission?.takeIf { it.mapId == g.mapId }?.let { g.relevant(it) } else null
-        val maxLevel = if (MapLook.places == MapLook.MISSION) 1 else MapLook.places
+        val relevant = if (mission && places == MapLook.MISSION) MapFocus.mission?.takeIf { it.mapId == g.mapId }?.let { g.relevant(it) } else null
+        val maxLevel = if (places == MapLook.MISSION) 1 else places
         val targetColor = if (light) Color(0xFFB4441A) else Hud.Amber
         // target towns first, so their names always get a place
         // (worked out with the flags, once per mission, not sorted again on every frame)
@@ -829,22 +831,26 @@ private fun widthStep(px: Float): Int {
 
 // ------------------------------------------------------------------ controls
 
-/** + and − buttons for maps (browsers and mice without pinch or wheel); [onZoom] gets the zoom factor. */
+/**
+ * + and − buttons for maps (browsers and mice without pinch or wheel); [onZoom] gets the zoom factor. On a device
+ * worked by finger ([com.bmscompanion.app.data.Platform.touchFirst]) the keys are a finger's size, 48 dp.
+ */
 @Composable
 fun MapZoomButtons(onZoom: (Float) -> Unit, modifier: Modifier = Modifier) {
+    val key = if (com.bmscompanion.app.data.Platform.touchFirst) 48.dp else 36.dp
     Column(
         modifier.clip(RoundedCornerShape(12.dp)).background(Hud.Surface.copy(alpha = 0.92f)).border(1.dp, Hud.Outline.copy(alpha = 0.7f), RoundedCornerShape(12.dp)),
     ) {
-        ZoomKey("+", "Zoom in") { onZoom(ZoomMath.BUTTON) }
-        Box(Modifier.width(36.dp).height(1.dp).background(Hud.Outline.copy(alpha = 0.7f)))
-        ZoomKey("−", "Zoom out") { onZoom(1f / ZoomMath.BUTTON) }
+        ZoomKey("+", "Zoom in", key) { onZoom(ZoomMath.BUTTON) }
+        Box(Modifier.width(key).height(1.dp).background(Hud.Outline.copy(alpha = 0.7f)))
+        ZoomKey("−", "Zoom out", key) { onZoom(1f / ZoomMath.BUTTON) }
     }
 }
 
 @Composable
-private fun ZoomKey(text: String, description: String, onClick: () -> Unit) {
+private fun ZoomKey(text: String, description: String, key: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
     Box(
-        Modifier.size(36.dp).clickable(onClickLabel = description, onClick = onClick),
+        Modifier.size(key).clickable(onClickLabel = description, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) { Text(text, color = Hud.Text, fontSize = 22.sp, fontWeight = FontWeight.SemiBold) }
 }

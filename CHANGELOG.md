@@ -1,5 +1,89 @@
 # Changelog
 
+## 1.4.3 (BMS 4.38) — November 2026
+
+**Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install**; existing settings are kept.
+
+Bug fixes and smaller features: folder selection on the PC, the fuel plan's high-altitude legs, two-finger
+zoom in the browser, the arrival and alternate fields on the VR chart boards, F-15C and radio and chart pages for the
+cockpit kneeboard, magnetic bearings, RWR symbols as the scope draws them, and ground unit orders in the Command
+section.
+
+### Fixes
+
+- **PC: folder selection.** The EZBoards, HTML Briefing, Falcon BMS and screenshots folders are chosen in Windows' own
+  folder dialog, and a screenshot's **Save a copy…** uses Windows' own save dialog. This fixes a crash that could
+  close the program while browsing for a folder.
+- **Fuel plan: high-altitude legs.** A leg planned at or above 25,000 ft burns 10 lb/nm instead of the 15 lb/nm cruise
+  figure, which overstated the fuel needed for a high egress; the minimums now agree closely with the Planner's engine
+  tables. The rate and the altitude are settings.
+- **Fuel plan: the Bingo steerpoint.** Tap a steerpoint in the table to put Bingo there, and again to go back to the
+  steerpoint farthest from the recovery; the Bingo figure says which. The settings' boxes keep what is typed until
+  they are left.
+- **Two fingers in the browser** (iPad, phones): a pinch zoomed nothing and a two-finger pan was lost, on every map, the
+  taxi chart's twist and the Planner's pages. Pinch and pan now work; Safari's own page zoom no longer takes the gesture.
+- **Flight plan rows are no longer cut.** The Briefing's Flight plan and the map's steerpoint list wrap a long name or
+  comment (a CAP's departure time) instead of ending it with "…".
+- **Reference pictures:** the Add-On Israel aircraft pictures that were upside down (the A-4s, Kfir, Lavi, the Syrian
+  and Egyptian MiGs) are the right way up.
+- **VR board addresses** are `http://localhost:47474/kneeboard/<n>` (Copy address, Copy every address, the server page
+  and the Setup guide): OpenKneeboard runs on the BMS PC, so the tabs keep working when the PC's LAN address changes.
+  The LAN address is still shown for phones, tablets and browsers.
+- **Command section:** a squadron's NoPlan flag was labelled "Planned by BMS"; it is shown as NoPlan, apart from Set by
+  HQ (below).
+
+### Kneeboards
+
+- **VR chart boards for every field.** The Ground chart and Instrument charts boards draw the departure, arrival and
+  alternate fields, each once, departure first; **Configure** chooses which. On the ground at another field, that
+  field comes first.
+- **F-15C cockpit kneeboard.** Upd Kneeboard and Mission → Kneeboards have an F-16 / F-15C switch. The F-15C's pages
+  are its right-leg kneeboard (`1403-1418.dds`), each aircraft with its own plan, following the mission's aircraft.
+- **Radio presets page:** UHF and VHF presets, TACAN/ILS and the comm ladder on one page, in both modes.
+- **Charts on the cockpit kneeboard.** The chart viewer's **Add to kneeboard** opens Upd Kneeboard on a page chooser,
+  so several instrument charts can go on different pages; a landscape page is turned when that makes it larger.
+
+### Maps
+
+- **Magnetic bearings.** Bullseye and BRA figures (the map's box, cards and steerpoint list, the Dashboard, the AWACS
+  page, the VR boards) are magnetic by default, as the F-16's HSD and FCR show them: the jet's own variation in 3D,
+  BMS's variation map before. **BRG MAG / BRG TRUE** on the map switches. The Planner's DataCard keeps WDP's true
+  figures.
+- **Your own jet:** a size slider, four shapes (Jet, Arrow, Dot, Classic) and six colours, from the map's **Jet ›** chip
+  or the kneeboard's menu, and per VR map board.
+- **Fuel** figures take the cockpit's totalizer.
+- **Taxi page:** the airfield's Info box (coordinates as BMS shows them, elevation, runways, every frequency) under the
+  cards, in a fold.
+- **By finger:** the maps' + and − are 48 dp, and the taxi chart's keys larger and further apart, so a finger reaching
+  for + no longer turns the chart.
+- **The Planner's DataCard and attack maps** have a **Map** button: WDP's white map, the Mission map's style or any map
+  style, and the towns the briefing places threats by.
+
+### Reference
+
+- **RWR symbols as the scope draws them.** The Threats list shows both the ALR-56M and the ALR-93 symbol; the hat over
+  aircraft, and on the ALR-93 the SAM arrow, AAA box and search-radar stroke (TO 1F-16CMAM-34-1-1, 2.7.3.4.2).
+  Alternating symbols such as KS-19's A/S flash between their parts instead of being crowded into the circle.
+- **HARM & RWR:** a row of the ALIC codes or the RWR emitters opens that system's threat page; the symbols tab draws
+  each symbol.
+- **ECM programs** on each air-defence threat: its radars with their bands per mode from BMS's radar data, and the
+  ALQ-131/184 program that covers them.
+- The Briefing's **Loadout** card gives each F-16's drag index and load, as the Planner's Performance page counts them.
+
+### Command section (PC window)
+
+- **NoPlan** and **Set by HQ** are the two separate flags BMS reads, each with what it does, in the squadron, battalion
+  and brigade inspectors and the Units table; **Advanced** names every unit flag.
+- **Orders** for battalions and brigades, given as BMS gives them (a brigade's battalions with it, or left for it to
+  hand out), and the map's **Assign** tool (G): select ground units, click the objective. **Halt** stops the selected
+  ground units where they stand.
+- **Add…** on the Units page: a squadron at an airbase or carrier, a two-ship of a squadron, a battalion, brigade or
+  task force, in any save (units live in the save, not only in a campaign start); an airbase's inspector has **Add
+  squadron to this airbase…**.
+- Bulk: NoPlan on or off for a team's air-defence or artillery battalions.
+- Checks: a squadron off the map without NoPlan is an error with a Fix; a squadron whose base is neither an objective
+  nor a task force is reported.
+
 ## 1.4.2 (BMS 4.38) — October 2026
 
 **Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install**; existing settings are kept.

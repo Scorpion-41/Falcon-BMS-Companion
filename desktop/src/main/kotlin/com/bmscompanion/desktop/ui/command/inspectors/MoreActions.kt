@@ -229,12 +229,12 @@ internal fun exportCsv(ctx: CmdContext, objectives: Boolean) {
 
 /** The unit flags by bit (the low ones for every unit; from 0x100000 an air unit's and a ground unit's differ). */
 private val UNIT_FLAGS = listOf(
-    0x1 to "Dead", 0x4 to "Assigned", 0x8 to "Ordered", 0x10 to "No planning", 0x20 to "Parent", 0x40 to "Engaged", 0x80 to "Human controlled",
+    0x1 to "Dead", 0x4 to "Assigned", 0x8 to "Ordered", 0x10 to "NoPlan", 0x20 to "Parent", 0x40 to "Engaged", 0x80 to "Not set by HQ",
     0x100 to "Scripted", 0x200 to "Commando", 0x400 to "Moving", 0x800 to "Refused", 0x1000 to "Has ECM", 0x2000 to "Cargo", 0x4000 to "Combat",
     0x8000 to "Broken", 0x10000 to "Losses", 0x20000 to "Inactive", 0x40000 to "Fragmented", 0x80000 to "Unload CFT",
 )
-private val AIR_HIGH = listOf(0x100000 to "Final", 0x200000 to "Has pilots", 0x400000 to "Diverted", 0x800000 to "Fired", 0x1000000 to "Locked", 0x2000000 to "IA kill", 0x4000000 to "No abort")
-private val GROUND_HIGH = listOf(0x100000 to "Targeted", 0x200000 to "Retreating", 0x400000 to "Detached", 0x800000 to "Supported", 0x1000000 to "Temporary destination")
+private val AIR_HIGH = listOf(0x100000 to "Final", 0x200000 to "Has pilots", 0x400000 to "Diverted", 0x800000 to "Fired", 0x1000000 to "Locked (a ground unit's temporary destination)", 0x2000000 to "IA kill", 0x4000000 to "No abort")
+private val GROUND_HIGH = listOf(0x100000 to "Targeted", 0x200000 to "Retreating", 0x400000 to "Detached", 0x800000 to "Supported", 0x1000000 to "Temporary destination (a flight's Locked)")
 
 /**
  * A unit's raw record (folded): CampId (kept unique among objectives and units), owner's spotting by team, base flags

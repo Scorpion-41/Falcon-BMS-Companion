@@ -196,6 +196,8 @@ fun ChartViewerScreen(
     }
     val where = if (index >= 0 && siblings.size > 1) "chart ${index + 1} of ${siblings.size}" else null
 
+    // Upd Kneeboard opens over the viewer from its Add to kneeboard (1.4.2)
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier.fillMaxSize().background(Hud.Bg)
             // ← → (and page up/down) turn the page and then carry on into the next chart, Esc closes
@@ -206,6 +208,8 @@ fun ChartViewerScreen(
             listOfNotNull(airport.ifEmpty { null }, where).joinToString(" · ").ifEmpty { null },
             onBack = close,
         ) {
+            // this page onto a half of Upd Kneeboard's plan, chosen in the window it opens over the viewer (1.4.2)
+            com.bmscompanion.app.ui.screens.wdp.AddChartToKneeboardButton(current, title + if (count > 1) ", page $page of $count" else "")
             IconButton(onClick = { turns = (turns + 1) % 4 }) { Icon(Icons.Default.Rotate90DegreesCw, "Turn the page", tint = Hud.TextDim) }
             IconButton(onClick = close) { Icon(Icons.Default.Close, "Close the chart", tint = Hud.Text) }
         }
@@ -223,6 +227,8 @@ fun ChartViewerScreen(
                 onPage = { page = it },
             )
         }
+    }
+    com.bmscompanion.app.ui.screens.wdp.ChartKneeboardHost()
     }
 }
 

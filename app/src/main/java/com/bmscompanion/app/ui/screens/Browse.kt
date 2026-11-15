@@ -411,6 +411,8 @@ private suspend fun searchAll(q: String): List<Hit> {
     val nq = q.norm()
     fun score(name: String): Int { val n = name.norm(); return when { n == nq -> 100; n.startsWith(nq) -> 80; n.contains(nq) -> 50; else -> 0 } }
     val out = ArrayList<Hit>()
+    // the easter egg: the galley microwave, for the long flights
+    if (Galley.asked(q)) out += Hit("Galley", Galley.SYSTEM, Galley.DETAIL, Routes.GALLEY, 100)
     Repo.aircraft().forEach { a -> val s = score(a.name); if (s > 0) out += Hit("Aircraft", a.name, "${a.familyTitle} · ${a.role}", Routes.aircraft(a.key), s) }
     Repo.threats().forEach { t ->
         val s = maxOf(score(t.name), t.aliases.maxOfOrNull { score(it) } ?: 0, if (t.rwr.values.any { it?.norm() == nq }) 60 else 0, if (t.harmAlic?.contains(q) == true) 60 else 0)

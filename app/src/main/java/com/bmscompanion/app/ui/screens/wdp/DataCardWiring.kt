@@ -40,7 +40,7 @@ import com.bmscompanion.app.data.wdp.PopupCoords
 import com.bmscompanion.app.data.wdp.PopupPlan
 import com.bmscompanion.app.data.wdp.TossPlan
 import com.bmscompanion.app.data.wdp.WdpValues
-import com.bmscompanion.app.ui.screens.mission.bra
+import com.bmscompanion.app.ui.screens.mission.braTrue as bra  // the card's figures are WDP's: true, whatever the map shows
 import com.bmscompanion.app.ui.screens.mission.bullseye
 import com.bmscompanion.app.ui.screens.mission.stationFromNotes
 import com.bmscompanion.app.ui.screens.mission.supportAssets
@@ -2050,7 +2050,12 @@ class DataCardWiring : WdpWiring, WdpControlContent {
         // with nothing to draw the box stays as WDP leaves an empty picture box; the map can be zoomed and panned, and
         // the support stations are on it with the route, as on WDP's main map
         androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
-            CardMap(mission.theater, attack ?: routePicture(), whiteMap, if (attack == null) cardTracks.toList() else emptyList(), mapView)
+            // on the screen the Planner's map look and its Map button (style, towns, the white map); a kneeboard page as before
+            val screen = !wdpOnPaper
+            CardMap(
+                mission.theater, attack ?: routePicture(), whiteMap, if (attack == null) cardTracks.toList() else emptyList(), mapView,
+                own = screen, onWhite = { onClick("picMap") },
+            )
             // the Planner's latest attack is another page's: one line says so (the card keeps its own, AttackFocus) — on
             // the screen only, never on the kneeboard page Upd Kneeboard prints of the card (its window says it there)
             if (!wdpOnPaper) AttackFocus.cardNotice(profile)?.let { notice ->

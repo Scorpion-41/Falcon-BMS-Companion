@@ -3,7 +3,8 @@ package com.bmscompanion.desktop.bridge.command
 /**
  * The unit editor's operations on many units at once, each one undoable step: resupply every squadron, full
  * rosters, spotting reset, a team's units to another team, every squadron or battalion of a team from one class to
- * another, and air-defence battalions on every objective of a kind.
+ * another, air-defence battalions on every objective of a kind, and NoPlan on a team's air-defence or artillery
+ * battalions.
  */
 object UnitBulk {
     /** Every squadron's stores as its class's template has them. */
@@ -90,6 +91,23 @@ object UnitBulk {
             val (x, y) = GroundOps.objCell(o)
             UnitLife.addBattalion(doc, t, owner, x, y, o, 9)
         })
+    }
+
+    /** The battalions of team [owner] (-1 every team) that are air defence ([artillery] false) or artillery, rockets and missiles. */
+    fun battalionsOfRole(doc: CommandSave, owner: Int, artillery: Boolean): List<CmdBattalion> = doc.battalions.filter { b ->
+        val sub = GroundOps.subOf(doc, b)
+        (owner < 0 || b.owner == owner) && if (artillery) sub in GroundOps.SUB_ARTILLERY else sub == GroundOps.SUB_AIR_DEFENCE
+    }
+
+    /**
+     * NoPlan set (or cleared, [on] false) on every air-defence or artillery battalion of a team: BMS's planners leave
+     * them where they are (an air-defence site stops moving round, a battery holds its station).
+     */
+    fun noPlanFor(doc: CommandSave, owner: Int, artillery: Boolean, on: Boolean): CommandEdit {
+        val list = battalionsOfRole(doc, owner, artillery)
+        val what = if (artillery) "artillery battalions" else "air-defence battalions"
+        if (list.isEmpty()) return Edits.failing("NoPlan", "uni", "there are no $what${if (owner >= 0) " of that team" else ""}")
+        return GroundOps.setFlag(doc, list, GroundOps.U_NO_PLANNING, on, "NoPlan ${if (on) "on" else "off"}: ${list.size} $what")
     }
 }
 
@@ -204,7 +222,14 @@ object UnitChecks {
             if (wrong > 0) out += tag("Pilots", false) + Issue(Severity.WARNING, sq.id, "${name(sq)}: $wrong pilot${if (wrong == 1) "'s" else "s'"} \"flying\" mark does not match the flights' seats.", "Mark them by the seats") { d ->
                 UnitEdit.mutate("Pilots of ${name(sq)} by the seats", d) { touch(sq); sq.pilots.forEachIndexed { i, p -> if (p.status in setOf(0, 4)) p.status = if (i in flying) AirOps.PILOT_IN_USE else AirOps.PILOT_FREE } }
             }
-            if (sq.airbaseId.isNone || (sq.airbaseId !in objIds && ids[sq.airbaseId] !is CmdTaskForce)) out += tag("References", true) + Issue(Severity.WARNING, sq.id, "${name(sq)}'s base is not an objective or a task force of the file.", null, null)
+            val offMap = GroundOps.offMap(doc, sq)
+            if (!offMap && sq.airbaseId !in objIds && ids[sq.airbaseId] !is CmdTaskForce) out += tag("References", true) + Issue(Severity.WARNING, sq.id, "${name(sq)}'s base is not an objective or a task force of the file.", null, null)
+            // a squadron based off the map must not be planned from (the campaign designers' rule: BMS's air tasking
+            // would plan missions from a base it cannot fly from)
+            if (offMap && sq.unitFlags and GroundOps.U_NO_PLANNING == 0) out += tag("Squadrons", false) + Issue(Severity.ERROR, sq.id,
+                "${name(sq)} is based off the map but NoPlan is not set (every off-map squadron needs it).", "Set NoPlan") { d ->
+                GroundOps.setFlag(d, listOf(sq), GroundOps.U_NO_PLANNING, true, "NoPlan for ${name(sq)}")
+            }
         }
         cmp?.squadInfo?.filter { ids[it.id] !is CmdSquadron }?.forEach { si ->
             out += tag("Squadron list", true) + Issue(Severity.ERROR, si.id, "The header lists a squadron (${si.squadronName.text.ifBlank { "id ${si.id}" }}) the units do not have.", "Take the row out") { d ->

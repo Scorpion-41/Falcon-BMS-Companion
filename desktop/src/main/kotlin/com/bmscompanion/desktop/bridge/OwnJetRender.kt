@@ -32,26 +32,27 @@ object OwnJetRender {
                 if (tile != null) drawImage(tile, IntOffset.Zero, IntSize(tile.width, tile.height), IntOffset.Zero, IntSize(w, h))
                 else drawRect(Color.Gray)
                 val light = style == "chart" || style == "topo"
+                // top row: the three presets in the default shape and colour; bottom row: the four shapes at the
+                // default size, each in another colour
                 for (i in 0..2) {
-                    OwnJetLook.size = i
-                    val p = Offset(w * (0.2f + i * 0.3f), h * 0.55f)
+                    OwnJetLook.board(i.toString(), "0", "0")
+                    val p = Offset(w * (0.2f + i * 0.3f), h * 0.3f)
                     // a leg of the route through the jet, as on the map (Hud.Amber)
-                    drawLine(Color(0xFFFFB020), p + Offset(-w * 0.12f, h * 0.35f), p + Offset(w * 0.12f, -h * 0.35f), 3f)
+                    drawLine(Color(0xFFFFB020), p + Offset(-w * 0.08f, h * 0.2f), p + Offset(w * 0.08f, -h * 0.2f), 3f)
+                    drawOwnJet(p, 35.0, OwnJetLook.lengthPx(this) * 1.6f, light)
+                }
+                for (s in 0 until OwnJetLook.shapes.size) {
+                    OwnJetLook.board("1", s.toString(), (s + 1).toString())
+                    val p = Offset(w * (0.14f + s * 0.24f), h * 0.78f)
                     drawOwnJet(p, 35.0, OwnJetLook.lengthPx(this) * 1.6f, light)
                 }
             }
-            OwnJetLook.size = 1
+            OwnJetLook.board("1", "0", "0")
             val f = File(out, "ownjet-$style-${density.toInt()}x.png")
             com.bmscompanion.desktop.skiaPng(img)?.let { f.writeBytes(it) }
             appendLine("${f.name}: ${if (tile == null) "no tile, grey ground" else "Korea tile"}; S/M/L = " +
-                (0..2).joinToString("/") { i -> "${lenOf(i, density)} px" })
-            OwnJetLook.size = 1
+                OwnJetLook.presets.joinToString("/") { d -> "${maxOf(d * density, d * 1.5f).toInt()} px" } +
+                "; shapes ${OwnJetLook.shapes.joinToString()} at M")
         }
-    }
-
-    private fun lenOf(i: Int, density: Float): Int {
-        val dp = floatArrayOf(26f, 36f, 50f)[i] * density
-        val px = floatArrayOf(30f, 44f, 60f)[i]
-        return maxOf(dp, px).toInt()
     }
 }

@@ -120,6 +120,8 @@ object Routes {
     const val CHECKLISTS = "checklists"
     const val COMMS = "comms"
     const val HARM = "harm"
+    /** the galley microwave (an easter egg: search "microwave") */
+    const val GALLEY = "galley"
     const val ENCY = "encyclopedia"
     const val BULLSEYE = "bullseye"
     const val TOOLS = "tools"
@@ -403,6 +405,9 @@ fun AppRoot(startRoute: String? = null, nav: NavHostController = rememberNavCont
                     composable("checklist/{id}") { ChecklistScreen(nav, it.arguments?.getString("id").orEmpty()) }
                     composable(Routes.COMMS) { CommsScreen(nav) }
                     composable(Routes.HARM) { HarmRwrScreen(nav) }
+                    // a tab of it by number (0 ALIC codes, 1 HARM modes, 2 RWR emitters, 3 RWR symbols, 4 RWR controls)
+                    composable("${Routes.HARM}/{tab}") { HarmRwrScreen(nav, it.arguments?.getString("tab")?.toIntOrNull() ?: 0) }
+                    composable(Routes.GALLEY) { com.bmscompanion.app.ui.screens.GalleyScreen(nav) }
                     composable(Routes.ENCY) { EncyclopediaScreen(nav) }
                     composable(Routes.BULLSEYE) { BullseyeScreen(nav) }
                     composable(Routes.TOOLS) { ToolsScreen(nav) }

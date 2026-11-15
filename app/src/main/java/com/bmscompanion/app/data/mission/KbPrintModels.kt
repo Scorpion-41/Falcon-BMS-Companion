@@ -45,6 +45,12 @@ data class KbPrintState(
     val since: Long = 0,
     val sinceFrom: String? = null,
     val mission: String? = null,
+    /**
+     * whose pages these are ([KbAircraft], 1.4.2, `?ac=` on the routes): the F-16's `7982-7997.dds` (absent from an
+     * older PC, which serves only those) or the F-15C's `1403-1418.dds`, whose pilot model has a kneeboard on the right
+     * leg only, so only the right half of each of its files is ever shown, printed or offered
+     */
+    val aircraft: String = KbAircraft.F16,
 ) {
     companion object {
         const val SINCE_PRINTED = "printed"
@@ -130,7 +136,51 @@ data class KbFileSend(
     val n: Int = 0,
     val left: KbHalf? = null,
     val right: KbHalf? = null,
+    /** whose page file ([KbAircraft], 1.4.2): the F-15C's left half is never written, whatever is sent for it */
+    val aircraft: String = KbAircraft.F16,
 )
+
+/**
+ * Whose cockpit kneeboard pages Upd Kneeboard writes (1.4.2). Both live in the same `KoreaObj` folder of the theater's
+ * 3D data folder: the F-16's sixteen files `7982.dds`-`7997.dds` (left half = left knee, right half = right knee) and
+ * the F-15C's `1403.dds`-`1418.dds`, whose pilot model carries a kneeboard on its right leg only — the right half of
+ * each file is the page (EZBoards writes it at x = 1024, `SET KNEEBOARD[F15_<n>]`), the left half is never seen.
+ */
+object KbAircraft {
+    const val F16 = "f16"
+    const val F15 = "f15"
+    val ALL = listOf(F16, F15)
+
+    fun of(s: String?): String = if (s.equals(F15, ignoreCase = true)) F15 else F16
+
+    /** "F-16" / "F-15C" */
+    fun name(ac: String) = if (ac == F15) "F-15C" else "F-16"
+
+    /** Page 1's file number: page n is `first + n - 1`. */
+    fun first(ac: String) = if (ac == F15) 1403 else 7982
+
+    /** "7983.dds" */
+    fun fileOf(ac: String, n: Int) = "${first(ac) + n - 1}.dds"
+
+    /** Only the right half of a page is shown in the cockpit (the F-15C). */
+    fun rightOnly(ac: String) = ac == F15
+
+    /** The halves a page has in the cockpit: 'L' and 'R', or 'R' alone. */
+    fun sides(ac: String): List<Char> = if (rightOnly(ac)) listOf('R') else listOf('L', 'R')
+
+    /** The routes' query for [ac]: nothing for the F-16 (what an older PC serves), `ac=f15` otherwise. */
+    fun query(ac: String): String = if (ac == F15) "ac=$F15" else ""
+
+    /** The aircraft a mission's aircraft type flies with ("F-15C Eagle" → F-15C), null when it is neither. */
+    fun forType(type: String?): String? {
+        val t = type?.uppercase()?.replace(" ", "")?.replace("-", "") ?: return null
+        return when {
+            t.contains("F15") -> F15
+            t.contains("F16") -> F16
+            else -> null
+        }
+    }
+}
 
 /**
  * What happened to one file: [status] is [KbFileResult.WRITTEN], [KbFileResult.UNCHANGED] or [KbFileResult.REFUSED],
@@ -201,6 +251,16 @@ object KbKind {
      * map), with the key and the figures at the take-off, target and landing (1.4.2)
      */
     const val WEATHER_MAP = "wxmap"
+    /**
+     * the mission's radio presets as Mission → Comms shows them: the cartridge's UHF and VHF presets (the ones tuned
+     * after a load marked) and the briefing's comm ladder (1.4.2)
+     */
+    const val RADIO = "radio"
+    /**
+     * one page of a bundled instrument chart (approach, departure, arrival), put on a half from the chart viewer's **Add
+     * to kneeboard** and drawn fitted to the half (1.4.2)
+     */
+    const val CHART = "chart"
 }
 
 /**
@@ -230,11 +290,18 @@ object KbCockpit {
     /** The file was written before the mission now planned began: what it holds is an earlier mission's. */
     fun earlier(state: KbPrintState?, s: KbSlot): Boolean = state != null && state.since > 0 && shown(s).modified in 1 until state.since
 
-    /** The halves in cockpit order — page 1 left knee, page 1 right knee, page 2 … — leaving out [skipOriginal] ones. */
-    fun halves(state: KbPrintState?, skipOriginal: Boolean = false): List<Pair<Int, Char>> =
-        pages(state).filter { !skipOriginal || !allOriginal(it) }.flatMap { listOf(it.n to 'L', it.n to 'R') }
+    /**
+     * The halves in cockpit order — page 1 left knee, page 1 right knee, page 2 … — leaving out [skipOriginal] ones; the
+     * F-15C's right halves alone ([KbAircraft.rightOnly]: its pilot model has no left kneeboard).
+     */
+    fun halves(state: KbPrintState?, skipOriginal: Boolean = false): List<Pair<Int, Char>> {
+        val sides = KbAircraft.sides(state?.aircraft ?: KbAircraft.F16)
+        return pages(state).filter { !skipOriginal || (if (sides.size == 1) original(it, 'R') else allOriginal(it)).not() }
+            .flatMap { p -> sides.map { p.n to it } }
+    }
 
     /** Where a picture of half [side] of page [s] as BMS shows it comes from, [w] px wide (at most 1024: the file's half). */
-    fun picturePath(s: KbSlot, side: Char, w: Int): String =
-        "/api/kbprint/thumb?n=${s.n}&side=$side&w=$w" + (if (s.hiRes != null) "&twin=1" else "") + "&t=${shown(s).modified}"
+    fun picturePath(s: KbSlot, side: Char, w: Int, aircraft: String = KbAircraft.F16): String =
+        "/api/kbprint/thumb?n=${s.n}&side=$side&w=$w" + (if (s.hiRes != null) "&twin=1" else "") + "&t=${shown(s).modified}" +
+            KbAircraft.query(aircraft).let { if (it.isEmpty()) "" else "&$it" }
 }

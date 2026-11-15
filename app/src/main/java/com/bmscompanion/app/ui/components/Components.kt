@@ -607,28 +607,6 @@ fun FavoriteButton(id: String) {
     }
 }
 
-/** RWR-scope style symbol badge. */
-@Composable
-fun RwrBadge(symbol: String?, size: Dp = 40.dp, color: Color = Hud.Green) {
-    if (symbol.isNullOrBlank()) return
-    val tm = androidx.compose.ui.text.rememberTextMeasurer()
-    androidx.compose.foundation.Canvas(Modifier.size(size)) {
-        val r = this.size.minDimension / 2
-        drawCircle(Color(0xFF06140C), r, center)
-        drawCircle(color.copy(alpha = 0.7f), r - 1.5.dp.toPx() / 2, center, style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx()))
-        var fs = when { symbol.length <= 2 -> 0.46f; symbol.length <= 4 -> 0.30f; else -> 0.22f } * this.size.minDimension
-        val style = { px: Float -> androidx.compose.ui.text.TextStyle(color = color, fontFamily = Mono, fontWeight = FontWeight.Bold, fontSize = (px / density / fontScale).sp,
-            platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false),
-            lineHeightStyle = androidx.compose.ui.text.style.LineHeightStyle(androidx.compose.ui.text.style.LineHeightStyle.Alignment.Center, androidx.compose.ui.text.style.LineHeightStyle.Trim.Both)) }
-        var layout = tm.measure(symbol, style(fs), maxLines = 1)
-        val maxW = r * 1.55f
-        if (layout.size.width > maxW) { fs *= maxW / layout.size.width; layout = tm.measure(symbol, style(fs), maxLines = 1) }
-        // center the glyphs (cap height ≈ 0.72 em) rather than the font line box
-        val baselineY = center.y + fs * 0.36f
-        drawText(layout, topLeft = Offset(center.x - layout.size.width / 2f, baselineY - layout.firstBaseline))
-    }
-}
-
 @Composable
 fun ListRow(
     title: String,

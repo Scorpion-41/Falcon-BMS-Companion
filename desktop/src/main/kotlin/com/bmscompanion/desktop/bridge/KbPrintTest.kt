@@ -73,9 +73,63 @@ object KbPrintTest {
         } catch (e: Throwable) {
             check(false, "the check ran to the end", "${e::class.java.simpleName}: ${e.message}\n" + e.stackTrace.take(10).joinToString("\n") { "    at $it" })
         }
+        try {
+            f15(root, ::line, ::check)
+        } catch (e: Throwable) {
+            check(false, "the F-15C part ran to the end", "${e::class.java.simpleName}: ${e.message}\n" + e.stackTrace.take(10).joinToString("\n") { "    at $it" })
+        }
         line()
         line(if (fails == 0) "ALL PASS" else "$fails FAIL(s)")
         return sb.toString()
+    }
+
+    /**
+     * 12 (1.4.2). The F-15C's pages, `1403-1418.dds` in the same folder, right halves only: the names, the state, EZBoards'
+     * `KNEEBOARD[F15_<n>]` claims as right halves, a print of both halves that writes the right one alone (the left
+     * half's pixels unchanged), and BMS's shipped F-15C copy put back. Skipped when the copy has no `1403.dds`.
+     */
+    private fun f15(root: File, line: (String) -> Unit, report: (Boolean, String, String) -> Unit) {
+        fun check(ok: Boolean, what: String, detail: String = "") = report(ok, what, detail)
+        line("")
+        line("12. The F-15C's pages (right halves only)")
+        val ac = com.bmscompanion.app.data.mission.KbAircraft.F15
+        val set = Theaters.at(root)
+        val t = set.all.firstOrNull { KneeboardPrint.place(root, it.name, ac).page(1)?.isFile == true }
+        if (t == null) { line("SKIP no theater of the copy has 1403.dds"); return }
+        val at = KneeboardPrint.place(root, t.name, ac)
+        check(at.name(1) == "1403.dds" && at.name(16) == "1418.dds", "the F-15C's page names are 1403-1418.dds", "${at.name(1)} … ${at.name(16)}")
+        val st = KneeboardPrint.state(at, null, false)
+        check(st.aircraft == ac && st.pages.firstOrNull()?.file == "1403.dds", "the state is the F-15C's", "${st.aircraft} ${st.pages.firstOrNull()?.file}")
+        check(st.pages.filter { !it.missing }.all { it.left == it.right }, "each F-15C slot reports its left half as its right one")
+        val ez = File(root.parentFile, root.name + "-kbprint-ez15").apply { deleteRecursively(); mkdirs() }
+        File(ez, "CONFIG_USER.BAT").writeText("SET KNEEBOARD[F15_1]=page_1\r\nSET KNEEBOARD[F15_4]=page_4\r\nREM SET KNEEBOARD[F15_5]=x\r\nSET KNEEBOARD[F16_3L]=x\r\n")
+        val c15 = KneeboardPrint.ezClaims(ez, ac)
+        val c16 = KneeboardPrint.ezClaims(ez)
+        check(c15 == setOf("1R", "4R") && c16 == setOf("3L"), "EZBoards' F15_<n> lines are the right halves; its F16 lines stay the F-16's", "f15 $c15, f16 $c16")
+        runCatching { ez.deleteRecursively() }
+        val n = (1..16).firstOrNull { at.page(it)?.isFile == true && Dds.header(at.page(it)!!.readBytes()).unwritable == null }
+        if (n == null) { line("SKIP no F-15C page this program writes"); return }
+        val file = at.page(n)!!
+        val before = file.readBytes()
+        val bi = Dds.header(before)
+        val hw = bi.width / 2
+        val leftBefore = Dds.decode(before, bi, 0, 0, 0, hw, bi.height)
+        val rightBefore = Dds.decode(before, bi, 0, hw, 0, hw, bi.height)
+        val p = KneeboardPrint.printPage(at, n, arrayOf(testPage("${n}L"), testPage("${n}R")), arrayOf(KbKind.TEST, KbKind.TEST))
+        check(p.result.status == KbFileResult.WRITTEN, "an F-15C page prints", "${p.result.file} ${p.result.status} ${p.result.reason ?: ""}")
+        val after = file.readBytes()
+        val ai = Dds.header(after)
+        check(after.size == before.size && ai.format == bi.format && ai.levels == bi.levels, "the F-15C page keeps its size, format and mips", "${bi.format}/${bi.levels} → ${ai.format}/${ai.levels}")
+        check(Dds.decode(after, ai, 0, 0, 0, hw, ai.height).contentEquals(leftBefore), "its left half (never seen in the cockpit) is left exactly as it was")
+        check(!Dds.decode(after, ai, 0, hw, 0, hw, ai.height).contentEquals(rightBefore), "its right half holds the page printed")
+        val o = KneeboardPrint.ownersOf(at, n)
+        check(o?.right == KbOwner.COMPANION && o.rightKind == KbKind.TEST, "the tag names the right half this program's test page", "${o?.left}/${o?.right} ${o?.rightKind}")
+        if (at.shipped == null) { line("SKIP the copy ships no F-15C pages (Docs\\07 Kneeboard Templates\\F-15C\\DDS_Backup)"); return }
+        check(at.shipped.path.contains("F-15", ignoreCase = true), "the shipped folder is the F-15C's", KneeboardPrint.relative(root, at.shipped))
+        val back = KneeboardPrint.putShipped(at, listOf(n)).first()
+        val shipped = at.shippedPage(n)
+        check(back.status == KbFileResult.WRITTEN && shipped != null && file.readBytes().contentEquals(shipped.readBytes()),
+            "BMS's F-15C page is put back byte for byte", "${back.status} ${back.reason ?: ""}")
     }
 
     // ------------------------------------------------------------------ pages

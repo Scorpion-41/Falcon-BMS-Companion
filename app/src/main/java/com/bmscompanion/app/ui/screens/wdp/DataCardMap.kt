@@ -33,8 +33,16 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.verticalScroll
+import com.bmscompanion.app.data.Repo
 import com.bmscompanion.app.data.Theater
+import com.bmscompanion.app.data.mission.prefIntState
+import com.bmscompanion.app.data.mission.prefState
 import com.bmscompanion.app.data.wdp.PopupPlan
+import com.bmscompanion.app.ui.components.BmsChart
+import com.bmscompanion.app.ui.components.MapLook
+import com.bmscompanion.app.ui.components.drawLandmarks
+import com.bmscompanion.app.ui.components.rememberGeo
 import com.bmscompanion.app.ui.components.MapProjection
 import com.bmscompanion.app.ui.components.ZoomMath
 import com.bmscompanion.app.ui.components.rememberZoomGlide
@@ -71,10 +79,22 @@ internal class CardMapView {
  * that switches the map.
  */
 @Composable
-internal fun CardMap(theater: Theater?, picture: PopupPlan.MapPicture?, white: Boolean, tracks: List<CardTrack>, view: CardMapView) {
+internal fun CardMap(
+    theater: Theater?, picture: PopupPlan.MapPicture?, white: Boolean, tracks: List<CardTrack>, view: CardMapView,
+    /** on the screen: the Planner's map look ([PlannerMapLook]: style, towns) and its **Map** button; off on paper, drawn as before */
+    own: Boolean = false,
+    /** turns WDP's white map on or off, as a click on the map does (the wiring's own `picMap` click) */
+    onWhite: (() -> Unit)? = null,
+) {
     val base = rememberMapBase(theater?.map)
     // (its labels are measured on every drawing: the default cache of 8 laid them all out again each time)
     val tm = rememberTextMeasurer(cacheSize = 128)
+    val geo = if (own) rememberGeo(theater?.map, theater?.sizeFt ?: 1.0) else null
+    // the style under the plan: WDP's white map draws the Chart on white; else the Planner's choice, else the Mission map's
+    val style = if (white) "chart" else if (own) PlannerMapLook.shown else null
+    // marks in dark inks on a paper-light map, as on the white map
+    val darkInks = white || (style != null && MapLook.isLight(style))
+    val places = PlannerMapLook.places
     // the box's width, for the glide, which zooms between layouts
     val width = remember { FloatArray(1) }
     // a wheel glides (ZoomMath); a pinch or a drag follows the fingers and stops a glide in flight
@@ -105,23 +125,27 @@ internal fun CardMap(theater: Theater?, picture: PopupPlan.MapPicture?, white: B
                 val side = (w * sizeFt / pic.spanFt).toFloat()
                 val left = (-pic.upperE / sizeFt * side).toFloat()
                 val top = (-(1.0 - pic.upperN / sizeFt) * side).toFloat()
-                drawMapBase(MapProjection(left * z + o.x, top * z + o.y, side * z, sizeFt, 1f), base, null, if (white) "chart" else null)
+                // (scale: the theater against the box, as a theater map counts it, which sets when smaller towns appear)
+                val pr = MapProjection(left * z + o.x, top * z + o.y, side * z, sizeFt, side * z / minOf(size.width, size.height))
+                drawMapBase(pr, base, null, style)
+                // the towns and borders the briefing's threats are placed by ("2 nm west of …")
+                if (geo != null) drawLandmarks(pr, geo, tm, mission = false, styleOverride = style ?: MapLook.style, places = places)
             }
             val type = (11f / (density * fontScale)).sp
             // theater feet to the plan's pixels
             val kp = if (pic.spanFt > 0.0) pic.size / pic.spanFt else 0.0
             fun ft(north: Double, east: Double) = at(((east - pic.upperE) * kp).toFloat(), ((pic.upperN - north) * kp).toFloat())
-            if (kp > 0.0) for (t in tracks) drawTrack(t, ::ft, white, tm, type)
+            if (kp > 0.0) for (t in tracks) drawTrack(t, ::ft, darkInks, tm, type)
             // an attack page's picture: WDP's route and threats, then the one attack drawing in place of its own marks
             val attack = pic.attack
             val under = if (attack != null && pic.underlay >= 0) pic.underlay else pic.items.size
             for ((idx, it0) in pic.items.withIndex()) {
                 if (idx >= under) break
                 val it = if (attack != null && idx == pic.ipSquare && it0 is PopupPlan.MapItem.Rect) PopupPlan.MapItem.Ellipse(it0.x, it0.y, it0.w, it0.h, it0.color) else it0
-                drawItem(it, ::at, k * z, white, tm, type)
+                drawItem(it, ::at, k * z, darkInks, tm, type)
             }
             if (attack != null && kp > 0.0) {
-                val inks = com.bmscompanion.app.ui.components.AttackInks.of(white)
+                val inks = com.bmscompanion.app.ui.components.AttackInks.of(darkInks)
                 val halo = androidx.compose.ui.graphics.Shadow(inks.halo, Offset.Zero, 3f)
                 drawAttackModel(attack, ::ft, inks, (k * z).coerceIn(0.45f, 1.5f)) { text, p, color ->
                     drawText(tm.measure(text, TextStyle(color = color, fontSize = type, shadow = halo)), topLeft = p)
@@ -134,6 +158,76 @@ internal fun CardMap(theater: Theater?, picture: PopupPlan.MapPicture?, white: B
                 .background(Color.Black.copy(alpha = 0.55f)).clickable { view.fit() }.padding(horizontal = 6.dp, vertical = 2.dp),
             color = Color.White, fontSize = 11.sp,
         )
+        if (own) PlannerMapButton(white, onWhite, Modifier.align(Alignment.TopStart))
+    }
+}
+
+/**
+ * The look of the Planner's own maps — the DataCard's (`picMap`) and the attack pages' (`picSatView`) — on the
+ * screen: the map style (WDP had its map and its white map; the app's five styles and BMS's chart are offered, and
+ * "As the Mission map" keeps them following the pilot's Mission map, which is how they were drawn up to 1.4.2) and
+ * the towns, whose names the briefing places the threats by. Prefs, so each device keeps its own and MissionSync
+ * carries the change to the pilot's other devices. A kneeboard page of the card is drawn without them.
+ */
+internal object PlannerMapLook {
+    /** "" = the Mission map's style ([MapLook.style]) */
+    var style by prefState("wdp_maplook_style") {
+        Repo.getString("wdp_maplook_style")?.takeIf { s -> s.isEmpty() || MapLook.styles.any { it.first == s } || BmsChart.isChart(s) } ?: ""
+    }
+        private set
+    /** [MapLook.placeOptions]'s values without Mission: 0 off, 1 cities, 2 cities and towns (the default), 3 all places */
+    var places by prefIntState("wdp_maplook_towns") { Repo.getInt("wdp_maplook_towns", 2).coerceIn(0, 3) }
+        private set
+
+    /** the style drawn */
+    val shown: String get() = style.ifEmpty { MapLook.style }
+
+    fun chooseStyle(s: String) { style = s; Repo.putString("wdp_maplook_style", s) }
+    fun choosePlaces(i: Int) { places = i.coerceIn(0, 3); Repo.putInt("wdp_maplook_towns", places) }
+
+    val placeOptions = listOf(0 to "Off", 1 to "Cities", 2 to "Cities and towns", 3 to "All places")
+}
+
+/**
+ * The **Map** button in a Planner map's corner and its panel, drawn inside the map's box (no popup): WDP's white map
+ * (where the map has one, [onWhite]), the styles, the towns. A press here is the button's, never the map's own click.
+ */
+@Composable
+internal fun PlannerMapButton(white: Boolean, onWhite: (() -> Unit)?, modifier: Modifier = Modifier) {
+    var open by remember { mutableStateOf(false) }
+    val pill = Modifier.padding(4.dp).clip(RoundedCornerShape(4.dp)).background(Color.Black.copy(alpha = 0.62f))
+    if (!open) {
+        Text(
+            "Map", modifier.plannerProbe("Map/look").then(pill).clickable { open = true }.padding(horizontal = 6.dp, vertical = 2.dp),
+            color = Color.White, fontSize = 11.sp,
+        )
+        return
+    }
+    val panel = Modifier.padding(4.dp).clip(RoundedCornerShape(4.dp)).background(Color(0xF0101820))
+    androidx.compose.foundation.layout.Column(
+        modifier.then(panel).padding(horizontal = 8.dp, vertical = 4.dp)
+            .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+    ) {
+        @Composable
+        fun row(text: String, on: Boolean, probe: String, act: () -> Unit) = Text(
+            text,
+            Modifier.plannerProbe(probe).clickable(onClick = act).padding(vertical = 3.dp),
+            color = if (on) Color(0xFFFFC14D) else Color(0xFFDDE6EE), fontSize = 11.sp,
+            fontWeight = if (on) androidx.compose.ui.text.font.FontWeight.Bold else null,
+        )
+        @Composable
+        fun head(text: String) = Text(text.uppercase(), Modifier.padding(top = 4.dp), color = Color(0xFF8FA3B5), fontSize = 9.sp, letterSpacing = 0.8.sp)
+        head("Map")
+        if (onWhite != null) row("WDP white map", white, "Map/look/white") { if (!white) onWhite() }
+        row("As the Mission map (${MapLook.styleName(MapLook.style)})", !white && PlannerMapLook.style.isEmpty(), "Map/look/mission") {
+            PlannerMapLook.chooseStyle(""); if (white) onWhite?.invoke()
+        }
+        for ((id, name) in MapLook.styles) row(name, !white && PlannerMapLook.style == id, "Map/look/$id") {
+            PlannerMapLook.chooseStyle(id); if (white) onWhite?.invoke()
+        }
+        head("Towns")
+        for ((v, name) in PlannerMapLook.placeOptions) row(name, PlannerMapLook.places == v, "Map/look/towns$v") { PlannerMapLook.choosePlaces(v) }
+        row("Close", false, "Map/look/close") { open = false }
     }
 }
 

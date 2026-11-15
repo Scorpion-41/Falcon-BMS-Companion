@@ -259,7 +259,37 @@ private fun AcmiRow() {
  * therefore built under the plain cross-platform look and feel, where no Windows shell code runs at all, and the look
  * and feel is put back the moment it closes. A duller dialog that always opens beats a handsome one that throws.
  */
-fun pickFolder(title: String, start: String? = null): String? = runCatching {
+fun pickFolder(title: String, start: String? = null, then: (String) -> Unit) {
+    val from = startFolder(start)
+    com.bmscompanion.desktop.PcFileDialogs.pickFolder(title, from) { answer ->
+        when (answer) {
+            is com.bmscompanion.app.data.NativeAnswer.Picked -> javax.swing.SwingUtilities.invokeLater { runCatching { then(answer.path) }.onFailure { PcLog.write("folder picker (\"$title\")", it) } }
+            com.bmscompanion.app.data.NativeAnswer.Cancelled -> Unit
+            is com.bmscompanion.app.data.NativeAnswer.Failed -> {
+                PcLog.write("folder picker (\"$title\"): Windows' folder dialog failed, ${answer.why}", null)
+                // the old chooser, posted as an event of its own so its modal loop never runs inside Compose's dispatch
+                javax.swing.SwingUtilities.invokeLater { swingPickFolder(title, start)?.let { p -> runCatching { then(p) } } }
+            }
+        }
+    }
+}
+
+/** [pickFolder] for a coroutine: the folder, or null when cancelled. */
+suspend fun pickFolderAwait(title: String, start: String? = null): String? {
+    val done = kotlinx.coroutines.CompletableDeferred<String?>()
+    val from = startFolder(start)
+    com.bmscompanion.desktop.PcFileDialogs.pickFolder(title, from) { answer ->
+        when (answer) {
+            is com.bmscompanion.app.data.NativeAnswer.Picked -> done.complete(answer.path)
+            com.bmscompanion.app.data.NativeAnswer.Cancelled -> done.complete(null)
+            is com.bmscompanion.app.data.NativeAnswer.Failed -> javax.swing.SwingUtilities.invokeLater { done.complete(swingPickFolder(title, start)) }
+        }
+    }
+    return done.await()
+}
+
+/** The fallback when Windows' dialog cannot be made: Swing's chooser, always posted, never from inside a click. */
+private fun swingPickFolder(title: String, start: String? = null): String? = runCatching {
     var picked: String? = null
     val show = Runnable {
         val previous = javax.swing.UIManager.getLookAndFeel()
@@ -371,6 +401,8 @@ fun ConnectDevicesCard(status: PcStatus) {
                     "Set them up in the app: Mission → Kneeboards, which hands you an address per board.",
                 fontSize = 13.sp, color = Hud.TextDim,
             )
+            // OpenKneeboard runs on this PC beside Falcon BMS: localhost, which a new LAN address (DHCP) never breaks
+            Text("http://localhost:$port/kneeboard/1, /kneeboard/2 … — localhost, as OpenKneeboard runs on this PC.", style = LocalExtra.current.monoSmall, color = Hud.Cyan)
         }
         DeviceBlock(Icons.Default.Computer, "Laptop or second PC", Hud.Amber) {
             Text("Install BMS Companion there, open the full app, choose “On another PC” in Setup and press Find BMS PC.", fontSize = 13.sp, color = Hud.TextDim)
@@ -416,7 +448,7 @@ fun SetupChecklistCard(status: PcStatus) {
         add(
             if (install.baseDir != null) Step("Falcon BMS is found", Check.OK, "Found: ${install.baseDir}" + (install.registryVersion?.let { " ($it)" } ?: ""))
             else Step("Falcon BMS is found", Check.PROBLEM, "Falcon BMS was not found. Choose the BMS folder.",
-                listOf("Choose BMS folder…" to { pickFolder("Select your Falcon BMS folder", s.BmsDirOverride)?.let { p -> Bridge.update { it.copy(BmsDirOverride = p).withOverrideListed() } } }))
+                listOf("Choose BMS folder…" to { pickFolder("Select your Falcon BMS folder", s.BmsDirOverride) { p -> Bridge.update { it.copy(BmsDirOverride = p).withOverrideListed() } } }))
         )
         val seen = status.devices.isNotEmpty()
         add(
@@ -467,9 +499,9 @@ fun SetupChecklistCard(status: PcStatus) {
         )
         val kb = info?.kneeboard
         val kbPick = "Choose HTML Briefing folder…" to {
-            pickFolder("Select the HTML Briefing folder (contains html_brief.exe)", s.KneeboardExporterDir ?: Bridge.kneeboard.defaultDir(install))
-                ?.let { p -> Bridge.update { it.copy(KneeboardExporterDir = p) } }
-            Unit
+            pickFolder("Select the HTML Briefing folder (contains html_brief.exe)", s.KneeboardExporterDir ?: Bridge.kneeboard.defaultDir(install)) { p ->
+                Bridge.update { it.copy(KneeboardExporterDir = p) }
+            }
         }
         add(
             when {
@@ -484,8 +516,7 @@ fun SetupChecklistCard(status: PcStatus) {
         )
         val last = info?.ezBoards?.lastRun
         val ezPick = "Choose EZBoards folder…" to {
-            pickFolder("Select the EZBoards folder (contains EZBOARDS.BAT)", s.EzBoardsDir ?: install.defaultEzBoardsDir())?.let { p -> if (EzBoardsRunner.isValidDir(p)) Bridge.update { it.copy(EzBoardsDir = p) } }
-            Unit
+            pickFolder("Select the EZBoards folder (contains EZBOARDS.BAT)", s.EzBoardsDir ?: install.defaultEzBoardsDir()) { p -> if (EzBoardsRunner.isValidDir(p)) Bridge.update { it.copy(EzBoardsDir = p) } }
         }
         add(
             when {
@@ -594,7 +625,7 @@ fun BmsSettingsCard() {
         Overline("EZBOARDS")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Field("EZBoards folder", ez, { ez = it }, Modifier.weight(1f))
-            SmallButton("Browse…", null, primary = false) { pickFolder("Select the EZBoards folder (contains EZBOARDS.BAT)", ez.ifBlank { null })?.let { p -> Bridge.update { it.copy(EzBoardsDir = p) } } }
+            SmallButton("Browse…", null, primary = false) { pickFolder("Select the EZBoards folder (contains EZBOARDS.BAT)", ez.ifBlank { null }) { p -> Bridge.update { it.copy(EzBoardsDir = p) } } }
         }
         if (ez != s.EzBoardsDir.orEmpty()) SmallButton("Save folder", null, primary = true) { Bridge.update { it.copy(EzBoardsDir = ez.trim().ifEmpty { null }) } }
         Toggle("Generate kneeboards automatically when the briefing is printed", null, s.AutoEzBoardsOnPrint) { on -> Bridge.update { it.copy(AutoEzBoardsOnPrint = on) } }
@@ -621,8 +652,9 @@ fun BmsSettingsCard() {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Field("HTML Briefing folder (contains html_brief.exe)", exporter, { exporter = it }, Modifier.weight(1f))
             SmallButton("Browse…", null, primary = false) {
-                pickFolder("Select the HTML Briefing folder (contains html_brief.exe)", exporter.ifBlank { null } ?: Bridge.kneeboard.defaultDir(Bridge.install))
-                    ?.let { p -> Bridge.update { it.copy(KneeboardExporterDir = p) } }
+                pickFolder("Select the HTML Briefing folder (contains html_brief.exe)", exporter.ifBlank { null } ?: Bridge.kneeboard.defaultDir(Bridge.install)) { p ->
+                    Bridge.update { it.copy(KneeboardExporterDir = p) }
+                }
             }
         }
         if (exporter != s.KneeboardExporterDir.orEmpty()) {
@@ -648,12 +680,12 @@ fun BmsSettingsCard() {
         Overline("FOLDERS AND ADVANCED")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Field("BMS folder in use (empty: the registry's; Falcon BMS installs switches)", bmsDir, { bmsDir = it }, Modifier.weight(1f))
-            SmallButton("Browse…", null, primary = false) { pickFolder("Select the Falcon BMS folder", s.BmsDirOverride)?.let { p -> Bridge.update { it.copy(BmsDirOverride = p).withOverrideListed() } } }
+            SmallButton("Browse…", null, primary = false) { pickFolder("Select the Falcon BMS folder", s.BmsDirOverride) { p -> Bridge.update { it.copy(BmsDirOverride = p).withOverrideListed() } } }
         }
         if (bmsDir != s.BmsDirOverride.orEmpty()) SmallButton("Save BMS folder", null, primary = true) { Bridge.update { it.copy(BmsDirOverride = bmsDir.trim().ifEmpty { null }).withOverrideListed() } }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Field("Screenshots folder (only if not the BMS one)", picsDir, { picsDir = it }, Modifier.weight(1f))
-            SmallButton("Browse…", null, primary = false) { pickFolder("Select the folder with your BMS screenshots", s.PicturesDirOverride)?.let { p -> Bridge.update { it.copy(PicturesDirOverride = p) } } }
+            SmallButton("Browse…", null, primary = false) { pickFolder("Select the folder with your BMS screenshots", s.PicturesDirOverride) { p -> Bridge.update { it.copy(PicturesDirOverride = p) } } }
         }
         if (picsDir != s.PicturesDirOverride.orEmpty()) SmallButton("Save screenshots folder", null, primary = true) { Bridge.update { it.copy(PicturesDirOverride = picsDir.trim().ifEmpty { null }) } }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {

@@ -68,8 +68,8 @@ The app sends the UDP datagram `BMSC_DISCOVER` to the broadcast address(es) on p
 | POST | `/api/plan` | before the two modes: on user tap (Send to Mission, now gone) | body: `PlanSend` → `PlanOverlay` |
 | POST | `/api/plan/files[?from=]` | before the two modes: Send to Mission → files on the PC | no body → `PlanOverlay` |
 | POST | `/api/plan/clear`, `/api/plan/undo` | before the two modes | `PlanOverlay` |
-| GET | `/api/kbprint/state` | when the Upd Kneeboard window opens; every 4 s while the Kneeboards page's In the cockpit view or the Dashboard's Kneeboards card shows | `KbPrintState` |
-| GET | `/api/kbprint/thumb?n=&side=L\|R&w=[&twin=1]` | per page half shown (again only when its file changes) | JPEG of what that half holds now |
+| GET | `/api/kbprint/state[?ac=f15]` | when the Upd Kneeboard window opens; every 4 s while the Kneeboards page's In the cockpit view or the Dashboard's Kneeboards card shows | `KbPrintState` (`ac=f15`: the F-15C's pages, 1.4.2) |
+| GET | `/api/kbprint/thumb?n=&side=L\|R&w=[&twin=1][&ac=f15]` | per page half shown (again only when its file changes) | JPEG of what that half holds now |
 | POST | `/api/kbprint/file` | on user tap (Print), one call per page file | body: `KbFileSend` → `KbFileResult` |
 | POST | `/api/kbprint/shipped?n=<n\|all>` | on user tap | `KbFileResult[]` — puts Falcon BMS's own shipped page back |
 | GET | `/api/notes` | when the Noteboard editor or a Kneeboards page opens, every 5 s while the editor is open, every 4 s on a VR Notes board (1.4.1) | `NotesState` (see *The Noteboard*) |
@@ -142,6 +142,13 @@ as EZBoards mode with nothing suspended. See *Mission source*.
   the same cells as `ded`, `#` where BMS draws the cell in inverse video (an invert byte neither 0 nor a space), a
   space elsewhere, trailing spaces dropped; empty when nothing is highlighted. `pfl[]` / `pflInvert[]` the same for the
   Pilot Fault List (`PFLLines`, `PFLInvert`); `pfl` is empty while the list shows nothing.
+
+- `fuelTotalizer` (additive, after 1.4.2): FlightData's `total`, the cockpit's fuel totalizer (the TOTAL the fuel
+  gauge and the DED's BINGO page show), lb; 0 when BMS leaves it unset or it does not read as the jet's fuel (not
+  within a third of internal + external). Devices show it as the jet's fuel (`Live.fuelTotal`), else internal +
+  external. `magDev` (additive, after 1.4.2): FlightData2's `magDeviationSystem`, degrees, the variation the jet's
+  systems use; the header gives no sign, so a device checks it against `hdgTrue` − `hdgMag` before using it
+  (`MagVar.jet`). Absent from an older PC.
 
 - `mfdLeft[]` / `mfdRight[]`: 20 entries each, `{a, b, inverted}` — the two lines of one MFD option-select button
   legend and whether BMS has boxed it, OSB 1 first and running clockwise from the top left, five to a side. Empty
@@ -951,13 +958,13 @@ only the header's reserved field at offset 32 changes, to `BMSCOMPANION<version>
 24-bit, an odd size) is refused, never guessed at. A page file that does not exist is **never created** (some theaters
 have one page only). Nothing throws: each file comes back `written`, `unchanged` or `refused` with its reason
 (read-only, in use, no such page, a format this program does not write, disk full). `KbHalf.kind` names what was
-printed on a half. Only the F-16's pages are written; the F-15C's are not.
+printed on a half. The F-16's pages by default; the F-15C's right halves with `ac=f15` (1.4.2, below).
 
 ```
-KbPrintState  {folder?, theater?, twin, bmsIn3d, pages[KbSlot], shipped, ezConfig?, error?, mode?}
+KbPrintState  {folder?, theater?, twin, bmsIn3d, pages[KbSlot], shipped, ezConfig?, error?, mode?, aircraft}
 KbSlot        {n, file, format, mips, size, left, right, ezLeft, ezRight, modified, missing}
 KbHalf        {kind, label, png, picture}                           png: base64 of a 1024×1536 PNG; picture: a path on the PC
-KbFileSend    {n, left?: KbHalf, right?: KbHalf}                    a null half is left as it is
+KbFileSend    {n, left?: KbHalf, right?: KbHalf, aircraft}         a null half is left as it is; aircraft f16|f15
 KbFileResult  {file, status: written|unchanged|refused, reason?, leftRefused?, rightRefused?}
 ```
 `folder` is relative to the BMS folder; `twin` is true when a `KoreaObj_HiRes` twin exists, which is written as well
@@ -967,9 +974,22 @@ in its own size. `size` is the file's width in pixels (the files are square). `l
 `routemap`, `attack`, `departure`, `arrival`, `alternate`, `picture` (1.3.8: a picture file on the PC, Browse picture…,
 stretched over the half as WDP does and drawn by the PC from the file; the device shows a preview read through
 `/api/files/picture`), then (1.4.0) `schedule`, `routemap-dark`, `targetpics`, then (1.4.1) `notes` and `notes-2`
-(Noteboard 1 and 2, *The Noteboard* below).
+(Noteboard 1 and 2, *The Noteboard* below), then (1.4.2) `wxmap` (the weather map), `radio` (the radio presets: the
+cartridge's UHF/VHF presets, the tuned-after-load ones banded, its TACAN/ILS and the briefing's comm ladder, as
+Mission → Comms shows them) and `chart` (one page of a bundled instrument chart, put on a half by the chart viewer's
+**Add to kneeboard** and drawn fitted to the half by the device; the plan keeps the page's asset path per half).
 The header tag names each half's kind by its place in that list as one base-36 digit (`picture` is `g`, `notes` `k`,
-`notes-2` `l`).
+`notes-2` `l`, `wxmap` `m`, `radio` `n`, `chart` `o`).
+
+**The F-15C's pages** (1.4.2, additive): every route takes `ac=f15` (state, thumb, shipped as a query parameter;
+`KbFileSend.aircraft` = `f15` for the file), absent = the F-16 as before. The F-15C's kneeboard is `1403.dds`-`1418.dds`
+in the same `KoreaObj` folder and layout, but its pilot model has a kneeboard on the right leg only: page *n* is the
+**right half** of its file (EZBoards writes it at x = 1024, claiming it with `SET KNEEBOARD[F15_<n>]=`, read as
+`ezRight`); the left half is never written (a `left` sent is ignored) and the state reports each slot's `left` as its
+`right`. `KbPrintState.aircraft` (`f16` default) says whose pages an answer holds — a device asking for `f15` treats an
+answer without it as a PC that writes the F-16's pages only. BMS's shipped copies: `Docs\07 Kneeboard Templates\F-15C\
+DDS_Backup` (Korea) and the Balkans' `Docs\04 3d Kneeboards Backup\02 F-15C`. Same rules as the F-16's (format kept, a
+missing file never created, temp file and atomic move, nothing throws).
 
 **Where the window opens** (1.4.1): from the Planner's toolbar in WDP mode, and from **Mission → Kneeboards → Upd
 Kneeboard** in either mode. In EZBoards mode that button waits until EZBoards has made its pages for the briefing

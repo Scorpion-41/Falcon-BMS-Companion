@@ -42,32 +42,64 @@ private fun GroundHead(ctx: CmdContext, u: CmdUnit, kind: String) {
     IssuesBlock(ctx, u)
 }
 
-/** The objective a ground unit is sent to: the nearest objectives as choices; "Place there" puts it on it. */
+/**
+ * Orders: BMS's orders and the assigned objective (the nearest objectives as choices, or any objective clicked with
+ * the map's Assign tool), given as BMS gives them ([GroundOps.giveOrders]: ordered, sent there, the old route
+ * cleared); a brigade's battalions take them too when ticked, else the brigade hands them out.
+ * "Place it there" puts it on the objective; Halt stops it (and the other ground units selected) where it stands.
+ */
 @Composable
-private fun ObjectiveLines(ctx: CmdContext, u: CmdGroundUnit, withElements: Boolean) {
+private fun OrdersBlock(ctx: CmdContext, u: CmdGroundUnit, withElements: Boolean) {
     val doc = ctx.core
+    var toBattalions by remember(u.id) { mutableStateOf(true) }
     val near = remember(doc.revision, u.id) { doc.near(u.x, u.y, 40.0, units = false).take(40) }
     val current = doc.objective(u.aobj)
     val opts = listOf<Pair<CmdObjective?, String>>(null to "None") +
         (if (current != null && near.none { it.first === current }) listOf(current to GroundOps.objName(doc, current)) else emptyList()) +
         near.map { (o, d) -> (o as CmdObjective) to "${GroundOps.objName(doc, o)} · ${"%.0f".format(d)} nm" }
-    ChoiceLine("Objective", current, opts, tip = "Where it is sent (its destination is that objective)") { o -> ctx.apply(GroundOps.setAobj(doc, u, o)) }
-    if (current != null) {
-        Buttons {
+    val brigade = u is CmdBrigade
+    ChoiceLine("Orders", u.orders, GroundOps.ORDERS.mapIndexed { i, s -> i to s }, tip = "BMS's unit orders; with an objective they are given as BMS gives them (the unit ordered, sent there, its old route cleared)") { v ->
+        ctx.apply(if (current == null) AirOps.field(doc, u, "Orders of ${AirOps.nameOf(doc, u)}") { orders = v } else GroundOps.giveOrders(doc, u, v, current, brigade && toBattalions))
+    }
+    ChoiceLine("Objective", current, opts, tip = "The assigned objective: where its orders send it (the map draws it as an amber diamond and line). Any objective: the Assign tool") { o ->
+        ctx.apply(if (o == null) GroundOps.setAobj(doc, u, null) else GroundOps.giveOrders(doc, u, u.orders, o, brigade && toBattalions))
+    }
+    if (brigade) Line("") { CheckLine("its battalions too (else the brigade hands out its own)", toBattalions) { toBattalions = it } }
+    Buttons {
+        SmallButton("Pick on the map", tip = "The Assign tool: click the objective it is ordered to (Shift + click adds more units)") {
+            if (refOf(u) !in ctx.selection.refs) ctx.selection.set(refOf(u))
+            CommandSession.tool = com.bmscompanion.desktop.ui.command.CmdTool.ASSIGN
+        }
+        if (current != null) {
             SmallButton("Place it there", tip = if (withElements) "The brigade and its battalions stand on the objective, their routes cleared" else "It stands on the objective, its route cleared") {
                 ctx.apply(GroundOps.placeAt(doc, u, current, withElements))
             }
             SmallButton("Show", tip = "Select the objective") { ctx.focus(objRef(current)) }
         }
-        if (u is CmdBattalion) GroundOps.siteShortfall(doc, u.type, current)?.let { Text(it, color = Hud.Amber, fontSize = 11.sp, modifier = Modifier) }
     }
+    val sel = ctx.groundUnits(ctx.selection.refs).takeIf { l -> l.size > 1 && l.any { it === u } } ?: listOf(u)
+    Buttons {
+        SmallButton(if (sel.size > 1) "Halt the ${sel.size} selected — clear routes" else "Halt — clear the route", danger = true,
+            tip = "It stops where it stands at once: route cleared, destination its own cell, not moving${if (brigade) "; its battalions halt too" else ""}. Orders stay; set NoPlan to keep BMS's HQ from moving it on") {
+            ctx.apply(GroundOps.halt(doc, sel))
+        }
+    }
+    if (current != null && u is CmdBattalion) GroundOps.siteShortfall(doc, u.type, current)?.let { Text(it, color = Hud.Amber, fontSize = 11.sp, modifier = Modifier) }
+    if (!GroundOps.setByHq(u)) Hint("Not set by HQ: BMS's headquarters leaves these orders as they are.")
+    NumLine("Division", u.division.toLong(), 0L..9999L, tip = "Units of one team with the same division number make a division (BMS forms it)") { v -> ctx.apply(AirOps.field(doc, u, "Division of ${AirOps.nameOf(doc, u)}") { division = v.toInt() }) }
 }
 
+/** NoPlan, Set by HQ and the temporary destination of a battalion or a brigade, each with a line on what it does. */
 @Composable
-private fun OrdersLines(ctx: CmdContext, u: CmdGroundUnit) {
+private fun PlanningLines(ctx: CmdContext, u: CmdGroundUnit) {
     val doc = ctx.core
-    ChoiceLine("Orders", u.orders, GroundOps.ORDERS.mapIndexed { i, s -> i to s }) { v -> ctx.apply(AirOps.field(doc, u, "Orders of ${AirOps.nameOf(doc, u)}") { orders = v }) }
-    NumLine("Division", u.division.toLong(), 0L..9999L, tip = "Units of one team with the same division number make a division (BMS forms it)") { v -> ctx.apply(AirOps.field(doc, u, "Division of ${AirOps.nameOf(doc, u)}") { division = v.toInt() }) }
+    fun flag(bit: Int, on: Boolean, what: String) = ctx.apply(GroundOps.setFlag(doc, listOf(u), bit, on, "$what ${if (on) "on" else "off"}: ${AirOps.nameOf(doc, u)}"))
+    Line("NoPlan") { CheckLine("", u.unitFlags and GroundOps.U_NO_PLANNING != 0) { flag(GroundOps.U_NO_PLANNING, it, "NoPlan") } }
+    Hint("BMS's planners leave it out: an air-defence site (HAWK, Patriot, a mobile SA-x) stops moving round, an artillery battery holds its station, ready to fire on call.")
+    Line("Set by HQ") { CheckLine("", GroundOps.setByHq(u)) { flag(GroundOps.U_NOT_BY_HQ, !it, "Set by HQ") } }
+    Hint("Off: BMS's headquarters gives it no new orders; it keeps the orders set here.")
+    Line("Temp destination") { CheckLine("", u.unitFlags and GroundOps.U_TEMP_DEST != 0) { flag(GroundOps.U_TEMP_DEST, it, "Temporary destination") } }
+    Hint("BMS's temporary-destination mark — the same bit a flight's Locked is. Set, BMS works the final place out from the orders again as the unit moves; designers set it with NoPlan for artillery that holds and fires on call.")
 }
 
 @Composable
@@ -114,15 +146,12 @@ object BattalionInspector : CmdInspector {
             GroundHead(ctx, b, "Battalion")
             Fold("Battalion", "u_batt", startOpen = true) {
                 CommonLines(ctx, b)
-                OrdersLines(ctx, b)
-                ObjectiveLines(ctx, b, withElements = false)
                 NumLine("Supply", b.supply.toLong(), 0L..100L, unit = "%") { v -> ctx.apply(AirOps.field(doc, b, "Supply of ${AirOps.nameOf(doc, b)}") { supply = v.toInt() }) }
                 NumLine("Morale", b.morale.toLong(), 0L..100L, unit = "%") { v -> ctx.apply(AirOps.field(doc, b, "Morale of ${AirOps.nameOf(doc, b)}") { morale = v.toInt() }) }
                 NumLine("Fatigue", b.fatigue.toLong(), 0L..255L) { v -> ctx.apply(AirOps.field(doc, b, "Fatigue of ${AirOps.nameOf(doc, b)}") { fatigue = v.toInt() }) }
-                Line("Planned by BMS", tip = "Off: the ground tasking leaves it where it is") {
-                    CheckLine("", b.unitFlags and GroundOps.U_NO_PLANNING == 0) { on -> ctx.apply(AirOps.field(doc, b, "Planning of ${AirOps.nameOf(doc, b)}") { unitFlags = if (on) unitFlags and GroundOps.U_NO_PLANNING.inv() else unitFlags or GroundOps.U_NO_PLANNING }) }
-                }
             }
+            Fold("Orders", "u_battorders", startOpen = true) { OrdersBlock(ctx, b, withElements = false) }
+            Fold("Planning", "u_battplan", startOpen = true) { PlanningLines(ctx, b) }
             Fold("Brigade", "u_battbde", startOpen = true) {
                 val bde = doc.unit(b.parentId) as? CmdBrigade
                 val bdes = doc.brigades.filter { AirOps.allied(doc, b.owner, it.owner) && (it === bde || it.elements.size < 5) }
@@ -172,17 +201,19 @@ object BrigadeInspector : CmdInspector {
             }
             Fold("Brigade", "u_bde", startOpen = true) {
                 CommonLines(ctx, br)
-                OrdersLines(ctx, br)
-                ObjectiveLines(ctx, br, withElements = true)
                 Buttons {
-                    SmallButton("Orders to all", tip = "Its battalions get the brigade's orders") { ctx.apply(GroundOps.pushToElements(doc, br, "Orders")) }
-                    SmallButton("Owner to all") { ctx.apply(GroundOps.pushToElements(doc, br, "Owner")) }
-                }
-                Buttons {
+                    SmallButton("Owner to all", tip = "Its battalions get the brigade's owner") { ctx.apply(GroundOps.pushToElements(doc, br, "Owner")) }
                     SmallButton("Division to all") { ctx.apply(GroundOps.pushToElements(doc, br, "Division")) }
-                    SmallButton("Objective to all") { ctx.apply(GroundOps.pushToElements(doc, br, "Objective")) }
                 }
             }
+            Fold("Orders", "u_bdeorders", startOpen = true) {
+                OrdersBlock(ctx, br, withElements = true)
+                Buttons {
+                    SmallButton("Orders to all", tip = "Its battalions get the brigade's orders as they are, nothing else") { ctx.apply(GroundOps.pushToElements(doc, br, "Orders")) }
+                    SmallButton("Objective to all", tip = "Its battalions get the brigade's objective and destination as they are") { ctx.apply(GroundOps.pushToElements(doc, br, "Objective")) }
+                }
+            }
+            Fold("Planning", "u_bdeplan", startOpen = false) { PlanningLines(ctx, br) }
             Fold("Class", "u_bdetype", startOpen = false) { TypeLines(ctx, br, UnitKind.BRIGADE) }
             RouteBlock(ctx, br, air = false)
             LifeBlock(ctx, br, childrenWord = "battalions")

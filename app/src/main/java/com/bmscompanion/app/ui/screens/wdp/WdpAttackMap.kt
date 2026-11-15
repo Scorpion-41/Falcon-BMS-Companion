@@ -41,6 +41,9 @@ import com.bmscompanion.app.ui.components.MapLook
 import com.bmscompanion.app.ui.components.MapProjection
 import com.bmscompanion.app.ui.components.drawMapBase
 import com.bmscompanion.app.ui.components.rememberMapBase
+import com.bmscompanion.app.ui.components.GeoPaths
+import com.bmscompanion.app.ui.components.drawLandmarks
+import com.bmscompanion.app.ui.components.rememberGeo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -381,7 +384,17 @@ private fun WdpMapView(host: WdpAttackMap, picture: PopupPlan.MapPicture?, capti
         }
         onDispose { host.snapshot = null }
     }
-    Canvas(Modifier.fillMaxSize().clipToBounds()) { drawWdpMap(picture, shownTheater, base, tm, light, caption = caption) }
+    // on the screen the Planner's map look (style, towns: PlannerMapLook) and its Map button; the snapshot above, which
+    // the Coordination Card and the kneeboard pages take, stays as it was
+    val style = PlannerMapLook.shown
+    val geo = rememberGeo(theater?.map, theater?.sizeFt ?: 1.0)
+    val places = PlannerMapLook.places
+    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+        Canvas(Modifier.fillMaxSize().clipToBounds()) {
+            drawWdpMap(picture, shownTheater, base, tm, MapLook.isLight(style), caption = caption, style = style, geo = geo, places = places)
+        }
+        PlannerMapButton(false, null, Modifier.align(androidx.compose.ui.Alignment.TopStart))
+    }
 }
 
 /**
@@ -400,6 +413,8 @@ internal fun WdpMapPicture(theater: Theater?, picture: PopupPlan.MapPicture?, pa
 private fun DrawScope.drawWdpMap(
     pic: PopupPlan.MapPicture?, theater: Theater?, base: MapBaseState, tm: TextMeasurer, light: Boolean, paper: Boolean = false,
     caption: String? = null,
+    /** the Planner's map look on the screen ([PlannerMapLook]): its style, and the towns of [geo]; null = the Mission map's style, no towns */
+    style: String? = null, geo: GeoPaths? = null, places: Int = 0,
 ) {
     drawRect(if (paper) Color.White else Color.Black)
     if (pic == null) return
@@ -410,7 +425,9 @@ private fun DrawScope.drawWdpMap(
         val side = (w * sizeFt / pic.spanFt).toFloat()
         val left = (-pic.upperE / sizeFt * side).toFloat()
         val top = (-(1.0 - pic.upperN / sizeFt) * side).toFloat()
-        drawMapBase(MapProjection(left, top, side, sizeFt, 1f), base, null)
+        val pr = MapProjection(left, top, side, sizeFt, side / minOf(size.width, size.height))
+        drawMapBase(pr, base, null, style)
+        if (geo != null) drawLandmarks(pr, geo, tm, mission = false, styleOverride = style ?: MapLook.style, places = places)
     }
     val k = w / pic.size
     // WDP's GenericSansSerif and Arial at 10 points are 13.3 of its 435 pixels

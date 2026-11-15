@@ -559,10 +559,13 @@ fun JsonBlock(e: JsonElement, depth: Int = 0) {
 // ============================ HARM & RWR ============================
 
 @Composable
-fun HarmRwrScreen(nav: NavHostController) {
+fun HarmRwrScreen(nav: NavHostController, startTab: Int = 0) {
     val harm by produceState<HarmFile?>(null) { value = Repo.harm() }
     val rwr by produceState<RwrFile?>(null) { value = Repo.rwr() }
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    // the Threats page's entries, so a row of the ALIC and emitter tables opens its system (RwrLinks)
+    val threats by produceState<List<com.bmscompanion.app.data.Threat>>(emptyList()) { value = Repo.threats() }
+    val linkOf: (String?) -> com.bmscompanion.app.data.Threat? = { name -> com.bmscompanion.app.ui.components.RwrLinks.threatFor(name, threats) }
+    var tab by rememberSaveable { mutableIntStateOf(startTab.coerceIn(0, 4)) }
     var q by rememberSaveable { mutableStateOf("") }
     val tabs = listOf("ALIC codes", "HARM modes", "RWR emitters", "RWR symbols", "RWR controls")
     Column(Modifier.fillMaxSize()) {
@@ -589,12 +592,19 @@ fun HarmRwrScreen(nav: NavHostController) {
                         if (wideGrid) Spacer(Modifier.height(8.dp))
                     } }
                     gridItems(rows) { a ->
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                        val linked = remember(a.system, threats) { linkOf(a.system) }
+                        Column(
+                            Modifier.fillMaxWidth().then(if (linked != null) Modifier.clickable { nav.go(com.bmscompanion.app.ui.Routes.threat(linked.id)) } else Modifier)
+                                .padding(horizontal = 16.dp, vertical = 6.dp),
+                        ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.weight(0.6f)) { RwrBadge(a.symbol?.ifBlank { null } ?: "–", 34.dp) }
+                                Box(Modifier.weight(0.6f)) {
+                                    RwrBadge(a.symbol?.ifBlank { null } ?: "–", 34.dp, mark = linked?.let { com.bmscompanion.app.ui.components.RwrMarks.forThreat(it, alr93 = false) } ?: com.bmscompanion.app.ui.components.RwrMark.NONE)
+                                }
                                 Column(Modifier.weight(2f)) { Text(a.system, fontWeight = FontWeight.SemiBold); a.radar?.let { Text(it, fontSize = 12.sp, color = Hud.TextDim) } }
                                 Text(a.category, Modifier.weight(0.8f), fontSize = 12.sp, color = Hud.Cyan)
                                 Text(a.alic, Modifier.weight(0.8f), style = LocalExtra.current.mono.copy(fontSize = 18.sp), color = Hud.Amber, fontWeight = FontWeight.Bold)
+                                Text(if (linked != null) "›" else "", Modifier.width(14.dp), color = Hud.TextDim, fontSize = 18.sp)
                             }
                             a.notes?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Hud.TextFaint, maxLines = 3, overflow = TextOverflow.Ellipsis) }
                         }
@@ -625,17 +635,49 @@ fun HarmRwrScreen(nav: NavHostController) {
                 val rows = r.emitters.filter { (type == null || it.type == type) && (q.isBlank() || it.system.contains(q, true) || it.symbol.equals(q, true) || (it.alr93 ?: "").equals(q, true)) }
                 LazyVerticalGrid(GridCells.Adaptive(500.dp), contentPadding = PaddingValues(bottom = 24.dp)) {
                     item(span = { GridItemSpan(maxLineSpan) }) { Column { Column(Modifier.padding(16.dp)) { SearchField(q, { q = it }, "Symbol or system (e.g. 29, SA-6)") }; ChipRow(types, type, { it }, { type = it }) } }
-                    gridItems(rows) { e ->
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) { RwrBadge(e.alr56m?.ifBlank { null } ?: e.symbol.ifBlank { "–" }, 42.dp); Text("56M", fontSize = 8.sp, color = Hud.TextFaint) }
+                    // the easter egg: ask the RWR for the microwave and it is there, at 12 o'clock, airborne
+                    if (Galley.asked(q)) item(span = { GridItemSpan(maxLineSpan) }) {
+                        Row(
+                            Modifier.fillMaxWidth().clickable { nav.go(com.bmscompanion.app.ui.Routes.GALLEY) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) { RwrBadge("MW", 42.dp, mark = com.bmscompanion.app.ui.components.RwrMark.AIR); Text("56M", fontSize = 8.sp, color = Hud.TextFaint) }
                             Spacer(Modifier.width(6.dp))
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) { RwrBadge(e.alr93?.ifBlank { null } ?: "–", 42.dp, Hud.Cyan); Text("93", fontSize = 8.sp, color = Hud.TextFaint) }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) { RwrBadge("MW", 42.dp, Hud.Cyan, com.bmscompanion.app.ui.components.RwrMark.AIR); Text("93", fontSize = 8.sp, color = Hud.TextFaint) }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(Galley.SYSTEM, fontWeight = FontWeight.SemiBold)
+                                Text(Galley.DETAIL, fontSize = 12.sp, color = Hud.TextDim)
+                                Text(Galley.NOTE, fontSize = 12.sp, color = Hud.TextFaint)
+                            }
+                            Text("›", Modifier.padding(start = 8.dp), color = Hud.TextDim, fontSize = 18.sp)
+                        }
+                    }
+                    gridItems(rows) { e ->
+                        val linked = remember(e.system, threats) { linkOf(e.system) }
+                        Row(
+                            Modifier.fillMaxWidth().then(if (linked != null) Modifier.clickable { nav.go(com.bmscompanion.app.ui.Routes.threat(linked.id)) } else Modifier)
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            val s56 = e.alr56m?.ifBlank { null } ?: e.symbol.ifBlank { null }
+                            val s93 = e.alr93?.ifBlank { null }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                RwrBadge(s56 ?: "–", 42.dp, if (s56 == null) Hud.TextFaint else Hud.Green, if (s56 == null) com.bmscompanion.app.ui.components.RwrMark.NONE else com.bmscompanion.app.ui.components.RwrMarks.forEmitter(e.type, alr93 = false))
+                                Text("56M", fontSize = 8.sp, color = Hud.TextFaint)
+                            }
+                            Spacer(Modifier.width(6.dp))
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                RwrBadge(s93 ?: "–", 42.dp, if (s93 == null) Hud.TextFaint else Hud.Cyan, if (s93 == null) com.bmscompanion.app.ui.components.RwrMark.NONE else com.bmscompanion.app.ui.components.RwrMarks.forEmitter(e.type, alr93 = true))
+                                Text("93", fontSize = 8.sp, color = Hud.TextFaint)
+                            }
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(e.system, fontWeight = FontWeight.SemiBold)
                                 Text(listOfNotNull(e.type, e.radars).joinToString(" · "), fontSize = 12.sp, color = Hud.TextDim)
                                 e.notes?.let { Text(it, fontSize = 12.sp, color = Hud.TextFaint, maxLines = 2, overflow = TextOverflow.Ellipsis) }
                             }
+                            if (linked != null) Text("›", Modifier.padding(start = 8.dp), color = Hud.TextDim, fontSize = 18.sp)
                         }
                     }
                 }
@@ -646,7 +688,7 @@ fun HarmRwrScreen(nav: NavHostController) {
                     CollapsibleCard("Symbols & modifiers (${r.symbols.size})", initiallyOpen = true) {
                         r.symbols.forEach { s ->
                             Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.Top) {
-                                RwrBadge(s.symbol.ifBlank { "?" }, 40.dp)
+                                com.bmscompanion.app.ui.components.RwrSymbolGlyph(s.symbol.ifBlank { "?" }, 40.dp)
                                 Spacer(Modifier.width(12.dp))
                                 Column { Text(s.meaning, fontWeight = FontWeight.SemiBold); s.details?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Hud.TextDim) } }
                             }

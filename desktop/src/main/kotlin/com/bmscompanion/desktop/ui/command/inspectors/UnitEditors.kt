@@ -47,7 +47,8 @@ object UnitEditors {
         CommandSlots.tables[CmdPage.UNITS] = UnitsTable
         CommandSlots.tables[CmdPage.ATO] = AtoTable
         CommandSlots.actions += listOf(AddSquadronHere, AddBattalionHere, AddBrigadeHere, AddTaskForceHere, AddFlightTo, AddWaypointHere,
-            BaseHere, PlaceHere, SendHere, CloneHere, DeleteUnit, DeleteWithChildren)
+            BaseHere, PlaceHere, SendHere, HaltUnits, CloneHere, DeleteUnit, DeleteWithChildren)
+        CommandSlots.assignObjective = { ctx, refs, objRef -> assignObjective(ctx, refs, objRef) }
         CommandSlots.mapEdits = UnitMapEdits(CommandSlots.mapEdits)
         CommandSlots.overlays += { ctx -> UnitDialogs.Host(ctx) }
         UnitChecks.install()
@@ -110,6 +111,34 @@ class UnitMapEdits(private val inner: CmdMapEdits?) : CmdMapEdits {
         // (null from the inner edits is "done": the first refusal of either is the answer)
         if (rest.isNotEmpty()) (inner?.setOwner(rest, team) ?: if (inner == null) "Owners are not set here." else null)?.let { if (why == null) why = it }
         return why
+    }
+}
+
+/** The ground units of [refs] (battalions and brigades). */
+internal fun CmdContext.groundUnits(refs: List<CmdRef>): List<CmdGroundUnit> =
+    refs.filter { it.kind == CmdKind.BATTALION || it.kind == CmdKind.BRIGADE }.mapNotNull { unitOf(it) as? CmdGroundUnit }
+
+/**
+ * The Assign objective tool: each of [refs]' battalions and brigades ordered to the objective clicked, its orders
+ * kept, a brigade's battalions with it ([GroundOps.giveOrders]); one undoable step.
+ */
+internal fun assignObjective(ctx: CmdContext, refs: List<CmdRef>, objRef: CmdRef): String? {
+    val doc = ctx.core
+    val o = ctx.objAt(objRef) ?: return "That objective is not in the file.".also { ctx.say(it) }
+    val units = ctx.groundUnits(refs)
+    if (units.isEmpty()) return "Select battalions or brigades first.".also { ctx.say(it) }
+    val e = if (units.size == 1) GroundOps.giveOrders(doc, units[0], units[0].orders, o, battalionsToo = true)
+    else Edits.group("Assign ${units.size} ground units to ${GroundOps.objName(doc, o)}", units.map { GroundOps.giveOrders(doc, it, it.orders, o, battalionsToo = true) })
+    return ctx.apply(e)
+}
+
+/** Halt: the battalions and brigades selected (or the one the menu is on) stop where they stand, routes cleared. */
+object HaltUnits : CmdAction {
+    override val label = "Halt: clear the route"
+    override fun accepts(ctx: CmdContext, ref: CmdRef?) = ref?.kind == CmdKind.BATTALION || ref?.kind == CmdKind.BRIGADE
+    override fun run(ctx: CmdContext, ref: CmdRef?, north: Double, east: Double) {
+        val refs = if (ref != null && ref in ctx.selection.refs) ctx.selection.refs else listOfNotNull(ref)
+        ctx.apply(GroundOps.halt(ctx.core, ctx.groundUnits(refs)))
     }
 }
 

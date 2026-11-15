@@ -62,8 +62,10 @@ import androidx.compose.ui.unit.sp
 import com.bmscompanion.app.data.PcFiles
 import com.bmscompanion.app.data.Platform
 import com.bmscompanion.app.data.Repo
+import com.bmscompanion.app.data.mission.KbAircraft
 import com.bmscompanion.app.data.mission.KbFileResult
 import com.bmscompanion.app.data.mission.KbFileSend
+import com.bmscompanion.app.data.mission.ownFlight
 import com.bmscompanion.app.data.mission.KbHalf
 import com.bmscompanion.app.data.mission.KbKind
 import com.bmscompanion.app.data.mission.KbOwner
@@ -153,7 +155,57 @@ object KneeboardPrintSession {
     val EZ_KINDS: Set<String> = setOf(
         KbKind.LEAVE, KbKind.PICTURE, KbKind.NOTES, KbKind.NOTES_2, KbKind.BLANK, KbKind.TEST, KbKind.TARGET_PICTURES,
         KbKind.ROUTE_MAP, KbKind.ROUTE_MAP_DARK, KbKind.WEATHER_MAP, KbKind.DEPARTURE, KbKind.ARRIVAL, KbKind.ALTERNATE,
+        // 1.4.2: the radio presets (the Comms page's) and a chart page from the chart viewer
+        KbKind.RADIO, KbKind.CHART,
     )
+
+    /**
+     * The F-15C's default plans (1.4.2): its kneeboard is the right leg's alone, so each page is one half. WDP mode: the
+     * Briefing, the Weather and the Radio presets on the first three pages; EZBoards mode: the Noteboard, the route map
+     * and the departure chart on the first pages EZBoards does not claim (it writes F-15 pages 1 and 2 as it ships).
+     */
+    val F15_WDP_SET: List<Pair<String, String>> = listOf(KbKind.LEAVE to KbKind.BRIEFING, KbKind.LEAVE to KbKind.WEATHER, KbKind.LEAVE to KbKind.RADIO)
+    val F15_EZ_SET: List<Pair<String, String>> = listOf(KbKind.LEAVE to KbKind.NOTES, KbKind.LEAVE to KbKind.ROUTE_MAP, KbKind.LEAVE to KbKind.DEPARTURE)
+
+    /**
+     * Whose cockpit pages the window plans and prints ([KbAircraft], 1.4.2): the F-16's (the default) or the F-15C's,
+     * each with its own plan ([switchAircraft]). Follows the mission's aircraft until the pilot chooses by hand for
+     * this mission's aircraft ([chosenFor]).
+     */
+    var aircraft by mutableStateOf(KbAircraft.F16)
+        private set
+
+    /** The mission's aircraft type when the pilot last chose the aircraft by hand; null: the window follows the mission. */
+    private var chosenFor: String? = null
+
+    /** The other aircraft's plan as its JSON ([Saved]), kept until the window is switched to it. */
+    private var otherJson: String? = null
+
+    private val f15 get() = KbAircraft.rightOnly(aircraft)
+
+    /** Half [side] exists in the cockpit for the aircraft planned ([KbAircraft.sides]). */
+    fun hasSide(side: Char) = side in KbAircraft.sides(aircraft)
+
+    /**
+     * `"<n><L|R>"` → the chart page that half shows (1.4.2, [KbKind.CHART]); kept when the half is set to another kind,
+     * like a picture's path.
+     */
+    val charts = mutableStateMapOf<String, KbChartPick>()
+
+    /**
+     * The chart viewer's Add to kneeboard (1.4.2): the chart page handed over and the half it would go on, while the
+     * chart chooser shows in place of the table ([ChartChooser]); nothing changes until its Insert.
+     */
+    var chartBrowse by mutableStateOf<ChartBrowse?>(null)
+
+    class ChartBrowse(val pick: KbChartPick) {
+        /** 0 until the pages are read and the next free half is offered ([suggestChart]) */
+        var page by mutableStateOf(0)
+        var side by mutableStateOf<Char?>(null)
+    }
+
+    /** Where the last chart inserted went, until the plan is next changed. */
+    var chartNotice by mutableStateOf<String?>(null)
 
     /** A kind the window offers in the mode of [st]: every kind in WDP mode, [EZ_KINDS] in EZBoards mode. */
     fun offered(kind: String, st: KbPrintState? = state): Boolean = wdpMode(st) || kind in EZ_KINDS
@@ -165,8 +217,10 @@ object KneeboardPrintSession {
     fun ezClaimed(n: Int, side: Char, st: KbPrintState? = state): Boolean =
         !wdpMode(st) && st?.pages?.firstOrNull { it.n == n }?.let { if (side == 'L') it.ezLeft else it.ezRight } == true
 
-    /** The window's default plan for [mode]: the Mission set in WDP mode, [ezDefault] in EZBoards mode. */
-    fun setFor(mode: String): List<Pair<String, String>> = if (mode == MissionMode.WDP) MISSION_SET else ezDefault()
+    /** The window's default plan for [mode]: the Mission set in WDP mode, [ezDefault] in EZBoards mode; the F-15C's own sets. */
+    fun setFor(mode: String): List<Pair<String, String>> =
+        if (f15) (if (mode == MissionMode.WDP) F15_WDP_SET else F15_EZ_SET)
+        else if (mode == MissionMode.WDP) MISSION_SET else ezDefault()
 
     /**
      * The untouched plan was laid by the **Mission set** button ([missionSet]) rather than as the window's default
@@ -189,7 +243,7 @@ object KneeboardPrintSession {
 
     /** What is kept between launches. */
     @Serializable
-    private class Saved(
+    private data class Saved(
         val plan: Map<String, String> = emptyMap(),
         val pictures: Map<String, String> = emptyMap(),
         val planned: Boolean = false,
@@ -205,6 +259,16 @@ object KneeboardPrintSession {
         val planMode: String? = null,
         /** the other mode's plan, kept for when the PC is switched back to it (1.4.1, one plan per mode) */
         val other: Map<String, ModePlan> = emptyMap(),
+        /** the halves' chart pages ([charts], 1.4.2); absent from an earlier build */
+        val charts: Map<String, KbChartPick> = emptyMap(),
+        /**
+         * the aircraft the window is on ([KbAircraft], 1.4.2); absent: the F-16. Everything above is always the F-16's
+         * plan, so an earlier build reads the F-16's; the F-15C's own plan is [f15], a Saved of its own as JSON.
+         */
+        val aircraft: String? = null,
+        val f15: String? = null,
+        /** the mission's aircraft type when the pilot last chose the aircraft by hand ([chosenFor]) */
+        val chosenFor: String? = null,
     )
 
     /** One mode's plan, kept while the PC is in the other mode ([Saved.other]). */
@@ -247,7 +311,23 @@ object KneeboardPrintSession {
 
     /** The plan as the device kept it; nothing (a fresh start) when there is none or it cannot be read. */
     private fun restore() {
-        val s = runCatching { Repo.getString(SAVED_KEY)?.let { Repo.json.decodeFromString(Saved.serializer(), it) } }.getOrNull() ?: return
+        val s = decode(runCatching { Repo.getString(SAVED_KEY) }.getOrNull()) ?: return
+        // the top level is the F-16's plan; the F-15C's is its own Saved inside it (1.4.2)
+        aircraft = KbAircraft.of(s.aircraft)
+        chosenFor = s.chosenFor
+        if (aircraft == KbAircraft.F16) { applySaved(s); otherJson = s.f15 }
+        else { applySaved(decode(s.f15) ?: Saved()); otherJson = encode(s.copy(aircraft = null, f15 = null, chosenFor = null)) }
+        if (!hasSide(selSide)) selSide = KbAircraft.sides(aircraft).first()
+    }
+
+    private fun decode(v: String?): Saved? = v?.let { runCatching { Repo.json.decodeFromString(Saved.serializer(), it) }.getOrNull() }
+    private fun encode(s: Saved): String = Repo.json.encodeToString(Saved.serializer(), s)
+
+    /** This aircraft's plan as it is now, as kept ([Saved], without the other aircraft's). */
+    private fun current() = Saved(plan.toMap(), pictures.toMap(), planned, laidFor, madeIn, layout, KneeboardTargets.choices.toMap(), byButton, planMode, stashed.toMap(), charts.toMap())
+
+    /** One aircraft's kept plan put into the window's state. */
+    private fun applySaved(s: Saved) {
         // a kind this build does not draw (kept by another version) is left out: it would never be drawn for the PC
         plan.clear(); plan.putAll(s.plan.filter { (k, v) -> halfKey(k) && v != KbKind.LEAVE && KneeboardPages.of(v) != null })
         pictures.clear(); pictures.putAll(s.pictures.filter { (k, v) -> halfKey(k) && v.isNotBlank() })
@@ -259,6 +339,57 @@ object KneeboardPrintSession {
         planMode = s.planMode ?: s.laidFor ?: s.madeIn
         stashed.clear(); stashed.putAll(s.other.filterKeys { it != planMode })
         KneeboardTargets.choices.clear(); KneeboardTargets.choices.putAll(s.targets.filter { (k, v) -> halfKey(k) && v.ids.isNotEmpty() })
+        charts.clear(); charts.putAll(s.charts.filter { (k, v) -> halfKey(k) && v.file.isNotBlank() })
+    }
+
+    /** Everything one aircraft's plan holds, emptied (before the other aircraft's is put in). */
+    private fun clearPlan() {
+        plan.clear(); pictures.clear(); charts.clear()
+        planned = false; laidFor = null; madeIn = null; relaid = null; layout = 0; byButton = false
+        planMode = null; stashed.clear()
+        browse = null; KneeboardTargets.choices.clear(); KneeboardTargets.picking = null
+    }
+
+    /**
+     * The window on [to]'s pages (1.4.2): this aircraft's plan put aside, [to]'s own back (none yet: the next read of
+     * the pages lays its default). [byHand]: the pilot's choice, which holds for the mission's aircraft now; else the
+     * window followed the mission ([followMission]).
+     */
+    fun switchAircraft(to: String, byHand: Boolean) {
+        val want = KbAircraft.of(to)
+        if (byHand) chosenFor = missionAircraftType().orEmpty()
+        if (want == aircraft) { if (byHand) save(strong = true); return }
+        val cur = encode(current())
+        val other = decode(otherJson)
+        clearPlan()
+        aircraft = want
+        if (other != null) applySaved(other)
+        otherJson = cur
+        state = null; results = emptyList(); chartNotice = null
+        // a chart being placed is offered the new aircraft's next free half
+        chartBrowse?.let { it.page = 0; it.side = null }
+        selN = 1; selSide = KbAircraft.sides(want).first()
+        stamp++
+        save(strong = byHand)
+    }
+
+    /** The mission's aircraft type ("F-16CM-52", "F-15C"), from the briefing of the mission the Mission section shows, else BMS's files. */
+    fun missionAircraftType(): String? {
+        fun of(d: com.bmscompanion.app.data.mission.MissionData?) = d?.briefing?.let { b -> runCatching { b.ownFlight()?.aircraft }.getOrNull() }?.ifBlank { null }
+        return of(MissionLink.mission.value) ?: of(MissionLink.bmsFiles.value)
+    }
+
+    /**
+     * Follows the mission's aircraft (an F-15C flight → the F-15C's pages) unless the pilot chose by hand while the
+     * mission's aircraft was the same as now. Called before the pages are read.
+     */
+    private fun followMission() {
+        val type = missionAircraftType() ?: return
+        val want = KbAircraft.forType(type) ?: return
+        val hand = chosenFor
+        if (hand != null && hand == type) return
+        if (hand != null) chosenFor = null
+        if (want != aircraft) switchAircraft(want, byHand = false)
     }
 
     private fun halfKey(k: String) = k.length in 2..3 && k.last() in "LR" && k.dropLast(1).toIntOrNull() in 1..16
@@ -270,7 +401,11 @@ object KneeboardPrintSession {
      */
     private fun save(strong: Boolean = pilotLay) {
         runCatching {
-            Repo.putString(SAVED_KEY, Repo.json.encodeToString(Saved.serializer(), Saved(plan.toMap(), pictures.toMap(), planned, laidFor, madeIn, layout, KneeboardTargets.choices.toMap(), byButton, planMode, stashed.toMap())))
+            // the top level is always the F-16's plan (what an earlier build reads); the F-15C's is kept inside it
+            val cur = current()
+            val top = if (aircraft == KbAircraft.F16) cur.copy(f15 = otherJson, chosenFor = chosenFor)
+            else (decode(otherJson) ?: Saved()).copy(aircraft = KbAircraft.F15, f15 = encode(cur), chosenFor = chosenFor)
+            Repo.putString(SAVED_KEY, encode(top))
         }
         com.bmscompanion.app.data.mission.PlannerSync.changed(com.bmscompanion.app.data.mission.PlannerSync.KNEEBOARD, strong)
     }
@@ -295,6 +430,8 @@ object KneeboardPrintSession {
         planned = false; laidFor = null; madeIn = null; relaid = null; browse = null; layout = 0; byButton = false
         planMode = null; stashed.clear()
         KneeboardTargets.choices.clear(); KneeboardTargets.picking = null; KneeboardNotes.editing = null
+        charts.clear(); chartBrowse = null; chartNotice = null
+        aircraft = KbAircraft.F16; otherJson = null; chosenFor = null
         runCatching { Repo.putString(SAVED_KEY, null) }
     }
 
@@ -303,6 +440,7 @@ object KneeboardPrintSession {
         plan.clear(); pictures.clear(); planned = false; laidFor = null; madeIn = null; relaid = null; layout = 0; byButton = false
         planMode = null; stashed.clear()
         KneeboardTargets.choices.clear()
+        charts.clear(); aircraft = KbAircraft.F16; otherJson = null; chosenFor = null
         restore()
     }
 
@@ -359,7 +497,7 @@ object KneeboardPrintSession {
      * it is), and a page of the Planner's left in a plan is never printed ([offered]).
      */
     fun kind(n: Int, side: Char): String {
-        if (ezClaimed(n, side)) return KbKind.LEAVE
+        if (!hasSide(side) || ezClaimed(n, side)) return KbKind.LEAVE
         val k = plan["$n$side"] ?: return KbKind.LEAVE
         return if (offered(k)) k else KbKind.LEAVE
     }
@@ -369,7 +507,7 @@ object KneeboardPrintSession {
      * simpler and safe choice: EZBoards would write it again at the next PRINT) and for a kind the mode does not offer.
      */
     fun set(n: Int, side: Char, kind: String) {
-        if (ezClaimed(n, side) || !offered(kind)) return
+        if (!hasSide(side) || ezClaimed(n, side) || !offered(kind)) return
         if (kind == KbKind.LEAVE) plan.remove("$n$side") else plan["$n$side"] = kind
         touched()
     }
@@ -385,6 +523,7 @@ object KneeboardPrintSession {
         madeIn = mode()
         planMode = madeIn
         relaid = null
+        chartNotice = null
         save(strong = true)
     }
 
@@ -419,7 +558,10 @@ object KneeboardPrintSession {
     /** The pages that can be printed and, in EZBoards mode, are not EZBoards' ([missionPages]), in order. */
     private fun freePages(st: KbPrintState?): List<Int> {
         val usable = st?.pages.orEmpty().filter { printable(it) }
-        val free = if (wdpMode(st)) usable else usable.filter { !it.ezLeft && !it.ezRight && !(st?.ezConfig == null && it.n == 1) }
+        // the F-15C: EZBoards as it ships writes its pages 1 and 2 (`KNEEBOARD[F15_1]`, `[F15_2]`)
+        val free = if (wdpMode(st)) usable
+        else if (f15) usable.filter { !it.ezRight && !(st?.ezConfig == null && it.n <= 2) }
+        else usable.filter { !it.ezLeft && !it.ezRight && !(st?.ezConfig == null && it.n == 1) }
         return free.map { it.n }.sorted()
     }
 
@@ -438,7 +580,7 @@ object KneeboardPrintSession {
     fun defaultPlan(): Map<String, String> = planOf(defaultPages(), setFor(mode()))
 
     /** What the untouched plan would be laid as now: the Mission set when its button laid it (WDP mode), else the default. */
-    private fun untouchedPlan(): Map<String, String> = if (byButton && wdpMode()) missionPlan(missionPages()) else defaultPlan()
+    private fun untouchedPlan(): Map<String, String> = if (byButton && wdpMode() && !f15) missionPlan(missionPages()) else defaultPlan()
 
     /**
      * The **Mission set** button: in WDP mode [MISSION_SET] (Briefing + Weather, the DataCard, the Coordination Card) on
@@ -452,7 +594,8 @@ object KneeboardPrintSession {
     }
 
     fun missionSet(): List<Int> {
-        if (!wdpMode()) return layDefault()
+        // the F-15C's pages are one half each: its own set ([setFor]) in either mode
+        if (!wdpMode() || f15) return layDefault()
         val pages = missionPages()
         lay(missionPlan(pages), button = true)
         return pages
@@ -468,7 +611,7 @@ object KneeboardPrintSession {
     private fun lay(p: Map<String, String>, button: Boolean) {
         plan.clear()
         plan.putAll(p)
-        p.keys.mapNotNull { it.dropLast(1).toIntOrNull() }.minOrNull()?.let { selN = it; selSide = 'L' }
+        p.keys.mapNotNull { it.dropLast(1).toIntOrNull() }.minOrNull()?.let { selN = it; selSide = KbAircraft.sides(aircraft).first() }
         planned = true
         laidFor = mode()
         madeIn = laidFor
@@ -523,7 +666,7 @@ object KneeboardPrintSession {
     /** The chooser's Insert: the picture on page [PictureBrowse.page]'s [side] half (WDP's `<- Insert` / `Insert ->`). */
     fun insertPicture(side: Char): Boolean {
         val b = browse ?: return false
-        if (!printable(slot(b.page)) || ezClaimed(b.page, side) || KneeboardPictures.cached(b.path)?.image == null) return false
+        if (!hasSide(side) || !printable(slot(b.page)) || ezClaimed(b.page, side) || KneeboardPictures.cached(b.path)?.image == null) return false
         pictures["${b.page}$side"] = b.path
         set(b.page, side, KbKind.PICTURE)
         selN = b.page; selSide = side
@@ -561,10 +704,17 @@ object KneeboardPrintSession {
         // the plan (and the Planner's flight, whose targets a page lists) made on another device first: the PC's when it
         // is newer than this device's, before anything below would lay a default (PlannerShared, 1.4.2)
         PlannerShared.sync()
-        val a = MissionLink.kbState()
+        // the mission's aircraft: an F-15C flight's pages unless the pilot chose by hand (1.4.2)
+        followMission()
+        val ac = aircraft
+        val a = MissionLink.kbState(ac)
         // a refusal may still carry the state (no page folder for this theater): both are kept
-        state = a.value
-        error = a.error ?: a.value?.error
+        // (a PC before 1.4.2 knows the F-16's pages only, and answers with them whatever is asked: never planned on)
+        val older = ac != KbAircraft.F16 && a.value != null && a.value.aircraft != ac
+        state = if (older) null else a.value
+        error = if (older) "BMS Companion on the PC is older than this device's: it writes the F-16's pages only. Update it for the F-15C's."
+        else a.error ?: a.value?.error
+        if (older) { loading = false; return }
         if (a.value != null && a.value.pages.isNotEmpty()) {
             val now = mode(a.value)
             // one plan per mode (1.4.1): the other mode's put aside, this mode's own back
@@ -598,6 +748,36 @@ object KneeboardPrintSession {
         }
         loading = false
     }
+
+    /**
+     * The half the chart chooser offers first: the first that can be printed and has nothing planned — on the pages
+     * the default plan uses first (in EZBoards mode never a half EZBoards writes), then any other — so a second chart
+     * never takes the first one's place unless the pilot picks that page. With every half planned, the first page that
+     * can be printed, its planned half named in the chooser.
+     */
+    fun suggestChart(b: ChartBrowse) {
+        val sides = KbAircraft.sides(aircraft)
+        val first = freePages(state)
+        val order = first + (1..16).filter { it !in first }
+        val halves = order.asSequence().flatMap { n -> sides.asSequence().map { n to it } }
+            .filter { (n, side) -> printable(slot(n)) && !ezClaimed(n, side) }
+        val at = halves.firstOrNull { (n, side) -> plan["$n$side"] == null } ?: halves.firstOrNull() ?: (1 to sides.first())
+        b.page = at.first; b.side = at.second
+    }
+
+    /** The chart chooser's Insert: the chart on its page's [side] half, which shows in the preview; then the table. */
+    fun insertChart(side: Char): Boolean {
+        val b = chartBrowse ?: return false
+        if (b.page !in 1..16 || !hasSide(side) || !printable(slot(b.page)) || ezClaimed(b.page, side)) return false
+        charts["${b.page}$side"] = b.pick
+        set(b.page, side, KbKind.CHART)
+        selN = b.page; selSide = side
+        chartBrowse = null
+        chartNotice = "Chart placed on page ${b.page}, ${KneeboardPages.knee(side)}: ${b.pick.title}. Press Print to put it in the cockpit."
+        return true
+    }
+
+    fun cancelChart() { chartBrowse = null }
 
     /**
      * Draws every planned half in [layer]'s page host, one after another, and sends each page file to the PC as soon as
@@ -687,7 +867,7 @@ object KneeboardPrintSession {
                     val pics = sent.mapNotNull { it?.picture?.ifBlank { null } }
                     progress = if (pics.isEmpty()) "Writing $file…"
                     else "Writing $file (the PC reads ${pics.joinToString(" and ") { KneeboardPictures.nameOf(it) }})…"
-                    val a = MissionLink.kbPrintFile(KbFileSend(n, sent[0], sent[1]))
+                    val a = MissionLink.kbPrintFile(KbFileSend(n, sent[0].takeIf { hasSide('L') }, sent[1], aircraft = aircraft))
                     val v = a.value
                     // a Picture half the PC could not read is its own line, as the window names a half
                     val halfWhy = listOf('L' to v?.leftRefused, 'R' to v?.rightRefused).filter { it.second != null }
@@ -723,7 +903,7 @@ object KneeboardPrintSession {
         resultsOf = if (n == null) "Put BMS's pages back" else "Put BMS's page back"
         progress = if (n == null) "Putting BMS's pages back…" else "Putting BMS's page $n back…"
         try {
-            val a = MissionLink.kbShipped(n)
+            val a = MissionLink.kbShipped(n, aircraft)
             results = a.value ?: listOf(KbFileResult(n?.let { KneeboardPages.fileOf(it) } ?: "All pages", KbFileResult.REFUSED, a.error ?: "The PC did not answer."))
             stamp++
             progress = "Reading the pages back…"
@@ -786,7 +966,19 @@ fun ColumnScope.KneeboardPrintWindow(onClose: () -> Unit) {
         return
     }
     val st = s.state
-    StatusLine(st, s.error, s.loading)
+    // whose pages: the F-16's or the F-15C's (1.4.2), each with its own plan; the status line beside it
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        PlannerSegments(
+            KbAircraft.ALL.map { KbAircraft.name(it) }, KbAircraft.ALL.map { "Print/Aircraft/$it" }, KbAircraft.ALL.indexOf(s.aircraft),
+        ) { i ->
+            if (!s.busy) { s.switchAircraft(KbAircraft.ALL[i], byHand = true); scope.launch { s.load() } }
+        }
+        Box(Modifier.weight(1f)) { StatusLine(st, s.error, s.loading) }
+    }
+    s.chartBrowse?.let { b ->
+        ChartChooser(b, Modifier.weight(1f).fillMaxWidth())
+        return
+    }
     s.browse?.let { b ->
         PictureChooser(b, Modifier.weight(1f).fillMaxWidth(), scope)
         return
@@ -871,6 +1063,7 @@ private fun StatusLine(st: KbPrintState?, error: String?, loading: Boolean) {
         val s = KneeboardPrintSession
         val wdp = s.wdpMode(st)
         val notes = buildList {
+            s.chartNotice?.let { add(it) }
             if (st?.bmsIn3d == true) add("Falcon BMS is in the cockpit now: a page printed now shows the next time you enter it.")
             if (st?.twin == true) add("The high-resolution copies (KoreaObj_HiRes) are written too.")
             if (!wdp && st != null && st.error == null && st.ezConfig == null && st.pages.isNotEmpty())
@@ -882,6 +1075,7 @@ private fun StatusLine(st: KbPrintState?, error: String?, loading: Boolean) {
         }
         // WDP mode: quiet lines only — EZBoards is paused, so nothing here is its to write
         val quiet = buildList {
+            if (KbAircraft.rightOnly(s.aircraft)) add("F-15C: its kneeboard is on the right leg only, so each page is the right half of ${KbAircraft.fileOf(s.aircraft, 1)}-${KbAircraft.fileOf(s.aircraft, 16)}.")
             s.relaid?.let { add(it) }
             if (wdp && st != null && st.error == null && st.pages.any { it.ezLeft || it.ezRight }) {
                 val claimed = st.pages.flatMap { p -> listOfNotNull("${p.n} left".takeIf { p.ezLeft }, "${p.n} right".takeIf { p.ezRight }) }
@@ -928,8 +1122,8 @@ private fun PageTable(st: KbPrintState?, modifier: Modifier, browse: (Int, Char)
     Column(modifier) {
         Row(Modifier.fillMaxWidth().padding(bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Page", Modifier.width(34.dp), color = Hud.TextFaint, fontSize = 10.sp)
-            Text("Left knee", Modifier.weight(1f), color = Hud.TextFaint, fontSize = 10.sp)
-            Text("Right knee", Modifier.weight(1f), color = Hud.TextFaint, fontSize = 10.sp)
+            if (s.hasSide('L')) Text("Left knee", Modifier.weight(1f), color = Hud.TextFaint, fontSize = 10.sp)
+            Text(if (s.hasSide('L')) "Right knee" else "Right knee (the F-15C's only kneeboard)", Modifier.weight(1f), color = Hud.TextFaint, fontSize = 10.sp)
         }
         if (pages.isEmpty()) {
             Text(
@@ -967,8 +1161,11 @@ private fun PageRow(slot: KbSlot, browse: (Int, Char) -> Unit) {
                 color = Hud.TextDim, fontSize = 11.sp, lineHeight = 14.sp, modifier = Modifier.weight(1f).padding(start = 6.dp),
             )
         } else {
-            HalfCell(slot, 'L', Modifier.weight(1f), browse)
-            Spacer(Modifier.width(4.dp))
+            // the F-15C's pages are their right halves alone (1.4.2)
+            if (s.hasSide('L')) {
+                HalfCell(slot, 'L', Modifier.weight(1f), browse)
+                Spacer(Modifier.width(4.dp))
+            }
             HalfCell(slot, 'R', Modifier.weight(1f), browse)
         }
     }
@@ -1013,6 +1210,7 @@ private fun HalfCell(slot: KbSlot, side: Char, modifier: Modifier, browse: (Int,
                         if (claimed) "EZBoards' page"
                         else if (kind == KbKind.PICTURE) KneeboardPictures.nameOf(s.picture(slot.n, side)).ifEmpty { "Picture" }
                         else if (kind == KbKind.TARGET_PICTURES) targetsCell(slot.n, side)
+                        else if (kind == KbKind.CHART) s.charts["${slot.n}$side"]?.title ?: "Chart"
                         else KneeboardPages.of(kind)?.short ?: kind,
                         color = if (leave) Hud.TextDim else Hud.Amber, fontSize = fingerSp(11.5f), lineHeight = 14.sp,
                         fontWeight = if (leave) FontWeight.Normal else FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -1027,7 +1225,8 @@ private fun HalfCell(slot: KbSlot, side: Char, modifier: Modifier, browse: (Int,
             }
                 DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                     // only the kinds this mode offers: in EZBoards mode none of the Planner's pages (1.4.1)
-                    for (k in KneeboardPages.kinds.filter { s.offered(it.id) }) {
+                    // a chart page is offered on a half that has had one (the chart viewer's Add to kneeboard puts it there)
+                    for (k in KneeboardPages.kinds.filter { s.offered(it.id) && (it.id != KbKind.CHART || s.charts.containsKey("${slot.n}$side")) }) {
                         val why = s.unavailable(k.id)
                         DropdownMenuItem(
                             text = {
@@ -1059,8 +1258,9 @@ private fun HalfCell(slot: KbSlot, side: Char, modifier: Modifier, browse: (Int,
 @Composable
 private fun KbThumb(n: Int, side: Char, modified: Long, modifier: Modifier, width: Int = 96) {
     val stamp = KneeboardPrintSession.stamp
-    val img by produceState<ImageBitmap?>(null, n, side, modified, stamp, width) {
-        value = MissionLink.fetchBytes(MissionLink.kbThumbPath(n, side, width))?.let { Repo.decodeBitmap(it) }?.asImageBitmap()
+    val ac = KneeboardPrintSession.aircraft
+    val img by produceState<ImageBitmap?>(null, n, side, modified, stamp, width, ac) {
+        value = MissionLink.fetchBytes(MissionLink.kbThumbPath(n, side, width, ac))?.let { Repo.decodeBitmap(it) }?.asImageBitmap()
     }
     Box(modifier.clip(RoundedCornerShape(2.dp)).background(Color(0xFF30353C))) {
         img?.let { Image(it, contentDescription = "Page $n, ${KneeboardPages.knee(side)}, now", modifier = Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds) }
@@ -1210,7 +1410,7 @@ private fun Buttons(st: KbPrintState?, layer: GraphicsLayer, scope: CoroutineSco
                 Btn("Put BMS's page back", enabled = ready && st?.shipped == true, probe = "Print/PutBack") { backMenu = true }
                 DropdownMenu(expanded = backMenu, onDismissRequest = { backMenu = false }) {
                     DropdownMenuItem(
-                        text = { Text("Page ${s.selN} (both knees)", fontSize = 13.sp) },
+                        text = { Text(if (s.hasSide('L')) "Page ${s.selN} (both knees)" else "Page ${s.selN}", fontSize = 13.sp) },
                         onClick = { backMenu = false; scope.launch { s.putBack(s.selN) } },
                         modifier = Modifier.plannerProbe("Print/PutBackPage"),
                     )
@@ -1233,6 +1433,95 @@ private fun Buttons(st: KbPrintState?, layer: GraphicsLayer, scope: CoroutineSco
             enabled = ready && jobs.isNotEmpty() && Platform.encodePng != null,
             primary = true, probe = "Print/Print",
         ) { scope.launch { s.print(layer) } }
+    }
+}
+
+/**
+ * The chart viewer's Add to kneeboard, in place of the table (as Browse picture…'s chooser): the chart page fitted to a
+ * half, the page it goes on (the next half with nothing planned to begin with), **← Insert left** / **Insert right →**
+ * — a half already planned is named, and Insert there replaces it — and Cancel, which leaves the plan as it was.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ChartChooser(b: KneeboardPrintSession.ChartBrowse, modifier: Modifier) {
+    val s = KneeboardPrintSession
+    val file = b.pick.file
+    LaunchedEffect(file) { KneeboardMorePages.loadChart(file) }
+    // the next free half, once the pages are read (and again for another aircraft)
+    LaunchedEffect(b, s.state, s.aircraft, b.page) { if (b.page == 0 && s.state != null) s.suggestChart(b) }
+    val img = KneeboardMorePages.chartImages[file]
+    val failed = KneeboardMorePages.chartFailed[file] == true
+    val ready = b.page in 1..16
+    val slot = if (ready) s.slot(b.page) else null
+    val usable = s.printable(slot)
+    fun canInsert(side: Char) = ready && usable && !s.busy && !s.ezClaimed(b.page, side)
+    fun taken(side: Char) = s.kind(b.page, side) != KbKind.LEAVE
+    Column(modifier.plannerProbe("Print/Chart"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            "Add to kneeboard  ·  " + b.pick.title, color = Hud.Text, fontSize = fingerSp(12f), fontWeight = FontWeight.SemiBold, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, modifier = Modifier.wdpTip("planner/Print/Chart/Title", b.pick.title, touch = true),
+        )
+        Text(
+            "Choose the page and the knee. The chart is fitted to the half page, a landscape page turned when that makes it larger.",
+            color = Hud.TextDim, fontSize = fingerSp(11f), maxLines = 2, overflow = TextOverflow.Ellipsis,
+        )
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
+            val wide = maxWidth >= 480.dp
+            val preview = @Composable { m: Modifier ->
+                Box(m.clip(RoundedCornerShape(3.dp)).background(Color.White).plannerProbe("Print/Chart/Preview"), contentAlignment = Alignment.Center) {
+                    if (img != null) Image(img, contentDescription = b.pick.title, modifier = Modifier.fillMaxSize().padding(4.dp), contentScale = ContentScale.Fit)
+                    else Text(if (failed) "The chart page could not be read" else "Reading…", color = Color(0xFF8A8A8A), fontSize = 12.sp)
+                }
+            }
+            val controls = @Composable { m: Modifier ->
+                Column(m, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Page", color = Hud.TextFaint, fontSize = 11.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Btn("−", enabled = ready && b.page > 1, probe = "Print/Chart/Prev") { b.page -= 1 }
+                        Text(if (ready) "${b.page}" else "…", Modifier.width(34.dp), color = Hud.Text, fontSize = 20.sp, fontWeight = FontWeight.SemiBold,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                        Btn("+", enabled = ready && b.page < 16, probe = "Print/Chart/Next") { b.page += 1 }
+                    }
+                    Text(
+                        when {
+                            !ready -> "Reading the pages on the PC…"
+                            slot == null -> "Page ${b.page} is not known on the PC."
+                            !usable -> if (slot.missing) "No page file ${slot.file} in this theater: BMS Companion never makes one." else slot.problem ?: "This page cannot be printed."
+                            !s.hasSide('L') -> "Planned now: ${planned(b.page, 'R')}."
+                            else -> "Planned now: left knee ${planned(b.page, 'L')}, right knee ${planned(b.page, 'R')}."
+                        },
+                        color = if (usable || !ready) Hud.TextDim else Hud.Amber, fontSize = 11.sp, lineHeight = 14.sp,
+                    )
+                    val replaced = KbAircraft.sides(s.aircraft).filter { ready && usable && taken(it) && !s.ezClaimed(b.page, it) }
+                    if (replaced.isNotEmpty()) Text(
+                        replaced.joinToString(" ") { "Insert ${if (it == 'L') "left" else "right"} replaces ${planned(b.page, it)}." } +
+                            " Pick another page to keep it.",
+                        color = Hud.Amber, fontSize = 11.sp, lineHeight = 14.sp,
+                    )
+                    val claimed = KbAircraft.sides(s.aircraft).filter { ready && s.ezClaimed(b.page, it) }
+                    if (claimed.isNotEmpty()) Text(
+                        "EZBoards writes the ${claimed.joinToString(" and ") { KneeboardPages.knee(it) }} of this page at every PRINT.",
+                        color = Hud.TextDim, fontSize = 11.sp, lineHeight = 14.sp,
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (s.hasSide('L')) Btn("← Insert left", enabled = canInsert('L'), primary = b.side != 'R', probe = "Print/Chart/InsertL") { s.insertChart('L') }
+                        Btn("Insert right →", enabled = canInsert('R'), primary = b.side == 'R' || !s.hasSide('L'), probe = "Print/Chart/InsertR") { s.insertChart('R') }
+                        Btn("Cancel", probe = "Print/Chart/Cancel") { s.cancelChart() }
+                    }
+                }
+            }
+            if (wide) {
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    preview(Modifier.fillMaxHeight().aspectRatio(2f / 3f, matchHeightConstraintsFirst = true))
+                    controls(Modifier.weight(1f))
+                }
+            } else {
+                Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    preview(Modifier.weight(1f).aspectRatio(2f / 3f, matchHeightConstraintsFirst = true))
+                    controls(Modifier.fillMaxWidth())
+                }
+            }
+        }
     }
 }
 
@@ -1289,13 +1578,14 @@ private fun PictureChooser(b: KneeboardPrintSession.PictureBrowse, modifier: Mod
                         when {
                             slot == null -> "Page ${b.page} is not known on the PC."
                             !usable -> if (slot.missing) "No page file ${slot.file} in this theater: BMS Companion never makes one." else slot.problem ?: "This page cannot be printed."
+                            !s.hasSide('L') -> "Planned now: ${planned(b.page, 'R')}."
                             else -> "Planned now: left knee ${planned(b.page, 'L')}, right knee ${planned(b.page, 'R')}."
                         },
                         color = if (usable) Hud.TextDim else Hud.Amber, fontSize = 11.sp, lineHeight = 14.sp,
                     )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Btn("← Insert left", enabled = canInsert, primary = b.side != 'R', probe = "Print/Pic/InsertL") { s.insertPicture('L') }
-                        Btn("Insert right →", enabled = canInsert, primary = b.side == 'R', probe = "Print/Pic/InsertR") { s.insertPicture('R') }
+                        if (s.hasSide('L')) Btn("← Insert left", enabled = canInsert, primary = b.side != 'R', probe = "Print/Pic/InsertL") { s.insertPicture('L') }
+                        Btn("Insert right →", enabled = canInsert, primary = b.side == 'R' || !s.hasSide('L'), probe = "Print/Pic/InsertR") { s.insertPicture('R') }
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Btn("Another picture…", enabled = !s.busy, probe = "Print/Pic/Browse") { scope.launch { s.browsePicture(b.page, b.side, from = b.path) } }
@@ -1332,6 +1622,7 @@ private fun planned(n: Int, side: Char): String {
     return when (k) {
         KbKind.LEAVE -> "as it is"
         KbKind.PICTURE -> KneeboardPictures.nameOf(s.picture(n, side)).ifEmpty { "a picture" }
+        KbKind.CHART -> s.charts["$n$side"]?.title ?: "a chart"
         else -> KneeboardPages.of(k)?.short ?: k
     }
 }

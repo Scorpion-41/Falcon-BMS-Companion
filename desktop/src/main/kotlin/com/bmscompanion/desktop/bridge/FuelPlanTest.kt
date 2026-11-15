@@ -116,6 +116,28 @@ object FuelPlanTest {
         val r2c = FuelPlan.plan(lowRoute, bare.copy(lowAltFt = 25_000))!!
         check("a higher low threshold makes every placed leg low", r2c.rows.drop(1).all { it.legLow })
 
+        // ---------------------------------------------------------------- 2b. a high egress (a pilot's report on 1.4.2)
+        // his Gunsan strike: from STPT 9 at 100 ft, 21.5 nm low, then up to 32,500 ft and home; divert 47 nm.
+        // WDP's engine tables give 4,200 lb at STPT 9; at 15 lb/nm all the way the plan said 5,151
+        appendLine("2b. A high egress")
+        val high = FuelPlan.Input(
+            points = listOf(
+                Point(9, "Strike", Kind.TARGET, altFt = 100.0),
+                Point(10, "Nav", Kind.NAV, legNm = 21.5, altFt = 100.0),
+                Point(11, "Nav", Kind.NAV, legNm = 40.8, altFt = 32_500.0),
+                Point(12, "Split", Kind.NAV, legNm = 72.3, altFt = 32_500.0),
+                Point(13, "Land", Kind.LAND, legNm = 29.9),
+            ),
+        )
+        val rh = FuelPlan.plan(high, FuelPlan.Settings(divertNm = 47.0))!!
+        table(rh)
+        check("legs into 11, 12 and 13 are high, 10 low", rh.rows[2].legHigh && rh.rows[3].legHigh && rh.rows[4].legHigh && rh.rows[1].legLow)
+        check("the minimum at STPT 9 is 4,230 lb (WDP: 4,200)", near(rh.rows[0].minLb, 2370.0 + 430.0 + 1430.0), FuelPlan.lb(rh.rows[0].minLb))
+        val rh0 = FuelPlan.plan(high, FuelPlan.Settings(divertNm = 47.0, highAltFt = 0))!!
+        check("with no high band the cruise rate is used", !rh0.rows[3].legHigh && near(rh0.rows[3].legBurn, 72.3 * 15))
+        val rb = FuelPlan.plan(lowRoute, bare.copy(bingoStpt = 3))!!
+        check("Bingo at a chosen steerpoint", rb.bingoAt == 3, "STPT ${rb.bingoAt}")
+
         // ---------------------------------------------------------------- 3. a tanker
         appendLine("3. A refuel steerpoint")
         val aar = FuelPlan.Input(

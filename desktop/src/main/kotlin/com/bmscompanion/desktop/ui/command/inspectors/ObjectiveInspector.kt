@@ -134,6 +134,20 @@ private fun One(ctx: CmdContext, o: CmdObjective) {
     } else FactRow("First owner", ctx.world.team(o.firstOwner)?.name ?: "${o.firstOwner}", lead = ctx.teamFlag(o.firstOwner))
     if (mode == ObjectiveOps.Mode.DELTAS) FactRow("In this save", if (delta == null) "as its start" else "changed (owner, supply or buildings)", ink = if (delta == null) Hud.TextDim else Hud.Amber)
 
+    // an airbase or airstrip: its squadrons, and a new one (units live in the save: any file, not only a start)
+    if (com.bmscompanion.desktop.bridge.command.UnitClasses.of(core).clsOfType(o.type)?.type in setOf(1, 2)) {
+        EdHeading("Squadrons")
+        val here = core.squadrons.filter { it.airbaseId == o.id }
+        if (here.isEmpty()) EdNote("No squadron is based here.")
+        here.forEach { sq -> FactRow(ctx.world.unit(sq.id.toString())?.name ?: com.bmscompanion.desktop.bridge.command.AirOps.nameOf(core, sq), "${com.bmscompanion.desktop.bridge.command.UnitClasses.rosterTotal(sq.roster)} aircraft") }
+        EdButtons {
+            DeskButton("Add squadron to this airbase…", enabled = core.uni?.editable == true, tip = "A new squadron based here: its aircraft and team, full strength, stores from its class's template, 48 pilots. Works in any save") {
+                val (gx, gy) = com.bmscompanion.desktop.bridge.command.GroundOps.objCell(o)
+                com.bmscompanion.desktop.ui.command.tables.UnitDialogs.open(com.bmscompanion.desktop.ui.command.tables.UnitDialogs.Add(com.bmscompanion.desktop.bridge.command.UnitKind.SQUADRON, gx, gy, o, core.ownerNow(o)))
+            }
+        }
+    }
+
     EdHeading("Supply")
     val sup = delta?.supply ?: o.supply
     val fuel = delta?.fuel ?: o.fuel

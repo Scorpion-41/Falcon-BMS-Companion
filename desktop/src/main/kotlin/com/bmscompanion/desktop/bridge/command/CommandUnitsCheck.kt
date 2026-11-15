@@ -138,6 +138,55 @@ object CommandUnitsCheck {
             if (doc.battalions.any { it.parentId == bde.id }) "a battalion still names it" else null
         }
         check("clone task force", { UnitLife.clone(doc, doc.taskForces.first(), doc.taskForces.first().x + 3 to doc.taskForces.first().y) })
+        // orders, halt and the planning flags
+        val walker = doc.battalions.firstOrNull { it.waypoints.size >= 2 } ?: doc.battalions.first()
+        check("halt ${AirOps.nameOf(doc, walker)} (${walker.waypoints.size} waypoints)", { GroundOps.halt(doc, listOf(walker)) }) {
+            when {
+                walker.waypoints.isNotEmpty() || walker.currentWp != 0 -> "its route is still there"
+                walker.destX != walker.x + 1 || walker.destY != walker.y + 1 -> "its destination is not its own cell"
+                walker.unitFlags and (GroundOps.U_MOVING or GroundOps.U_TEMP_DEST) != 0 -> "still moving or with a temporary destination"
+                else -> null
+            }
+        }
+        val bde2 = doc.brigades.firstOrNull { b -> doc.battalionsOf(b).size >= 2 }
+        val own = bde2?.let { b -> doc.objectives.filter { doc.ownerNow(it) == b.owner }.minByOrNull { o -> GroundOps.objCell(o).let { (x, y) -> kotlin.math.hypot((x - b.x).toDouble(), (y - b.y).toDouble()) } } }
+        if (bde2 != null && own != null) {
+            check("brigade ${bde2.nameId} ordered to defend ${GroundOps.objName(doc, own)}, its battalions too", { GroundOps.giveOrders(doc, bde2, 6, own, battalionsToo = true) }) {
+                val els = doc.battalionsOf(bde2)
+                when {
+                    bde2.aobj != own.id || bde2.orders != 6 || bde2.unitFlags and GroundOps.U_ORDERED == 0 -> "the brigade's orders are not set"
+                    els.any { GroundOps.setByHq(it) && (it.aobj != own.id || it.unitFlags and GroundOps.U_ORDERED == 0) } -> "a battalion set by HQ did not take them"
+                    bde2.waypoints.isNotEmpty() -> "the brigade kept its old route"
+                    else -> null
+                }
+            }
+            check("brigade ${bde2.nameId} ordered as BMS does (its battalions left for it to hand out)", { GroundOps.giveOrders(doc, bde2, 3, own, battalionsToo = false) }) {
+                if (doc.battalionsOf(bde2).any { it.unitFlags and GroundOps.U_ASSIGNED != 0 }) "a battalion is still assigned" else null
+            }
+            val enemy = doc.objectives.firstOrNull { doc.ownerNow(it) != bde2.owner && doc.ownerNow(it) != 0 }
+            if (enemy != null) refused("Defend for an objective of another team") { GroundOps.giveOrders(doc, bde2, 6, enemy, battalionsToo = false) }
+        }
+        val ad = UnitBulk.battalionsOfRole(doc, -1, artillery = false)
+        if (ad.isNotEmpty()) {
+            val on = ad.any { it.unitFlags and GroundOps.U_NO_PLANNING == 0 }
+            check("NoPlan ${if (on) "on" else "off"} for every air-defence battalion (${ad.size})", { UnitBulk.noPlanFor(doc, -1, artillery = false, on = on) }) {
+                if (ad.any { (it.unitFlags and GroundOps.U_NO_PLANNING != 0) != on }) "a battalion was left out" else null
+            }
+        }
+        check("Set by HQ off for ${AirOps.nameOf(doc, sq)}", { GroundOps.setFlag(doc, listOf(sq), GroundOps.U_NOT_BY_HQ, GroundOps.setByHq(sq), "Set by HQ") }) {
+            if (doc.squadInfo(sq)?.flags != sq.unitFlags) "the header's row did not follow" else null
+        }
+        // an off-map squadron without NoPlan: found by the checks, and their fix sets it
+        val off = doc.squadrons.firstOrNull { GroundOps.offMap(doc, it) }
+        if (off == null) appendLine("note: no off-map squadron in ${doc.file.name}: the off-map NoPlan check not exercised on it")
+        else {
+            val start = parts(doc)
+            if (off.unitFlags and GroundOps.U_NO_PLANNING != 0) doc.edits.run(GroundOps.setFlag(doc, listOf(off), GroundOps.U_NO_PLANNING, false, "NoPlan off"))
+            val found = UnitChecks.run(doc).firstOrNull { it.unit == off.id && it.text.contains("off the map") }
+            val why = found?.fix?.let { doc.edits.run(it(doc)) }
+            appendLine((if (found != null && why == null && off.unitFlags and GroundOps.U_NO_PLANNING != 0) "PASS" else "FAIL") + ": an off-map squadron without NoPlan is found (${found?.text ?: "not found"}) and its fix sets NoPlan${why?.let { " ($it)" } ?: ""}")
+            while (same(start, parts(doc)) != null && doc.edits.undo()) Unit
+        }
         val issues = UnitChecks.run(doc)
         appendLine("unit checks: ${issues.size} issues (${issues.count { it.fix != null }} with a fix): " + issues.groupBy { it.group }.entries.joinToString { "${it.key} ${it.value.size}" })
         if (issues.any { it.fix != null }) {
@@ -185,6 +234,11 @@ object CommandUnitsCheck {
         val forms = HashMap<Int, Int>()
         val locks = intArrayOf(0, 0)
         val zs = ArrayList<String>()
+        // the planning flags by kind: NoPlan (0x10), not set by HQ (0x80), temporary destination / locked (0x1000000)
+        val planFlags = java.util.TreeMap<String, IntArray>()
+        val offMapSq = intArrayOf(0, 0)
+        val offMapNames = ArrayList<String>()
+        val groundOrders = java.util.TreeMap<String, Int>()
         var saves = 0
         for (dir in folders) for (f in dir.listFiles()?.filter { it.isFile && ShippedSaves.isSave(it) }.orEmpty().sortedBy { it.name.lowercase() }) {
             val doc = CommandSave.open(f, set)
@@ -216,6 +270,18 @@ object CommandUnitsCheck {
                 cls.ucd(sq)?.int("Fuel")?.takeIf { it > 0 }?.let { if (fuelRatio.size < 30) fuelRatio += sq.fuel.toDouble() / it }
                 sq.pilots.forEach { p -> skills.merge(p.skillAndRating, 1, Int::plus); status.merge(p.status, 1, Int::plus) }
             }
+            for (u in doc.units) {
+                val c = planFlags.getOrPut(u.kind.name.lowercase()) { IntArray(4) }
+                c[0]++
+                if (u.unitFlags and GroundOps.U_NO_PLANNING != 0) c[1]++
+                if (u.unitFlags and GroundOps.U_NOT_BY_HQ != 0) c[2]++
+                if (u.unitFlags and GroundOps.U_TEMP_DEST != 0) c[3]++
+                if (u is CmdGroundUnit) groundOrders.merge("${u.kind.name.lowercase()} ${GroundOps.ORDERS.getOrElse(u.orders) { "${u.orders}" }}${if (u.aobj.isNone) "" else " +obj"}", 1, Int::plus)
+            }
+            for (sq in doc.squadrons) if (GroundOps.offMap(doc, sq)) {
+                offMapSq[if (sq.unitFlags and GroundOps.U_NO_PLANNING != 0) 0 else 1]++
+                if (offMapNames.size < 6) offMapNames += "${f.name}: ${AirOps.nameOf(doc, sq)} cell ${sq.x},${sq.y} base ${sq.airbaseId} flags 0x${sq.unitFlags.toString(16)}"
+            }
             for (b in doc.battalions) {
                 battDest.merge("${b.destX - b.x},${b.destY - b.y}", 1, Int::plus)
                 battParentFlag.merge("${if (b.parentId.isNone) "free" else "inBrigade"} parent=${b.unitFlags and 0x20 != 0}", 1, Int::plus)
@@ -240,6 +306,10 @@ object CommandUnitsCheck {
         appendLine("waypoint formation bytes: " + forms.entries.sortedByDescending { it.value }.take(12).joinToString { "${it.key}×${it.value}" } + "; time locks ${locks[0]}, speed locks ${locks[1]}")
         appendLine("flight z: " + zs.joinToString("; "))
         appendLine("plt callsign bits as the flights say: ${pltBits[0]} yes / ${pltBits[1]} no")
+        appendLine("planning flags (units / NoPlan / not set by HQ / temp dest·locked): " + planFlags.entries.joinToString { (k, c) -> "$k ${c[0]}/${c[1]}/${c[2]}/${c[3]}" })
+        appendLine("off-map squadrons: ${offMapSq[0]} with NoPlan, ${offMapSq[1]} without")
+        offMapNames.forEach { appendLine("  off map: $it") }
+        appendLine("ground orders: " + groundOrders.entries.sortedByDescending { it.value }.take(16).joinToString { "${it.key}×${it.value}" })
     }
 
     private const val CELL = com.bmscompanion.desktop.bridge.CampaignArchive.FEET_PER_CELL

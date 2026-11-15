@@ -300,7 +300,7 @@ private fun AwacsMap(
                 drawLine(Hud.Magenta, pa, pb, 2.5f)
                 val (brg, rng) = bearingRange(a.first, a.second, b.first, b.second)
                 val mid = Offset((pa.x + pb.x) / 2, (pa.y + pb.y) / 2)
-                safeText(tm, "${b3(brg)}/${rng.roundToInt()}", mid + Offset(8f, -18f), label.copy(color = Hud.Magenta, fontSize = 13.sp))
+                safeText(tm, "${b3(shownBearing(brg, a.first, a.second))}/${rng.roundToInt()}", mid + Offset(8f, -18f), label.copy(color = Hud.Magenta, fontSize = 13.sp))
             }
         }
 
@@ -595,8 +595,9 @@ private fun MeasurePanel(aw: AwacsState, tracks: List<Track>) {
             val (brg, rng) = bearingRange(a.first, a.second, b.first, b.second)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                BigStat("A → B", "${b3(brg)}/${rng.roundToInt()}", Modifier.weight(1f), Hud.Magenta)
-                BigStat("B → A", "${b3(brg + 180)}/${rng.roundToInt()}", Modifier.weight(1f), Hud.Cyan)
+                // magnetic or true as the device chose (BearingPrefs), each measured from its own end
+                BigStat("A → B", "${b3(shownBearing(brg, a.first, a.second))}/${rng.roundToInt()}", Modifier.weight(1f), Hud.Magenta)
+                BigStat("B → A", "${b3(shownBearing(brg + 180, b.first, b.second))}/${rng.roundToInt()}", Modifier.weight(1f), Hud.Cyan)
             }
             if (ac != null && bc != null) {
                 Spacer(Modifier.height(6.dp))
@@ -609,7 +610,7 @@ private fun MeasurePanel(aw: AwacsState, tracks: List<Track>) {
                 val time = rng / ac.gsKts * 60
                 KV("Time (A's GS)", "${time.roundToInt()} min at ${ac.gsKts.roundToInt()} kt", mono = true, labelWidth = 90.dp)
                 if (bc != null) intercept(a.first, a.second, ac.gsKts, b.first, b.second, bc.hdg, bc.gsKts)?.let {
-                    KV("Intercept", "hdg ${b3(it.heading)} · ${it.rangeNm.roundToInt()} nm · ${it.minutes.roundToInt()} min", mono = true, labelWidth = 90.dp, color = Hud.Green)
+                    KV("Intercept", "hdg ${b3(shownBearing(it.heading, a.first, a.second))} ·${it.rangeNm.roundToInt()} nm · ${it.minutes.roundToInt()} min", mono = true, labelWidth = 90.dp, color = Hud.Green)
                 }
                 val fuel = time / 60 * AwacsSettings.cruiseFf
                 KV("Fuel", "≈ ${"%,d".format(Locale.US, fuel.toInt())} lb at ${AwacsSettings.cruiseFf} pph", mono = true, labelWidth = 90.dp)

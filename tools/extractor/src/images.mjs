@@ -4,7 +4,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { DATA, findFileCI } from './util.mjs';
 
-export function decodeTga(buf) {
+export function decodeTga(buf, honourOrigin = false) {
   const idLen = buf[0], cmapType = buf[1], type = buf[2];
   const cmapLen = buf.readUInt16LE(5), cmapDepth = buf[7];
   const w = buf.readUInt16LE(12), h = buf.readUInt16LE(14), bpp = buf[16], flags = buf[17];
@@ -34,8 +34,11 @@ export function decodeTga(buf) {
       else { for (let k = 0; k < n && i < px; k++, i++, off += bytes) readPixel(off, i * 4); }
     }
   }
-  // origin: bit 5 set = top-left; otherwise bottom-left → flip rows
-  if (!(flags & 0x20)) {
+  // Rows are stored bottom row first, and that is how Falcon BMS shows a TacRef picture whatever the header's origin
+  // bit (bit 5, "top-left") says: the 36 pictures of 2,728 in 4.38.1 that set it (all in Add-On Israel's TacRData,
+  // 16-bit: the IDF A-4s, Kfir, Lavi, the Syrian/Egyptian MiGs …) came out upside down when the bit was honoured.
+  // `honourOrigin` keeps the TGA rule for any other caller.
+  if (honourOrigin ? !(flags & 0x20) : true) {
     const row = w * 4, tmp = Buffer.alloc(row);
     for (let y = 0; y < h >> 1; y++) {
       const a = y * row, b = (h - 1 - y) * row;

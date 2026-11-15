@@ -149,7 +149,7 @@ private class MapFrame {
 }
 
 /** The tools whose click edits: acted on at the release, not after the map's double-tap wait. */
-private val CLICK_TOOLS = setOf(CmdTool.CLONE, CmdTool.OWNER, CmdTool.LINK_ADD, CmdTool.LINK_REMOVE)
+private val CLICK_TOOLS = setOf(CmdTool.CLONE, CmdTool.OWNER, CmdTool.LINK_ADD, CmdTool.LINK_REMOVE, CmdTool.ASSIGN)
 
 /** A pointer drag in progress (Area, Move, Ruler), in screen pixels. */
 private class Drag(val start: Offset, var now: Offset, val ref: CmdRef?, val additive: Boolean)
@@ -247,6 +247,24 @@ internal fun CommandMap(ctx: CmdContext, mapState: MapState, modifier: Modifier 
                 val team = CommandSession.ownerTeam
                 CommandSession.status = if (edits == null) "Owners are set by the editor, which is not installed in this build yet."
                 else edits.setOwner(listOf(ref), team) ?: "Done: ${world.nameOf(ref)} now belongs to ${world.team(team)?.name ?: "team $team"}.".also { ctx.changed() }
+            }
+            CmdTool.ASSIGN -> {
+                // a battalion or brigade clicked is selected (Shift adds), an objective clicked is where they go
+                if (ref != null && (ref.kind == CmdKind.BATTALION || ref.kind == CmdKind.BRIGADE)) {
+                    if (shift) sel.toggle(ref) else sel.set(ref)
+                    val n = sel.refs.count { it.kind == CmdKind.BATTALION || it.kind == CmdKind.BRIGADE }
+                    CommandSession.status = "$n ground unit${if (n == 1) "" else "s"} selected: now click the objective."
+                    return
+                }
+                val units = sel.refs.filter { it.kind == CmdKind.BATTALION || it.kind == CmdKind.BRIGADE }
+                val hook = CommandSlots.assignObjective
+                CommandSession.status = when {
+                    ref == null || ref.kind != CmdKind.OBJECTIVE -> if (units.isEmpty()) "Select the battalions or brigades first, then click the objective they are ordered to." else "Click an objective: ${units.size} ground unit${if (units.size == 1) "" else "s"} selected."
+                    units.isEmpty() -> "Select the battalions or brigades first (Select tool, Shift adds), then click the objective."
+                    hook == null -> "Orders are given by the editor, which is not installed in this build."
+                    // (the edit says its own "Done: …" or refusal in the status line)
+                    else -> { hook(ctx, units, ref); return }
+                }
             }
         }
     }
@@ -541,7 +559,13 @@ private fun DrawScope.drawWorld(
         val selected = u.ref in sel
         if (!(layers.assignments || selected)) continue
         val o = world.objective(u.objective) ?: continue
-        tie(pr.toScreen(u.north, u.east), pr.toScreen(o.north, o.east), Hud.Amber)
+        val at = pr.toScreen(o.north, o.east)
+        tie(pr.toScreen(u.north, u.east), at, Hud.Amber)
+        // the assigned-objective mark: an amber diamond round the objective the unit is ordered to
+        val r = if (selected) 11f else 8f
+        val diamond = androidx.compose.ui.graphics.Path().apply { moveTo(at.x, at.y - r); lineTo(at.x + r, at.y); lineTo(at.x, at.y + r); lineTo(at.x - r, at.y); close() }
+        drawPath(diamond, edge.copy(alpha = 0.6f), style = Stroke(3.5f))
+        drawPath(diamond, Hud.Amber, style = Stroke(if (selected) 2f else 1.4f))
     }
     for (r in sel.refs) {
         if (r.kind == CmdKind.BRIGADE && layers.brigadeElements) world.unit(r.id)?.let { b ->
@@ -769,6 +793,12 @@ private fun MapToolStrip(ctx: CmdContext, mapState: MapState, world: CmdWorld, o
         world.teams.filter { it.inUse }.forEach { tm ->
             MiniChip(tm.name, CommandSession.ownerTeam == tm.n, teamInk(tm.colour), lead = { TeamFlagLead(tm.name, tm.colour) }) { CommandSession.ownerTeam = tm.n }
         }
+    }
+    if (CommandSession.tool == CmdTool.ASSIGN) Strip(Hud.Surface.copy(alpha = 0.35f)) {
+        val n = ctx.selection.refs.count { it.kind == CmdKind.BATTALION || it.kind == CmdKind.BRIGADE }
+        Text(if (n == 0) "Assign tool: select battalions or brigades first (Shift + click adds), then click the objective they are ordered to."
+            else "Assign tool: a click on an objective orders the $n selected ground unit${if (n == 1) "" else "s"} to it (orders kept; a brigade's battalions follow).",
+            color = Hud.TextDim, fontSize = 12.sp)
     }
 }
 

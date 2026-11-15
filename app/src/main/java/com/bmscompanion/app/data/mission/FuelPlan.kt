@@ -21,7 +21,9 @@ import kotlin.math.roundToInt
  * - **Bingo** = the minimum at the farthest point of the route + what the mission needs there (one minute of
  *   afterburner by default); **Joker** = Bingo + an extra. Not low-fuel values: the fuel at which a decision is due.
  * - Burns: 15 lb/nm at medium altitude and normal cruise (M0.7–0.8), 20 lb/nm for a leg planned low, 10 lb/nm for the
- *   divert (economy). His example: target → recovery 230 nm = 3,450 lb, divert 75 nm = 750 lb, + Secu Carb 1,000 →
+ *   divert (economy) and for a leg planned high (25,000 ft and above, where the F-16 cruises at about 10 lb/nm; WDP's
+ *   engine tables give 9-10 on such a leg, and without it a high egress counted half again too much, a pilot's report
+ *   on 1.4.2). His example: target → recovery 230 nm = 3,450 lb, divert 75 nm = 750 lb, + Secu Carb 1,000 →
  *   Bingo 5,200 lb, Joker 6,200 lb (checked by `--fuelplantest`).
  *
  * **What this adds to it**: the expected fuel at each steerpoint going forward from the take-off fuel (less a taxi
@@ -48,6 +50,7 @@ object FuelPlan {
      * Everything the pilot can change (per device, on the card's folded Settings). The F-16C Block 40/50 figures:
      * - [secuCarb] 1,000 lb: the method's own figure for the F-16 (it covers the most limiting fuel block).
      * - [cruisePerNm] 15, [lowPerNm] 20, [divertPerNm] 10 lb/nm: the method's own rules of thumb.
+     * - [highPerNm] 10 lb/nm for a leg planned at or above [highAltFt] 25,000 ft (the F-16's high cruise).
      * - [lowAltFt] 5,000 ft: a leg planned at or below it burns [lowPerNm]. BMS plans low-level legs in hundreds of
      *   feet and medium-altitude ones from 15,000 ft up; 5,000 ft sits between and still catches a low leg over hills.
      * - VMC: [vmcGoAround] 300 lb (a go-around in MIL to the downwind, about 2 min at 7,000-9,000 pph) and
@@ -70,6 +73,8 @@ object FuelPlan {
         val lowPerNm: Double = 20.0,
         val divertPerNm: Double = 10.0,
         val lowAltFt: Int = 5000,
+        val highPerNm: Double = 10.0,
+        val highAltFt: Int = 25000,
         val imc: Boolean = false,
         val vmcGoAround: Int = 300,
         val vmcPattern: Int = 600,
@@ -161,6 +166,8 @@ object FuelPlan {
         val afterLb: Double?,
         /** the minimum is the tanker rule's (reach the tanker, still able to go home from it) */
         val beforeTanker: Boolean = false,
+        /** the leg into it is planned high ([Settings.highAltFt] and above) and burns [Settings.highPerNm] */
+        val legHigh: Boolean = false,
     ) {
         val marginLb: Double? get() = expectedLb?.minus(minLb)
         val hasPos: Boolean get() = x != null && y != null && (x != 0.0 || y != 0.0)
@@ -207,16 +214,19 @@ object FuelPlan {
         val legNm = DoubleArray(pts.size)
         val legKnown = BooleanArray(pts.size) { it == 0 }
         val legLow = BooleanArray(pts.size)
+        val legHigh = BooleanArray(pts.size)
         for (i in 1 until pts.size) {
             val a = pts[i - 1]; val b = pts[i]
             val nm = if (a.hasPos && b.hasPos) hypot(b.x!! - a.x!!, b.y!! - a.y!!) / FT_PER_NM else b.legNm
             legKnown[i] = nm != null
             legNm[i] = nm ?: 0.0
-            legLow[i] = legAltitude(a, b)?.let { it <= s.lowAltFt } == true
+            val altFt = legAltitude(a, b)
+            legLow[i] = altFt?.let { it <= s.lowAltFt } == true
+            legHigh[i] = !legLow[i] && altFt?.let { s.highAltFt > 0 && it >= s.highAltFt } == true
         }
         if (legKnown.any { !it }) notes += "Leg " + (1 until pts.size).filter { !legKnown[it] }.joinToString(", ") { "${pts[it - 1].n}-${pts[it].n}" } +
             " has no length (no position and no distance in the briefing): counted as 0 nm."
-        val legBurn = DoubleArray(pts.size) { i -> if (i == 0) 0.0 else legNm[i] * (if (legLow[i]) s.lowPerNm else s.cruisePerNm) }
+        val legBurn = DoubleArray(pts.size) { i -> if (i == 0) 0.0 else legNm[i] * rateOf(s, legLow[i], legHigh[i]) }
         val toGo = DoubleArray(pts.size)
         for (i in pts.size - 2 downTo 0) toGo[i] = toGo[i + 1] + legNm[i + 1]
 
@@ -306,7 +316,7 @@ object FuelPlan {
                 n = p.n, label = p.label, kind = p.kind, x = p.x, y = p.y,
                 legNm = legNm[i], legKnown = legKnown[i], legLow = legLow[i], legBurn = legBurn[i], toGoNm = toGo[i],
                 minLb = min[i], expectedLb = expected[i], holdMin = p.holdMin, holdBurn = holdBurn[i], afterLb = after[i],
-                beforeTanker = beforeTanker[i],
+                beforeTanker = beforeTanker[i], legHigh = legHigh[i],
             )
         }
         return Result(
@@ -315,6 +325,13 @@ object FuelPlan {
             targetAt = tIdx?.let { pts[it].n }, playLb = play, stationMin = station, takeoffLb = start, takeoffFrom = from,
             tankers = tankers.map { pts[it].n }, notes = notes,
         )
+    }
+
+    /** A leg's burn per nm: low, high or the cruise. */
+    fun rateOf(s: Settings, low: Boolean, high: Boolean): Double = when {
+        low -> s.lowPerNm
+        high -> s.highPerNm
+        else -> s.cruisePerNm
     }
 
     /**
@@ -370,7 +387,7 @@ object FuelPlan {
         }
         val b = rows[best]
         val left = hypot(b.x!! - x, b.y!! - y) / FT_PER_NM
-        val rate = if (b.legLow) r.settings.lowPerNm else r.settings.cruisePerNm
+        val rate = rateOf(r.settings, b.legLow, b.legHigh)
         // pro-rated along the leg: the distance left to the next steerpoint, never more than the leg itself (a jet off
         // the line is not further from home than the steerpoint behind it)
         val minHere = b.minLb + kotlin.math.min(left, b.legNm) * rate

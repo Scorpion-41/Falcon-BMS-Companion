@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -267,7 +268,7 @@ fun FuelPlanBody(plan: FuelPlan.Result, l: Live?, compact: Boolean) {
     // the four figures: two by two on a narrow card
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val stats = listOf<@Composable (Modifier) -> Unit>(
-            { m -> BigStat("BINGO lb", lb(plan.bingoLb), m, Hud.Amber, sub = "at STPT ${plan.bingoAt}") },
+            { m -> BigStat("BINGO lb", lb(plan.bingoLb), m, Hud.Amber, sub = "at STPT ${plan.bingoAt}" + if (s.bingoStpt > 0 && s.bingoStpt == plan.bingoAt) " (yours)" else " (farthest)") },
             { m -> BigStat("JOKER lb", lb(plan.jokerLb), m, sub = "Bingo + ${lb(s.jokerExtra)}") },
             { m ->
                 val play = plan.playLb
@@ -290,6 +291,11 @@ fun FuelPlanBody(plan: FuelPlan.Result, l: Live?, compact: Boolean) {
     }
     Spacer(Modifier.height(10.dp))
     FuelTable(plan, compact, next = now?.nextN)
+    if (!Hud.onPaper) Text(
+        if (s.bingoStpt > 0) "Bingo is at STPT ${s.bingoStpt}, as you chose: tap another steerpoint to move it, or STPT ${s.bingoStpt} again for the farthest one."
+        else "Bingo is at the steerpoint farthest from the recovery: tap a steerpoint to put it there instead.",
+        Modifier.padding(top = 4.dp), fontSize = 11.sp, color = Hud.TextFaint, lineHeight = 14.sp,
+    )
     Spacer(Modifier.height(8.dp))
     val parts = buildList {
         add("Secu Carb ${lb(s.secuCarb)}")
@@ -363,10 +369,17 @@ private fun FuelTable(plan: FuelPlan.Result, compact: Boolean, next: Int? = null
                 if (bingo) "BINGO" else null,
                 if (r.n in plan.tankers) "TANKER" else null,
                 if (r.legLow) "low" else null,
+                if (r.legHigh) "high" else null,
                 if (r.holdMin >= 1) "${r.holdMin.roundToInt()} min" else null,
             )
+            // a tap puts Bingo at that steerpoint (the landing excepted); the chosen one tapped again goes back to the farthest
+            val canBingo = !Hud.onPaper && k < plan.rows.size - 1
             Row(
                 Modifier.fillMaxWidth().background(if (bingo) Hud.Amber.copy(alpha = 0.10f) else if (k % 2 == 1) Hud.Text.copy(alpha = 0.035f) else Color.Transparent)
+                    .then(if (canBingo) Modifier.clickable {
+                        val s = FuelPrefs.settings
+                        FuelPrefs.set(s.copy(bingoStpt = if (s.bingoStpt == r.n) 0 else r.n))
+                    } else Modifier)
                     .padding(vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -412,6 +425,8 @@ private fun FuelSettingsFold(s: FuelPlan.Settings) {
             add { NumField("Cruise burn", s.cruisePerNm, "lb/nm", decimals = true) { set { copy(cruisePerNm = it) } } }
             add { NumField("Low-level burn", s.lowPerNm, "lb/nm", decimals = true) { set { copy(lowPerNm = it) } } }
             add { NumField("Low leg at or below", s.lowAltFt.toDouble(), "ft") { set { copy(lowAltFt = it.toInt()) } } }
+            add { NumField("High-level burn", s.highPerNm, "lb/nm", decimals = true) { set { copy(highPerNm = it) } } }
+            add { NumField("High leg at or above (0 = none)", s.highAltFt.toDouble(), "ft") { set { copy(highAltFt = it.toInt()) } } }
             add { NumField("Divert burn", s.divertPerNm, "lb/nm", decimals = true) { set { copy(divertPerNm = it) } } }
             add { NumField("Divert distance (0 = auto)", s.divertNm, "nm", decimals = true) { set { copy(divertNm = it) } } }
             if (s.imc) {
@@ -457,7 +472,11 @@ private fun FuelSettingsFold(s: FuelPlan.Settings) {
 @Composable
 private fun NumField(label: String, value: Double, unit: String, decimals: Boolean = false, onChange: (Double) -> Unit) {
     fun shown(v: Double) = if (decimals && v != v.roundToInt().toDouble()) FuelPlan.oneDecimal(v) else v.roundToInt().toString()
-    var text by remember(value) { mutableStateOf(shown(value)) }
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    var focused by remember { mutableStateOf(false) }
+    var text by remember { mutableStateOf(shown(value)) }
+    // a change from elsewhere (Defaults, a tap on the table, another device) shows unless the box is being typed in
+    if (!focused && text.toDoubleOrNull() != value) text = shown(value)
     Row(Modifier.fillMaxWidth().height(34.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(label, Modifier.weight(1f), fontSize = 12.5.sp, color = Hud.TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
         BasicTextField(
@@ -467,11 +486,18 @@ private fun NumField(label: String, value: Double, unit: String, decimals: Boole
                 text = clean
                 clean.toDoubleOrNull()?.let { v -> if (v != value) onChange(v) }
             },
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { focusManager.clearFocus() }),
             singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = androidx.compose.ui.text.input.ImeAction.Done),
             textStyle = LocalExtra.current.monoSmall.copy(fontSize = 13.sp, color = Hud.Text, textAlign = TextAlign.End),
             cursorBrush = SolidColor(Hud.Amber),
-            modifier = Modifier.width(72.dp).clip(RoundedCornerShape(6.dp)).background(Hud.Surface2)
+            modifier = Modifier.width(72.dp)
+                .onFocusChanged { st ->
+                    focused = st.isFocused
+                    // leaving the box shows the figure in force (an empty or half-typed box goes back to it)
+                    if (!st.isFocused) text = shown(value)
+                }
+                .clip(RoundedCornerShape(6.dp)).background(Hud.Surface2)
                 .border(1.dp, Hud.Outline.copy(alpha = 0.7f), RoundedCornerShape(6.dp)).padding(horizontal = 6.dp, vertical = 5.dp),
         )
         Text(unit, Modifier.width(44.dp).padding(start = 6.dp), fontSize = 11.sp, color = Hud.TextFaint, maxLines = 1)

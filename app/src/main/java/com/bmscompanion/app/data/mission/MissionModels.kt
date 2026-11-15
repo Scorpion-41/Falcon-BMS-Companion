@@ -344,8 +344,19 @@ data class Live(
     val navPoints: List<NavPoint> = emptyList(),
     val voice: Voice? = null,
     val pilots: List<Pilot> = emptyList(),
+    /**
+     * The cockpit's fuel totalizer (FlightData `total`, lb): the TOTAL the fuel quantity indicator and the DED's BINGO
+     * page show. 0 from a PC older than 1.4.3 or while BMS leaves it unset; [fuelTotal] then adds internal and external.
+     */
+    val fuelTotalizer: Double = 0.0,
+    /**
+     * The jet's magnetic variation as its systems use it (FlightData2 `magDeviationSystem`, degrees; BMS's header
+     * gives no sign convention, so the devices check it against the headings, `MagVar.jet`). Null from an older PC.
+     */
+    val magDev: Double? = null,
 ) {
-    val fuelTotal get() = fuelInternal + fuelExternal
+    /** The fuel on board as the cockpit shows it: the totalizer, else internal + external. */
+    val fuelTotal get() = if (fuelTotalizer > 0.0) fuelTotalizer else fuelInternal + fuelExternal
 }
 
 // ---------------------------------------------------------------- Falcon BMS's own weather

@@ -132,7 +132,7 @@ enum class BoardKind(
     SUPPORT("support", "Tankers & AWACS", "Who is on station, with TACAN and frequencies.", 1),
     THREATS("threats", "Mission threats", "Every threat the briefing names, packed onto a sheet.", 3),
     HARM("harm", "HARM / ALIC codes", "The ALIC table, for typing into the HARM.", 1),
-    RUNWAYS("runways", "Ground chart", "The field you take off from, drawn from BMS's own data: taxiways, hold shorts and every ramp spot. One page per runway, turned to fill the page.", 12, configurable = true),
+    RUNWAYS("runways", "Ground chart", "The departure, arrival and alternate fields (Configure chooses), drawn from BMS's own data: taxiways, hold shorts and every ramp spot. One page per runway, turned to fill the page.", 16, configurable = true),
     LIVETAXI(
         "livetaxi", "Live taxi",
         "Where you are on the field, with what is ahead of you up the page. Turning a page zooms in and out.",
@@ -140,7 +140,7 @@ enum class BoardKind(
     ),
     // No MFD board: in VR the cockpit's own MFDs are in front of the pilot, and a board has no pointer to press them
     // with. A board saved with the old "mfds" kind opens as the live map (BoardKind.of).
-    PLATES("plates", "Instrument charts", "Approach, departure and arrival plates for that field.", 40),
+    PLATES("plates", "Instrument charts", "Approach, departure and arrival plates for the departure, arrival and alternate fields (Configure chooses).", 60, configurable = true),
     PICTURE("picture", "Hostile picture", "The AWACS picture: what is out there, nearest first.", 1),
 
     /**
@@ -396,7 +396,7 @@ private fun boardPages(kind: BoardKind, slot: BoardSlot, env: MissionEnv, step: 
     BoardKind.HARM -> harmPages()
     BoardKind.RUNWAYS -> groundChartPages(env, slot)
     BoardKind.LIVETAXI -> liveTaxiPages(env, slot, step)
-    BoardKind.PLATES -> chartPages(env)
+    BoardKind.PLATES -> chartPages(env, slot)
     BoardKind.PICTURE -> picturePages(env)
     BoardKind.EXPORTED -> exportedPages()
     BoardKind.NOTES -> notesPages(slot)
@@ -497,8 +497,8 @@ private fun BoardMap(env: MissionEnv, slot: BoardSlot, step: Int = -1) {
         // the mission's threats come under "sams" (MissionPicture): the briefed sites and the PPTs, nothing else
         MapLayers.follow = slot.options["follow"] != "0"
         MapLayers.save()
-        // the jet's size (0/1/2 = Small/Medium/Large) for this board, not saved over the device's own choice
-        com.bmscompanion.app.ui.components.OwnJetLook.board(slot.options["jet"])
+        // the jet's size (0/1/2 = Small/Medium/Large, or dp), shape and colour for this board, not saved over the device's own
+        com.bmscompanion.app.ui.components.OwnJetLook.board(slot.options["jet"], slot.options["jetshape"], slot.options["jetcolor"])
     }
     // The zoom the board opens at — and, once the pilot turns a page, the step they have zoomed to. There is
     // nothing in a headset to pinch with, so the page binding is the zoom control.
@@ -1091,32 +1091,50 @@ private fun harmPages(): List<BoardPage> {
  * and the RUNWAYS board draws that chart from the field's own data instead.
  */
 @Composable
-private fun chartPages(env: MissionEnv): List<BoardPage> {
+private fun chartPages(env: MissionEnv, slot: BoardSlot): List<BoardPage> {
     val live by MissionLink.live.collectAsState()
     val merged = rememberBoardMerged()
-    val bases = airbases(live, merged)
-    val field: Airport? = bases.departureIn(env.set) ?: bases.arrivalIn(env.set)
+    val fields = boardFields(env, slot, airbases(live, merged))
     val setId = env.theater?.airportSet
-    val charts by produceState<List<ChartRef>?>(null, setId, field?.id) {
-        value = if (setId == null || field == null) emptyList() else Repo.charts(setId)[field.id.toString()].orEmpty()
+    val charts by produceState<Map<Int, List<ChartRef>>?>(null, setId, fields.map { it.second.id }) {
+        val all = if (setId == null) emptyMap() else Repo.charts(setId)
+        value = fields.associate { (_, a) -> a.id to all[a.id.toString()].orEmpty() }
     }
     val what = "Instrument charts"
-    if (field == null) return listOf(BoardPage(what) {
-        BoardNotice(what, "This board follows the field you take off from. " + com.bmscompanion.app.ui.screens.mission.fillHint("Press PRINT on the BMS briefing and it fills itself in.", "The flight populated from the Planner names none."))
+    if (fields.isEmpty()) return listOf(BoardPage(what) {
+        BoardNotice(what, "This board follows the mission's departure, arrival and alternate fields. " + com.bmscompanion.app.ui.screens.mission.fillHint("Press PRINT on the BMS briefing and it fills itself in.", "The flight populated from the Planner names none."))
     })
-    val list = charts ?: return listOf(BoardPage(what) { BoardNotice(what, "Loading ${field.name}…") })
-    val wanted = list.filter { it.pages.isNotEmpty() }
-    if (wanted.isEmpty()) return listOf(BoardPage(what) {
-        BoardNotice(what, "${field.name} has no instrument charts in this theater.")
-    })
-    return wanted.flatMap { c ->
-        val files = List(c.pages.size) { chartPage(c.pages[0], it + 1) }
-        files.mapIndexed { i, file ->
-            BoardPage(if (files.size > 1) "${c.title} ${i + 1}" else c.title) {
-                Box(Modifier.fillMaxSize().padding(PLATE_MARGIN)) { AssetImage(file, Modifier.fillMaxSize()) }
+    val byField = charts ?: return listOf(BoardPage(what) { BoardNotice(what, "Loading charts…") })
+    val pages = fields.flatMap { (role, field) ->
+        byField[field.id].orEmpty().filter { it.pages.isNotEmpty() }.flatMap { c ->
+            val files = List(c.pages.size) { chartPage(c.pages[0], it + 1) }
+            files.mapIndexed { i, file ->
+                BoardPage("$role ${field.icao ?: field.name} · " + (if (files.size > 1) "${c.title} ${i + 1}" else c.title)) {
+                    Box(Modifier.fillMaxSize().padding(PLATE_MARGIN)) { AssetImage(file, Modifier.fillMaxSize()) }
+                }
             }
         }
     }
+    if (pages.isEmpty()) return listOf(BoardPage(what) {
+        BoardNotice(what, fields.joinToString(", ") { it.second.name } + (if (fields.size == 1) " has" else " have") + " no instrument charts in this theater.")
+    })
+    return pages
+}
+
+/**
+ * The fields a chart board draws, in order: departure, arrival, alternate (the board's `fields` option, a list of
+ * `dep`, `arr`, `alt`; all three by default), each once, with the role it is listed under. [here], a field the jet
+ * stands on that is none of them (a divert), comes first.
+ */
+private fun boardFields(env: MissionEnv, slot: BoardSlot, bases: com.bmscompanion.app.ui.screens.mission.Airbases, here: Airport? = null): List<Pair<String, Airport>> {
+    val wanted = (slot.options["fields"] ?: "dep,arr,alt").split(',').map { it.trim() }.toSet()
+    val out = ArrayList<Pair<String, Airport>>()
+    fun add(role: String, a: Airport?) { if (a != null && out.none { it.second.id == a.id }) out += role to a }
+    if ("dep" in wanted) add("DEP", bases.departureIn(env.set))
+    if ("arr" in wanted) add("ARR", bases.arrivalIn(env.set))
+    if ("alt" in wanted) add("ALT", bases.alternateIn(env.set))
+    if (here != null && out.none { it.second.id == here.id }) out.add(0, "HERE" to here)
+    return out
 }
 
 /**
@@ -1149,30 +1167,34 @@ private fun groundChartPages(env: MissionEnv, slot: BoardSlot): List<BoardPage> 
     }
     // the ship the jet stands on names itself by its hull number in the Tacview picture
     val bases = airbases(live, merged, contacts?.contacts)
-    val airport = nearest ?: bases.departureIn(env.set) ?: bases.arrivalIn(env.set)
-    val field by produceState<Airfield?>(null, setId, airport?.id) {
-        value = if (setId == null || airport == null) null else Repo.airfield(setId, airport.id)
+    // the departure, arrival and alternate fields (the board's `fields` option), and a field the jet stands on first
+    val airports = boardFields(env, slot, bases, nearest)
+    val loaded by produceState<List<Pair<String, Airfield>>?>(null, setId, airports.map { it.second.id }) {
+        value = if (setId == null) emptyList() else airports.mapNotNull { (role, a) -> runCatching { Repo.airfield(setId, a.id) }.getOrNull()?.let { role to it } }
     }
 
     val what = "Ground chart"
-    if (airport == null) return listOf(BoardPage(what) {
-        BoardNotice(what, "This board draws the field you take off from, one page per runway. " + com.bmscompanion.app.ui.screens.mission.fillHint("Press PRINT on the BMS briefing and it fills itself in.", "The flight populated from the Planner names none.") + " For where you are on the field while you taxi, put a Live taxi board on another kneeboard.")
+    if (airports.isEmpty()) return listOf(BoardPage(what) {
+        BoardNotice(what, "This board draws the mission's departure, arrival and alternate fields, one page per runway. " + com.bmscompanion.app.ui.screens.mission.fillHint("Press PRINT on the BMS briefing and it fills itself in.", "The flight populated from the Planner names none.") + " For where you are on the field while you taxi, put a Live taxi board on another kneeboard.")
     })
-    val f = field ?: return listOf(BoardPage(what) { BoardNotice(what, "Loading ${airport.name}…") })
-    if (f.routes.isEmpty()) return listOf(BoardPage(what) {
-        BoardNotice(what, "${f.name} has no taxiways in BMS's own data — the field is a strip.")
-    })
-
-    // A carrier is one page: it steams into wind, so the runway BMS names it and the numbers on its deck turn
-    // with the ship, and a page headed "RWY 36R" would be right for about a minute.
-    if (f.ship != null) return listOf(BoardPage(f.icao ?: f.name) { BoardGroundChart(f, null, slot, live) })
-
-    // One page per runway and nothing else. The page that followed the jet, with its route and its clearance,
-    // is the Live taxi board's whole job now, and having it here as well put a route across a chart a pilot opens
-    // to find something else.
-    return f.routes.map { route ->
-        BoardPage("${f.icao ?: f.name} RWY ${route.designator}") { BoardGroundChart(f, route, slot, live) }
+    val fields = loaded ?: return listOf(BoardPage(what) { BoardNotice(what, "Loading " + airports.joinToString(", ") { it.second.name } + "…") })
+    val pages = fields.flatMap { (role, f) ->
+        val tag = if (airports.size > 1) "$role " else ""
+        when {
+            f.routes.isEmpty() -> emptyList()
+            // A carrier is one page: it steams into wind, so the runway BMS names it and the numbers on its deck turn
+            // with the ship, and a page headed "RWY 36R" would be right for about a minute.
+            f.ship != null -> listOf(BoardPage(tag + (f.icao ?: f.name)) { BoardGroundChart(f, null, slot, live) })
+            // One page per runway and nothing else. The page that followed the jet, with its route and its clearance,
+            // is the Live taxi board's whole job now, and having it here as well put a route across a chart a pilot
+            // opens to find something else.
+            else -> f.routes.map { route -> BoardPage("$tag${f.icao ?: f.name} RWY ${route.designator}") { BoardGroundChart(f, route, slot, live) } }
+        }
     }
+    if (pages.isEmpty()) return listOf(BoardPage(what) {
+        BoardNotice(what, fields.joinToString(", ") { it.second.name } + " — no taxiways in BMS's own data (a strip).")
+    })
+    return pages
 }
 
 /**

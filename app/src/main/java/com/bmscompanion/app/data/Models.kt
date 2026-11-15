@@ -454,6 +454,22 @@ data class Threat(
     val tacref: String? = null,
     /** A photograph of its own (tools/curated/photos.json, "threat:<id>"), for a threat with no TacRef entry; else null. */
     val pic: String? = null,
+    /** Its radars in BMS and the ECM pod programs that jam them (tools/extractor/src/ecm.mjs); empty: no radar in BMS. */
+    val ecm: List<ThreatEcm> = emptyList(),
+)
+
+/**
+ * One of a threat's radars: the EW band it works in per mode, from BMS's radar data (`Data\Sim\Radar\*.dat`), and
+ * the ALQ-131/ALQ-184 programs that jam those bands (TO 1F-16CMAM-34-1-1 BMS 2.7.4.1.1: 1 A-C, 2 D-E, 3 F-G, 4 H-I,
+ * 5 J-K; L and M none).
+ */
+@Serializable
+data class ThreatEcm(
+    val radar: String,
+    val search: List<String> = emptyList(),
+    val acquisition: String? = null,
+    val guidance: String? = null,
+    val programs: List<Int> = emptyList(),
 )
 
 /**

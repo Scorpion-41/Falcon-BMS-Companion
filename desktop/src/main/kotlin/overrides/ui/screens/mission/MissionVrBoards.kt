@@ -102,6 +102,9 @@ fun MissionVrBoardsPane() {
 
     val port = serverPort()
     val address = remember(port) { SystemTools.lanAddresses().firstOrNull()?.let { "http://$it:$port" } }
+    // the boards' own address (1.4.2): this PC serves the pages and OpenKneeboard runs on it beside Falcon BMS, so a
+    // board is pasted as localhost — a LAN address can change (DHCP) and break every tab; the LAN one is for devices
+    val boardBase = "http://localhost:$port"
     val c = cfg
     val boards = c?.slots?.size ?: 0
 
@@ -110,7 +113,7 @@ fun MissionVrBoardsPane() {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Step 1. Nothing else here works until the headset PC can reach this one, so it is the first thing
         // asked and the first thing fixed — with the switch here rather than a sentence pointing at another page.
-        SectionCard("1 · This PC", accent = if (PcConfig.webEnabled && address != null) Hud.Green else Hud.Amber) {
+        SectionCard("1 · This PC", accent = if (PcConfig.webEnabled) Hud.Green else Hud.Amber) {
             Ready(
                 ok = PcConfig.webEnabled,
                 okText = "Browser access is on: the boards can reach this PC.",
@@ -118,9 +121,11 @@ fun MissionVrBoardsPane() {
                 fix = "Turn browser access on" to { PcConfig.setWeb(true) },
             )
             Ready(
-                ok = address != null,
-                okText = "This PC is at $address on your network.",
-                fixText = "No network address yet. A headset PC on the same network needs one; a single-PC setup can use http://127.0.0.1:$port.",
+                ok = true,
+                okText = "The boards' addresses use $boardBase: OpenKneeboard runs on this PC, so they never change " +
+                    "when the network gives this PC another address." +
+                    (address?.let { " Phones, tablets and browsers use $it." } ?: ""),
+                fixText = "",
             )
             Ready(
                 ok = boards > 0,
@@ -130,8 +135,8 @@ fun MissionVrBoardsPane() {
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PcButton("Preview board 1 here", Icons.Default.Refresh) { previewBoard(1) }
-                if (address != null && boards > 0) PcButton("Copy every address", Icons.Default.ContentCopy) {
-                    SystemTools.copyToClipboard((1..boards).joinToString("\n") { "$address/kneeboard/$it" })
+                if (boards > 0) PcButton("Copy every address", Icons.Default.ContentCopy) {
+                    SystemTools.copyToClipboard((1..boards).joinToString("\n") { "$boardBase/kneeboard/$it" })
                     saved = "Copied $boards addresses, one to a line."
                 }
             }
@@ -147,7 +152,7 @@ fun MissionVrBoardsPane() {
             c.slots.sortedBy { it.n }.forEach { slot ->
                 BoardRow(
                     slot = slot,
-                    address = address,
+                    address = boardBase,
                     onKind = { k -> push(c.copy(slots = c.slots.map { if (it.n == slot.n) it.copy(kind = k.id, options = emptyMap()) else it })) },
                     onOptions = { o -> push(c.copy(slots = c.slots.map { if (it.n == slot.n) it.copy(options = o) else it })) },
                     onRemove = { push(c.copy(slots = c.slots.filter { it.n != slot.n })) },
@@ -184,7 +189,7 @@ fun MissionVrBoardsPane() {
 
         SectionCard("4 · Adding them to OpenKneeboard", accent = Hud.Cyan) {
             Step(1, "In OpenKneeboard: Settings → Tabs → Add a tab → Web Dashboard.")
-            Step(2, "Paste the address from the row you want, and give the tab that row's name. One tab per row: board 1 is one tab, board 2 is another.")
+            Step(2, "Paste the address from the row you want (http://localhost:$port/kneeboard/<n>: OpenKneeboard runs on this PC, so localhost always reaches it), and give the tab that row's name. One tab per row: board 1 is one tab, board 2 is another.")
             Step(3, "Repeat for each row. The order of the tabs in OpenKneeboard is yours to choose.")
             Step(4, "Boards follow the mission on their own. After printing a new briefing, give them a few seconds; Rebuild pages above forces it.")
             Spacer(Modifier.height(6.dp))
@@ -291,6 +296,7 @@ private fun BoardRow(
         }
         if (tuning && kind == BoardKind.MAP) MapOptions(slot.options, onOptions)
         if (tuning && kind == BoardKind.RUNWAYS) GroundChartOptions(slot.options, onOptions)
+        if (tuning && kind == BoardKind.PLATES) Column(Modifier.padding(top = 8.dp)) { FieldsOption(slot.options, onOptions, "Every page of every instrument chart of each field, departure first.") }
         if (tuning && kind == BoardKind.LIVETAXI) LiveTaxiOptions(slot.options, onOptions)
         if (tuning && kind == BoardKind.NOTES) NotesOptions(slot.options, onOptions)
     }
@@ -345,6 +351,7 @@ private fun LiveTaxiOptions(options: Map<String, String>, onChange: (Map<String,
 private fun GroundChartOptions(options: Map<String, String>, onChange: (Map<String, String>) -> Unit) {
     fun set(key: String, value: String) = onChange(options + (key to value))
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        FieldsOption(options, onChange, "One page per runway of each field, departure first; on the ground at another field, that field comes first.")
         Text("CHART", style = LocalExtra.current.overline, color = Hud.TextFaint)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             listOf("Night" to "night", "Day" to "day").forEach { (label, key) ->
@@ -372,6 +379,25 @@ private fun GroundChartOptions(options: Map<String, String>, onChange: (Map<Stri
         }
         Text("How much ground fits across the page while it follows you.", fontSize = 11.sp, color = Hud.TextFaint)
     }
+}
+
+/**
+ * Which of the mission's fields a chart board draws (the `fields` option: `dep`, `arr`, `alt`, all three by
+ * default; at least one stays chosen). A field that is two of them is drawn once.
+ */
+@Composable
+private fun FieldsOption(options: Map<String, String>, onChange: (Map<String, String>) -> Unit, note: String) {
+    val on = (options["fields"] ?: "dep,arr,alt").split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+    Text("FIELDS", style = LocalExtra.current.overline, color = Hud.TextFaint)
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        listOf("Departure" to "dep", "Arrival" to "arr", "Alternate" to "alt").forEach { (label, key) ->
+            Choice(label, key in on) {
+                val next = if (key in on) on - key else on + key
+                if (next.isNotEmpty()) onChange(options + ("fields" to listOf("dep", "arr", "alt").filter { it in next }.joinToString(",")))
+            }
+        }
+    }
+    Text(note, fontSize = 11.sp, color = Hud.TextFaint)
 }
 
 /** What the map board is told before the flight, because in the cockpit there is nothing to tell it with. */
@@ -427,6 +453,17 @@ private fun MapOptions(options: Map<String, String>, onChange: (Map<String, Stri
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             com.bmscompanion.app.ui.components.OwnJetLook.names.forEachIndexed { i, name ->
                 Choice(name, (options["jet"] ?: "1") == i.toString()) { set("jet", i.toString()) }
+            }
+        }
+        // the jet's shape and colour on this board (OwnJetLook; the board's own, never the device's)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            com.bmscompanion.app.ui.components.OwnJetLook.shapes.forEachIndexed { i, name ->
+                Choice(name, (options["jetshape"] ?: "0") == i.toString()) { set("jetshape", i.toString()) }
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            com.bmscompanion.app.ui.components.OwnJetLook.colorNames.forEachIndexed { i, name ->
+                Choice(name, (options["jetcolor"] ?: "0") == i.toString()) { set("jetcolor", i.toString()) }
             }
         }
         Text("TOWNS", style = LocalExtra.current.overline, color = Hud.TextFaint)

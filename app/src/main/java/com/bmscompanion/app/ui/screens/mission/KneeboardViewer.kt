@@ -138,8 +138,14 @@ object CockpitKneeboards {
         val now = System.currentTimeMillis()
         if (!force && loaded && now - lastAt < POLL_MS - 500) return@withLock
         lastAt = now
-        val a = MissionLink.kbState()
-        if (a.value != null || a.reached) {
+        // the pages of the aircraft Upd Kneeboard is on (1.4.2): the F-16's, or the F-15C's right halves
+        val ac = com.bmscompanion.app.ui.screens.wdp.KneeboardPrintSession.aircraft
+        val a = MissionLink.kbState(ac)
+        if (ac != com.bmscompanion.app.data.mission.KbAircraft.F16 && a.value != null && a.value.aircraft != ac) {
+            // a PC before 1.4.2 answers with the F-16's pages whatever is asked
+            state = null
+            error = "BMS Companion on the PC is older than this device's: it shows the F-16's pages only."
+        } else if (a.value != null || a.reached) {
             // a refusal may still carry the state (a theater with no page folder): both are kept
             state = a.value
             error = a.error ?: a.value?.error
@@ -166,7 +172,8 @@ fun PollCockpitKneeboards() {
     val link by MissionLink.state.collectAsState()
     val online = link is LinkState.Online
     val ez = info?.ezBoards
-    val key = listOf(ez?.lastRun?.time, ez?.running, info?.kneeboard?.exported, info?.briefing?.modified, info?.mission?.populated?.at, info.wdpMode)
+    val key = listOf(ez?.lastRun?.time, ez?.running, info?.kneeboard?.exported, info?.briefing?.modified, info?.mission?.populated?.at, info.wdpMode,
+        com.bmscompanion.app.ui.screens.wdp.KneeboardPrintSession.aircraft)
     LaunchedEffect(online, key) {
         if (!online) return@LaunchedEffect
         CockpitKneeboards.refresh(force = true)
@@ -228,7 +235,7 @@ private fun sinceLine(s: KbPrintState): String {
 /** A half page as BMS shows it, at [w] px wide (the PC's picture), kept while a newer one loads. */
 @Composable
 private fun CockpitHalf(s: KbSlot, side: Char, w: Int, modifier: Modifier = Modifier) {
-    val path = KbCockpit.picturePath(s, side, w)
+    val path = KbCockpit.picturePath(s, side, w, CockpitKneeboards.state?.aircraft ?: com.bmscompanion.app.data.mission.KbAircraft.F16)
     var img by remember(s.n, side, w) { mutableStateOf<ImageBitmap?>(null) }
     var failed by remember(s.n, side, w) { mutableStateOf(false) }
     LaunchedEffect(path) {
@@ -287,7 +294,9 @@ private fun CockpitPageCard(state: KbPrintState?, s: KbSlot, w: Int, modifier: M
         }
         Spacer(Modifier.height(6.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (side in listOf('L', 'R')) {
+            // the F-15C's page is its right half alone (1.4.2): shown at a half's width all the same
+            val sides = cockpitSides(state)
+            for (side in sides) {
                 Column(Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).clickable { onOpen(side) }.plannerProbe("Kneeboards/View/${s.n}$side")) {
                     Box {
                         CockpitHalf(s, side, w, Modifier.fillMaxWidth())
@@ -297,9 +306,14 @@ private fun CockpitPageCard(state: KbPrintState?, s: KbSlot, w: Int, modifier: M
                     HalfCaption(s, side)
                 }
             }
+            if (sides.size == 1) Spacer(Modifier.weight(1f))
         }
     }
 }
+
+/** The halves a page has in the cockpit, for the aircraft [state] is of ([KbAircraft.sides]). */
+private fun cockpitSides(state: KbPrintState?): List<Char> =
+    com.bmscompanion.app.data.mission.KbAircraft.sides(state?.aircraft ?: com.bmscompanion.app.data.mission.KbAircraft.F16)
 
 
 // ------------------------------------------------------------------------------------------------ the section
@@ -406,8 +420,26 @@ private fun CockpitPages(nav: NavHostController, wdp: Boolean) {
     val all = KbCockpit.pages(s)
     val shown = CockpitKneeboards.shownPages(s)
     val originals = all.filter { KbCockpit.allOriginal(it) }
+    // whose cockpit: the F-16's pages or the F-15C's (right leg only), the same choice as Upd Kneeboard's (1.4.2)
+    val acNow = s.aircraft
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(bottom = 6.dp)) {
+        for (ac in com.bmscompanion.app.data.mission.KbAircraft.ALL) {
+            val on = ac == acNow
+            Text(
+                com.bmscompanion.app.data.mission.KbAircraft.name(ac),
+                Modifier.clip(RoundedCornerShape(8.dp)).background(if (on) Hud.Amber.copy(alpha = 0.2f) else Hud.Surface2)
+                    .border(1.dp, if (on) Hud.Amber else Hud.Outline.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                    .clickable(enabled = !on && !com.bmscompanion.app.ui.screens.wdp.KneeboardPrintSession.busy) {
+                        com.bmscompanion.app.ui.screens.wdp.KneeboardPrintSession.switchAircraft(ac, byHand = true)
+                    }
+                    .padding(horizontal = 11.dp, vertical = 5.dp).plannerProbe("Kneeboards/Aircraft/$ac"),
+                color = if (on) Hud.Text else Hud.TextDim, fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
     Text(
-        "What Falcon BMS shows on the kneeboard in the cockpit" + (s.theater?.let { " (${it.trim()})" } ?: "") +
+        "What Falcon BMS shows on the " + (if (com.bmscompanion.app.data.mission.KbAircraft.rightOnly(acNow)) "F-15C's kneeboard (right leg only)" else "kneeboard") +
+            " in the cockpit" + (s.theater?.let { " (${it.trim()})" } ?: "") +
             ", read from its page files: whichever tool wrote a page last is what you will see. " + sinceLine(s),
         style = MaterialTheme.typography.bodySmall, color = Hud.TextDim,
     )
@@ -416,7 +448,7 @@ private fun CockpitPages(nav: NavHostController, wdp: Boolean) {
         style = MaterialTheme.typography.bodySmall, color = Hud.Amber, modifier = Modifier.padding(top = 4.dp),
     )
     Spacer(Modifier.height(10.dp))
-    val halves = shown.flatMap { listOf(it.n to 'L', it.n to 'R') }
+    val halves = shown.flatMap { p -> cockpitSides(s).map { p.n to it } }
     if (shown.isEmpty()) {
         Text(
             "Every page holds Falcon BMS's own page as it ships: nothing has been made for the cockpit yet. " +
@@ -506,15 +538,17 @@ fun CockpitKneeboardCard(nav: NavHostController, onOpenTab: (MissionTab) -> Unit
             PageStatus(s, page)
         }
         Spacer(Modifier.height(8.dp))
-        val halves = pages.flatMap { listOf(it.n to 'L', it.n to 'R') }
+        val sides = cockpitSides(s)
+        val halves = pages.flatMap { p -> sides.map { p.n to it } }
         // (a wide card would make the page taller than a screen: two halves of at most 240 dp each)
         Row(Modifier.widthIn(max = 488.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            for (side in listOf('L', 'R')) {
+            for (side in sides) {
                 Column(Modifier.weight(1f).clip(RoundedCornerShape(6.dp)).clickable { CockpitKneeboards.open(nav, halves, page.n to side) }) {
                     CockpitHalf(page, side, 512, Modifier.fillMaxWidth())
                     HalfCaption(page, side)
                 }
             }
+            if (sides.size == 1) Spacer(Modifier.weight(1f))
         }
         Text(
             "Page ${page.n}" + clock(KbCockpit.shown(page).modified).takeIf { it.isNotEmpty() }?.let { ", written $it" }.orEmpty() + ". " + sinceLine(s),
@@ -577,7 +611,7 @@ fun CockpitKneeboardViewer(nav: NavHostController, start: Int) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (slot == null) LoadingBox()
             else {
-                val path = KbCockpit.picturePath(slot, side, 1024)
+                val path = KbCockpit.picturePath(slot, side, 1024, s?.aircraft ?: com.bmscompanion.app.data.mission.KbAircraft.F16)
                 var bmp by remember(n, side) { mutableStateOf<android.graphics.Bitmap?>(null) }
                 LaunchedEffect(path) { MissionLink.fetchBytes(path, timeoutMs = 30_000)?.let { Repo.decodeBitmap(it) }?.let { bmp = it } }
                 val b = bmp

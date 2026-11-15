@@ -65,7 +65,9 @@ all there is), a tap opening the large viewer.
 file is the left knee's page *n*, the right half the right knee's. BMS reads them **as you enter the cockpit**: a page
 written while you are in it shows the next time you enter. Whichever tool wrote a page last is what you see. Upd
 Kneeboard's window shows who made each page now (BMS, EZBoards, HTML Briefing, WDP or this app), worked out from the
-file itself, and **Put BMS's page back** restores the page BMS ships.
+file itself, and **Put BMS's page back** restores the page BMS ships. **The F-15C** (1.4.2) has its own sixteen files,
+`1403.dds` to `1418.dds`, in the same folder; its pilot model carries a kneeboard on the right leg only, so each page
+is the right half of its file. Upd Kneeboard's **F-16 | F-15C** switch plans and prints either, each with its own plan.
 
 **None of them keeps a backup of a page** — the pages are made again at will. Upd Kneeboard writes a page beside
 itself first and then moves it into place, keeps the file's own format, and leaves the half you did not print exactly

@@ -124,10 +124,34 @@
       "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3 (intro); BMS Threat Guide (Big Bird, Flap Lid B)"
     },
     {
-      "symbol": "Hat (semicircle over symbol)",
-      "meaning": "Airborne emitter (aircraft radar)",
-      "details": "Standard RWR convention for air threats; the BMS docs only show it in figures.",
-      "source": "general"
+      "symbol": "Hat (chevron over symbol)",
+      "meaning": "Airplane (airborne radar)",
+      "details": "A chevron over the code marks an aircraft radar. The ALR-93 legend shows it; the ALR-56M marks airborne emitters the same way.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.4.2 (ALR-93 symbols)"
+    },
+    {
+      "symbol": "SAM arrow (ALR-93)",
+      "meaning": "SAM",
+      "details": "An arrow at the lower left of the code, pointing up and right, marks a surface-to-air missile system or its fire control radar.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.4.2 (ALR-93 symbols)"
+    },
+    {
+      "symbol": "AAA box (ALR-93)",
+      "meaning": "AAA",
+      "details": "A box under the code with a gun barrel rising from its corner marks radar-directed anti-aircraft artillery.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.4.2 (ALR-93 symbols)"
+    },
+    {
+      "symbol": "Search radar stroke (ALR-93)",
+      "meaning": "Search radar",
+      "details": "A stroke rising from the top of the code marks an air search radar (shown only with the training library, LIB SET).",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.4.2 (ALR-93 symbols)"
+    },
+    {
+      "symbol": "Square (ALR-93)",
+      "meaning": "Lethal threat",
+      "details": "A square round the code marks a lethal threat; the diamond is the highest priority and the octagon a launch.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS 2.7.3.4.2 (ALR-93 symbols)"
     }
   ],
   "alr93SymbolCodes": {

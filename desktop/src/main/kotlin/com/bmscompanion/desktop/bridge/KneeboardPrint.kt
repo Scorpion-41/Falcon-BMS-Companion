@@ -1,5 +1,6 @@
 package com.bmscompanion.desktop.bridge
 
+import com.bmscompanion.app.data.mission.KbAircraft
 import com.bmscompanion.app.data.mission.KbFileResult
 import com.bmscompanion.app.data.mission.KbFileSend
 import com.bmscompanion.app.data.mission.KbKind
@@ -34,7 +35,13 @@ import javax.imageio.ImageWriteParam
  * Balkans's, the Korean add-ons KTO's). The left half of each 2048-pixel file is the left knee's page *n*, the right
  * half the right knee's; BMS reads them on entering the cockpit. When `KoreaObj_HiRes` holds a twin, BMS shows the twin
  * (`g_bHiResTextures`, on by default), so the twin is printed too, in its own size. A page file that does not exist is
- * never created (OFM KTO has page 1 only). The F-15C's pages are not touched.
+ * never created (OFM KTO has page 1 only).
+ *
+ * **The F-15C's pages** (1.4.2, `?ac=f15` on every route, [KbFileSend.aircraft]): `1403.dds`-`1418.dds` in the same
+ * folder, the same 2048-pixel layout, but its pilot model has a kneeboard on the right leg only, so only the right half
+ * of each file is the page (EZBoards writes it at x = 1024; its claims are `SET KNEEBOARD[F15_<n>]`) and the left half is
+ * never written. BMS ships its own copies in `Docs\07 Kneeboard Templates\F-15C\DDS_Backup` (Korea) and the Balkans'
+ * `Docs\04 3d Kneeboards Backup\02 F-15C`.
  *
  * **How a file is written** (the user's rule: these pages are made again at will by EZBoards, BMS's PRINT or this
  * Print, so they are written in place, with no backup):
@@ -82,7 +89,7 @@ object KneeboardPrint {
         val key = "${req.method} ${req.path.trimEnd('/')}"
         return try {
             when (key) {
-                "GET /api/kbprint/state" -> routeState()
+                "GET /api/kbprint/state" -> routeState(acOf(req))
                 "GET /api/kbprint/thumb" -> routeThumb(req)
                 "POST /api/kbprint/file" -> routeFile(req)
                 "POST /api/kbprint/shipped" -> routeShipped(req)
@@ -97,25 +104,28 @@ object KneeboardPrint {
     private fun error(sentence: String, status: Int) =
         ApiResponse.json("""{"error":${JsonPrimitive(sentence)}}""", status)
 
-    /** The page folder of the theater Falcon BMS is set to, on this PC. */
-    private fun here(): Place? {
+    /** The page folder of the theater Falcon BMS is set to, on this PC, for the aircraft [ac] ([KbAircraft]). */
+    private fun here(ac: String = KbAircraft.F16): Place? {
         val base = Bridge.install.baseDir ?: return null
-        return place(File(base), Bridge.install.theater)
+        return place(File(base), Bridge.install.theater, ac)
     }
+
+    /** The aircraft a route asks for: `ac=f15`, else the F-16 (what every earlier device asks for). */
+    private fun acOf(req: ApiRequest) = KbAircraft.of(req.query["ac"])
 
     private const val NO_BMS = "Falcon BMS was not found on this PC: set its folder in BMS Companion's settings on the PC."
 
     private var lastSharedDir: String? = null
 
-    private fun routeState(): ApiResponse {
-        val at = here()
+    private fun routeState(ac: String = KbAircraft.F16): ApiResponse {
+        val at = here(ac)
         val snap = Bridge.snapshot()
         // U7 (R3-KNEEBOARD §10): what BMS itself reports as its 3D data folder, logged once per value to settle whether it is absolute
         snap.strings[THR_3DDATADIR]?.takeIf { it.isNotBlank() && it != lastSharedDir }?.let {
             lastSharedDir = it
             BridgeLog.info("Falcon BMS reports its 3D data folder as \"$it\" (kneeboard pages are taken from the theater definition: ${at?.folderLabel ?: "none"})")
         }
-        val state = if (at == null) KbPrintState(error = NO_BMS)
+        val state = if (at == null) KbPrintState(error = NO_BMS, aircraft = ac)
         else state(at, Bridge.settings.value.EzBoardsDir, snap.flying)
         val body = json.encodeToString(KbPrintState.serializer(), state)
         return ApiResponse.json(body, if (state.error != null) 409 else 200)
@@ -125,7 +135,7 @@ object KneeboardPrint {
         val n = req.query["n"]?.toIntOrNull()?.takeIf { it in 1..PAGES } ?: return error("Which page? n must be 1 to $PAGES.", 400)
         val side = when (req.query["side"]?.uppercase()) { "L" -> 0; "R" -> 1; else -> return error("Which half? side must be L or R.", 400) }
         val w = (req.query["w"]?.toIntOrNull() ?: 256).coerceIn(32, 1024)
-        val at = here() ?: return error(NO_BMS, 409)
+        val at = here(acOf(req)) ?: return error(NO_BMS, 409)
         // twin=1: the page's KoreaObj_HiRes twin, which BMS shows in the cockpit when there is one (the page itself if not)
         val twin = req.query["twin"].let { it == "1" || it.equals("true", true) }
         val (jpeg, why) = thumb(at, n, side, w, twin)
@@ -136,12 +146,14 @@ object KneeboardPrint {
         val send = runCatching { json.decodeFromString(KbFileSend.serializer(), req.body.toString(Charsets.UTF_8)) }.getOrNull()
             ?: return error("The page to print could not be read.", 400)
         if (send.n !in 1..PAGES) return error("Which page? n must be 1 to $PAGES.", 400)
-        val halves = listOf(send.left, send.right)
+        val ac = KbAircraft.of(send.aircraft)
+        // the F-15C shows the right half alone: its left half is never written, whatever was sent for it
+        val halves = listOf(send.left.takeIf { !KbAircraft.rightOnly(ac) }, send.right)
         val pics = arrayOfNulls<BufferedImage>(2)
         val kinds = arrayOfNulls<String>(2)
         // a Picture half whose file is gone or cannot be read is left as it is, and says why; the other half still goes
         val refused = arrayOfNulls<String>(2)
-        val at = here() ?: return error(NO_BMS, 409)
+        val at = here(ac) ?: return error(NO_BMS, 409)
         for (s in 0..1) {
             val half = halves[s] ?: continue
             if (half.kind == KbKind.LEAVE) continue
@@ -157,7 +169,7 @@ object KneeboardPrint {
             kinds[s] = half.kind
         }
         if (pics.all { it == null } && refused.any { it != null }) {
-            val r = KbFileResult(pageName(send.n), KbFileResult.REFUSED, refused.filterNotNull().joinToString(" "), refused[0], refused[1])
+            val r = KbFileResult(at.name(send.n), KbFileResult.REFUSED, refused.filterNotNull().joinToString(" "), refused[0], refused[1])
             BridgeLog.info("Upd Kneeboard: ${r.file} ${r.status} — ${r.reason}")
             return result(r)
         }
@@ -204,7 +216,7 @@ object KneeboardPrint {
         val which = req.query["n"]?.trim()?.lowercase() ?: "all"
         val pages = if (which == "all") (1..PAGES).toList()
         else listOf(which.toIntOrNull()?.takeIf { it in 1..PAGES } ?: return error("Which page? n must be 1 to $PAGES, or all.", 400))
-        val at = here() ?: return error(NO_BMS, 409)
+        val at = here(acOf(req)) ?: return error(NO_BMS, 409)
         at.error?.let { return error(it, 409) }
         if (at.shipped == null) return error(noShipped(at), 409)
         val results = putShipped(at, pages)
@@ -215,7 +227,8 @@ object KneeboardPrint {
     }
 
     private fun noShipped(at: Place) =
-        "Falcon BMS ships no copy of these pages for ${at.theater?.name ?: "this theater"} (only Korea KTO, the Balkans and Hellas have one)."
+        if (KbAircraft.rightOnly(at.ac)) "Falcon BMS ships no copy of the F-15C's pages for ${at.theater?.name ?: "this theater"} (only Korea KTO and the Balkans have one)."
+        else "Falcon BMS ships no copy of these pages for ${at.theater?.name ?: "this theater"} (only Korea KTO, the Balkans and Hellas have one)."
 
     /** A PNG (or any picture ImageIO reads) sent as base64, with or without a `data:` prefix. */
     fun picture(base64: String): BufferedImage? = runCatching {
@@ -237,27 +250,34 @@ object KneeboardPrint {
         val hiRes: File?,
         val shipped: File?,
         val error: String?,
+        /** whose pages ([KbAircraft]): the F-16's `7982-7997.dds`, or the F-15C's `1403-1418.dds` (right halves only) */
+        val ac: String = KbAircraft.F16,
     ) {
-        fun page(n: Int): File? = dir?.let { File(it, pageName(n)) }
-        fun twin(n: Int): File? = hiRes?.let { File(it, pageName(n)) }?.takeIf { it.isFile }
-        fun shippedPage(n: Int): File? = shipped?.let { File(it, pageName(n)) }?.takeIf { it.isFile }
+        /** page [n]'s file name for this aircraft ("7983.dds", "1404.dds") */
+        fun name(n: Int): String = KbAircraft.fileOf(ac, n)
+        fun page(n: Int): File? = dir?.let { File(it, name(n)) }
+        fun twin(n: Int): File? = hiRes?.let { File(it, name(n)) }?.takeIf { it.isFile }
+        fun shippedPage(n: Int): File? = shipped?.let { File(it, name(n)) }?.takeIf { it.isFile }
         /** [dir] relative to the BMS folder, never an absolute path */
         val folderLabel: String? get() = dir?.let { relative(root, it) }
     }
 
-    /** The page folder for the theater named [theaterName] (the registry's `curTheater`) in the BMS folder [root]. */
-    fun place(root: File, theaterName: String?): Place {
+    /**
+     * The page folder for the theater named [theaterName] (the registry's `curTheater`) in the BMS folder [root], for
+     * the aircraft [ac] ([KbAircraft]: both aircraft's pages live in the same `KoreaObj`).
+     */
+    fun place(root: File, theaterName: String?, ac: String = KbAircraft.F16): Place {
         val set = Theaters.at(root)
         val t = if (theaterName.isNullOrBlank()) set.all.firstOrNull() else set.byName(theaterName)
         if (t == null) {
             val why = if (theaterName.isNullOrBlank()) (set.error ?: "Falcon BMS's theater list could not be read.")
             else "Falcon BMS is set to the theater \"${theaterName.trim()}\", which its theater list does not name."
-            return Place(root, null, null, null, null, why)
+            return Place(root, null, null, null, null, why, ac)
         }
         val dir = set.kneeboardDir(t)
             ?: return Place(root, t, null, null, null,
-                "${t.name} has no kneeboard folder (${t.threeDDataDir ?: "its 3D data folder"}\\KoreaObj was not found).")
-        return Place(root, t, dir, set.kneeboardHiResDir(t), shippedFolder(set, t), null)
+                "${t.name} has no kneeboard folder (${t.threeDDataDir ?: "its 3D data folder"}\\KoreaObj was not found).", ac)
+        return Place(root, t, dir, set.kneeboardHiResDir(t), shippedFolder(set, t, ac), null, ac)
     }
 
     private val shippedCache = HashMap<String, Pair<Long, File?>>()
@@ -267,13 +287,17 @@ object KneeboardPrint {
      * (`Data\Add-On Hellas\Docs\03 3d Kneeboard Backup`, `Data\Add-On Balkans\Docs\04 3d Kneeboards Backup\01 F-16`), or
      * the install's own `Docs` for the base theater's (`Docs\07 Kneeboard Templates\F-16\DDS_Backup`): a folder whose
      * path names a kneeboard, not an F-15's, holding `7982.dds`. Three levels down at most; null when there is none.
+     * For the F-15C ([ac]) the folder whose path names a kneeboard **and** the F-15, holding `1403.dds` (`Docs\07
+     * Kneeboard Templates\F-15C\DDS_Backup`, the Balkans' `Docs\04 3d Kneeboards Backup\02 F-15C`).
      */
-    private fun shippedFolder(set: Theaters.TheaterSet, t: Theaters.Theater): File? {
+    private fun shippedFolder(set: Theaters.TheaterSet, t: Theaters.Theater, ac: String = KbAircraft.F16): File? {
         val rel = t.threeDDataDir ?: return null
         val first = rel.replace('/', '\\').split('\\').firstOrNull { it.isNotBlank() } ?: return null
         val docs = (if (first.startsWith("add-on", ignoreCase = true)) Theaters.resolveDir(set.data, "$first\\Docs")
         else Theaters.resolveDir(set.root, "Docs")) ?: return null
-        val key = Theaters.canonical(docs)
+        val f15 = KbAircraft.rightOnly(ac)
+        val firstFile = KbAircraft.fileOf(ac, 1)
+        val key = Theaters.canonical(docs) + "|" + ac
         synchronized(shippedCache) {
             shippedCache[key]?.let { (at, f) -> if (System.currentTimeMillis() - at < 30_000) return f }
         }
@@ -282,8 +306,9 @@ object KneeboardPrint {
             val kids = runCatching { d.listFiles()?.toList().orEmpty() }.getOrDefault(emptyList())
             if (depth > 0) {
                 val path = relative(docs, d).lowercase()
-                if (path.contains("kneeboard") && !path.contains("f-15") && !path.contains("f15") &&
-                    kids.any { it.isFile && it.name.equals("7982.dds", ignoreCase = true) }) found += d
+                val namesF15 = path.contains("f-15") || path.contains("f15")
+                if (path.contains("kneeboard") && namesF15 == f15 &&
+                    kids.any { it.isFile && it.name.equals(firstFile, ignoreCase = true) }) found += d
             }
             if (depth < 3) kids.filter { it.isDirectory }.sortedBy { it.name.lowercase() }.forEach { walk(it, depth + 1) }
         }
@@ -311,10 +336,16 @@ object KneeboardPrint {
 
     // ================================================================ state
 
-    /** The halves EZBoards writes at every PRINT: its `SET KNEEBOARD[F16_<n><L|R>]=…` lines ("1L", "1R"), read only. */
-    fun ezClaims(dir: File?): Set<String> {
+    /**
+     * The halves EZBoards writes at every PRINT: its `SET KNEEBOARD[F16_<n><L|R>]=…` lines ("1L", "1R"), read only. For
+     * the F-15C ([ac]) its `SET KNEEBOARD[F15_<n>]=…` lines, each the right half of page n ("1R": EZBoards writes the
+     * F-15's page at x = 1024).
+     */
+    fun ezClaims(dir: File?, ac: String = KbAircraft.F16): Set<String> {
         val f = dir?.let { File(it, "CONFIG_USER.BAT") }?.takeIf { it.isFile } ?: return emptySet()
-        val line = Regex("""^\s*SET\s+"?KNEEBOARD\[F16_(\d{1,2})([LR])]\s*=\s*(.*?)"?\s*$""", RegexOption.IGNORE_CASE)
+        val f15 = KbAircraft.rightOnly(ac)
+        val line = if (f15) Regex("""^\s*SET\s+"?KNEEBOARD\[F15_(\d{1,2})()]\s*=\s*(.*?)"?\s*$""", RegexOption.IGNORE_CASE)
+        else Regex("""^\s*SET\s+"?KNEEBOARD\[F16_(\d{1,2})([LR])]\s*=\s*(.*?)"?\s*$""", RegexOption.IGNORE_CASE)
         val out = LinkedHashSet<String>()
         runCatching {
             f.readLines(Charsets.ISO_8859_1).forEach { raw ->
@@ -322,7 +353,8 @@ object KneeboardPrint {
                 if (t.startsWith("REM", ignoreCase = true) || t.startsWith("::")) return@forEach
                 val m = line.find(t) ?: return@forEach
                 val n = m.groupValues[1].toInt()
-                if (n in 1..PAGES && m.groupValues[3].isNotBlank()) out += "$n${m.groupValues[2].uppercase()}"
+                val side = if (f15) "R" else m.groupValues[2].uppercase()
+                if (n in 1..PAGES && m.groupValues[3].isNotBlank()) out += "$n$side"
             }
         }
         return out
@@ -331,7 +363,7 @@ object KneeboardPrint {
     /** What the Print window shows: the folder, the sixteen files and who made each half. [ezDir] is EZBoards' folder. */
     fun state(at: Place, ezDir: String?, in3d: Boolean): KbPrintState {
         val ez = ezDir?.takeIf { EzBoardsRunner.isValidDir(it) }?.let(::File)
-        val claims = ezClaims(ez)
+        val claims = ezClaims(ez, at.ac)
         val ezConfig = ez?.let { File(it, "CONFIG_USER.BAT") }?.takeIf { it.isFile }?.let { f ->
             val rel = relative(at.root, f)
             if (rel != f.name) rel else "${ez.name}\\${f.name}"
@@ -351,6 +383,7 @@ object KneeboardPrint {
             ezConfig = ezConfig,
             error = at.error,
             mode = MissionSource.mode(),
+            aircraft = at.ac,
         )
     }
 
@@ -419,7 +452,7 @@ object KneeboardPrint {
     }
 
     private fun slotOf(at: Place, n: Int, f: File?, claims: Set<String>): KbSlot {
-        val base = KbSlot(n = n, file = pageName(n), ezLeft = "${n}L" in claims, ezRight = "${n}R" in claims)
+        val base = KbSlot(n = n, file = at.name(n), ezLeft = "${n}L" in claims, ezRight = "${n}R" in claims)
         if (f == null || !f.isFile) return base.copy(left = KbOwner.MISSING, right = KbOwner.MISSING, missing = true)
         val head = ByteArray(Dds.HEADER)
         val length = f.length()
@@ -427,7 +460,9 @@ object KneeboardPrint {
         if (read.isFailure) return base.copy(modified = f.lastModified(), problem = why(read.exceptionOrNull()!!, f, at))
         val info = Dds.header(if (length >= Dds.HEADER) head else head.copyOf(length.toInt()), length)
         // a twin is another size than BMS's shipped copy: judged by the layout BMS's own pages have
-        val o = owners(f, info, at.shippedPage(n)?.takeIf { f == at.page(n) || it.length() == length })
+        val o0 = owners(f, info, at.shippedPage(n)?.takeIf { f == at.page(n) || it.length() == length })
+        // the F-15C's left half is never shown in the cockpit: reported as its right half, so a page is judged by what shows
+        val o = if (KbAircraft.rightOnly(at.ac)) Owners(o0.right, o0.right, o0.rightKind, o0.rightKind) else o0
         return base.copy(
             format = info.format, mips = info.levels, size = info.width, left = o.left, right = o.right,
             modified = f.lastModified(), leftKind = o.leftKind, rightKind = o.rightKind,
@@ -457,8 +492,8 @@ object KneeboardPrint {
         KbKind.SCHEDULE, KbKind.ROUTE_MAP_DARK, KbKind.TARGET_PICTURES,
         // 1.4.1: the Noteboard
         KbKind.NOTES, KbKind.NOTES_2,
-        // 1.4.2: the weather map
-        KbKind.WEATHER_MAP,
+        // 1.4.2: the weather map, the radio presets, a chart page from the chart viewer
+        KbKind.WEATHER_MAP, KbKind.RADIO, KbKind.CHART,
     )
 
     private val TAG_RE = Regex("""^$TAG(\S*)(?: L([a-z])([0-9a-z-]))?(?: R([a-z])([0-9a-z-]))?""")
@@ -524,8 +559,10 @@ object KneeboardPrint {
     @Synchronized
     fun printPage(at: Place, n: Int, pics: Array<BufferedImage?>, kinds: Array<String?>): Printed {
         val t0 = System.nanoTime()
-        val name = pageName(n)
+        val name = at.name(n)
         val ms = { (System.nanoTime() - t0) / 1_000_000 }
+        // the F-15C's left half is never seen in the cockpit, so it is never written
+        if (KbAircraft.rightOnly(at.ac)) pics[0] = null
         at.error?.let { return Printed(KbFileResult(name, KbFileResult.REFUSED, it), ms(), null) }
         val file = at.page(n)
         if (file == null || !file.isFile)
@@ -611,7 +648,7 @@ object KneeboardPrint {
      */
     @Synchronized
     fun putShipped(at: Place, pages: List<Int>): List<KbFileResult> = pages.map { n ->
-        val name = pageName(n)
+        val name = at.name(n)
         val file = at.page(n)
         try {
             when {
@@ -655,7 +692,7 @@ object KneeboardPrint {
      */
     @Synchronized
     fun putShippedHalves(at: Place, n: Int, sides: Set<Int>): KbFileResult {
-        val name = pageName(n)
+        val name = at.name(n)
         val file = at.page(n)
         return try {
             when {
@@ -730,7 +767,7 @@ object KneeboardPrint {
     fun thumb(at: Place, n: Int, side: Int, w: Int, twin: Boolean = false): Pair<ByteArray?, String?> {
         at.error?.let { return null to it }
         val file = (if (twin) at.twin(n) else null) ?: at.page(n)
-        if (file == null || !file.isFile) return null to "Page $n (${pageName(n)}) does not exist in this theater's kneeboard folder."
+        if (file == null || !file.isFile) return null to "Page $n (${at.name(n)}) does not exist in this theater's kneeboard folder."
         val key = "${file.path}|${file.length()}|${file.lastModified()}|$side|$w"
         synchronized(thumbs) { thumbs[key]?.let { return it to null } }
         return try {

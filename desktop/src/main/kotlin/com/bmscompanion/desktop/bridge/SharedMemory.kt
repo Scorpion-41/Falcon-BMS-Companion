@@ -221,6 +221,8 @@ object SharedMemoryReader {
             vviFpm = -fd.f(FD.zDot) * 60.0,
             gLoad = fd.f(FD.gs).toDouble(), aoa = fd.f(FD.alpha).toDouble(),
             fuelInternal = fd.f(FD.internalFuel).toDouble(), fuelExternal = fd.f(FD.externalFuel).toDouble(), fuelFlow = fd.f(FD.fuelFlow).toDouble(),
+            // the cockpit's totalizer (the TOTAL of the fuel gauge and the DED's BINGO page), when it reads as one
+            fuelTotalizer = totalizer(fd.f(FD.total).toDouble(), fd.f(FD.internalFuel).toDouble() + fd.f(FD.externalFuel).toDouble()),
             chaff = max(0f, fd.f(FD.chaffCount)).toInt(), flares = max(0f, fd.f(FD.flareCount)).toInt(),
             gear = fd.f(FD.gearPos).toDouble(), speedBrake = fd.f(FD.speedBrake).toDouble(),
             desiredCourse = fd.f(FD.desiredCourse).toDouble(),
@@ -244,6 +246,7 @@ object SharedMemoryReader {
             live = live.copy(
                 radarAltFt = fd2.f(FD2.ralt).toDouble(),
                 bingo = fd2.f(FD2.bingoFuel).toDouble(),
+                magDev = fd2.f(FD2.magDeviationSystem).toDouble().takeIf { it.isFinite() && kotlin.math.abs(it) <= 60.0 },
                 timeSec = fd2.i(FD2.currentTime),
                 lat = fd2.f(FD2.latitude).toDouble(), lon = fd2.f(FD2.longitude).toDouble(),
                 navMode = fd2.u8(FD2.navMode),
@@ -266,6 +269,18 @@ object SharedMemoryReader {
         readOsb()?.let { (l, r) -> live = live.copy(mfdLeft = l, mfdRight = r) }
         snap.live = live.copy(navPoints = snap.navPointStrings.mapNotNull(::parseNavPoint))
         return snap
+    }
+
+    /**
+     * FlightData's `total` (the fuel totalizer) when it reads as the jet's fuel: not 0, finite, and within a third of
+     * internal + external ([sum]; the two can differ by what the totalizer counts, never by a factor). Else 0, and
+     * the devices add internal and external as before.
+     */
+    internal fun totalizer(total: Double, sum: Double): Double = when {
+        !total.isFinite() || total <= 0.0 -> 0.0
+        sum <= 0.0 -> if (total < 100_000.0) total else 0.0
+        total in sum * 0.75..sum * 1.33 -> total
+        else -> 0.0
     }
 
     /** The two MFD bezels, left then right, or null when BMS is not publishing them. See [Osb]. */

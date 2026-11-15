@@ -39,11 +39,17 @@ private fun pcFileActions(bmsHere: Boolean): List<ImageAction> = listOfNotNull(
         }
     },
     ImageAction("Save a copy…", "save") { name, load ->
-        val target = withContext(Dispatchers.Main) {
-            val dlg = java.awt.FileDialog(null as java.awt.Frame?, "Save screenshot", java.awt.FileDialog.SAVE)
-            dlg.file = name
-            dlg.isVisible = true
-            dlg.file?.let { File(dlg.directory, it) }
+        // Windows' own dialog on a thread of its own (PcFileDialogs): a modal dialog shown on the thread Compose draws
+        // on runs a nested loop in which Compose can draw, which crashed in Skia on a pilot's PC
+        val ext = name.substringAfterLast('.', "png").lowercase()
+        val req = com.bmscompanion.app.data.FileRequest(
+            com.bmscompanion.app.data.FileMode.SAVE, "Save screenshot", null, name,
+            listOf(com.bmscompanion.app.data.FileFilter("Picture (*.$ext)", ext)), 0, ext,
+        )
+        val target = when (val a = PcFileDialogs.show(req)) {
+            is com.bmscompanion.app.data.NativeAnswer.Picked -> File(a.path)
+            com.bmscompanion.app.data.NativeAnswer.Cancelled -> null
+            is com.bmscompanion.app.data.NativeAnswer.Failed -> "Could not open the save window: ${a.why}".let { return@ImageAction it }
         } ?: return@ImageAction null
         val bytes = load() ?: return@ImageAction "Could not download the screenshot"
         withContext(Dispatchers.IO) { runCatching { target.writeBytes(bytes); "Saved to ${target.path}" }.getOrElse { "Could not save: ${it.message}" } }

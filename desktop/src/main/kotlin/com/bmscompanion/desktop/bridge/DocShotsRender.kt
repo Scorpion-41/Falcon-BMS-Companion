@@ -1,6 +1,7 @@
 package com.bmscompanion.desktop.bridge
 
 import androidx.compose.foundation.background
+import com.bmscompanion.app.ui.screens.mission.ordnanceType
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.CompositionLocalProvider
@@ -183,7 +184,18 @@ internal object DocShotsRender {
         }
         if (want("map")) shot(out, "mission-map", PC, "mission", MissionTab.MAP)
         if (want("map-live")) shot(out, "mission-map-live", PC, "mission", MissionTab.MAP, live)
-        if (want("briefing")) shot(out, "mission-briefing", PC, "mission", MissionTab.BRIEF)
+        if (want("briefing")) {
+            shot(out, "mission-briefing", PC, "mission", MissionTab.BRIEF)
+            // the Loadout card's drag index and load per jet (LoadoutDrag.kt), as the card words them
+            val b = m?.briefing
+            val tables = kotlinx.coroutines.runBlocking { com.bmscompanion.app.ui.screens.mission.loadoutTables() }
+            if (b != null && tables != null) for (f in b.ordnance) for (ac in f.aircraft) {
+                val type = b.ordnanceType(f.flight)
+                val fig = com.bmscompanion.app.ui.screens.mission.loadoutFigures(tables, type, "korea-kto", ac.stores)
+                appendLine("     loadout ${f.flight} ${ac.name} ($type): " + (fig?.let { "drag index ${it.drag}, load ${it.loadLb} lb" } ?: "no figures") +
+                    " — " + ac.stores.joinToString { "${it.qty}x ${it.name}" })
+            }
+        }
         if (want("comms")) shot(out, "mission-comms", PC, "mission", MissionTab.COMMS)
         if (want("radio")) {
             // BMS is not running, so the bridge's tick does not read its log: the copy's newest log is read here
@@ -251,6 +263,8 @@ internal object DocShotsRender {
         }
         if (want("phone-briefing")) shot(out, "phone-briefing", PHONE, "mission", MissionTab.BRIEF)
         if (want("phone-map")) shot(out, "phone-map", PHONE, "mission", MissionTab.MAP, live)
+        // the Taxi page with the airfield's Info box among its cards (the departure field, no jet)
+        if (want("taxi")) for (s in listOf(PC, TABLET, PHONE)) shot(out, "mission-taxi-${s.name}", s, "mission", MissionTab.TAXI)
         if (want("phone-dash")) { DashLayouts.choose(2); shot(out, "phone-dash-flying", PHONE, "mission", MissionTab.DASH, live) }
         // the switch into WDP mode, and the Mission section's page before the first Populate
         if (want("wdp")) {

@@ -44,6 +44,7 @@ enum class CmdTool(val label: String, val key: Char, val hint: String) {
     LINK_ADD("Link +", 'L', "Click two objectives to link them (campaign starts only)"),
     LINK_REMOVE("Link −", 'K', "Click two linked objectives to unlink them (campaign starts only)"),
     OWNER("Owner", 'O', "Click an objective or a unit to give it the owner chosen beside the tools"),
+    ASSIGN("Assign", 'G', "Assign objective: click battalions or brigades (Shift adds), then the objective they are ordered to (their orders kept)"),
     RULER("Ruler", 'R', "Drag from one point to another: track and distance"),
 }
 
@@ -189,6 +190,11 @@ object CommandSlots {
     var editing: ((CmdDocument) -> CmdEditing?)? = null
     /** drawn over the workspace while a file is open (an editor's dialogs: add a unit, the bulk operations) */
     val overlays = ArrayList<@Composable (CmdContext) -> Unit>()
+    /**
+     * The Assign objective tool's edit: the selected battalions and brigades ([units]) ordered to [objective], their
+     * orders kept; it says "Done: …" or the refusal in the status line itself and answers the refusal (null = done).
+     */
+    var assignObjective: ((CmdContext, List<CmdRef>, CmdRef) -> String?)? = null
 }
 
 /** The session of the PC window: the open file, the page, the tool, the selection, the dialogs. */

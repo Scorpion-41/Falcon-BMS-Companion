@@ -192,6 +192,12 @@ fun TaxiView(
      * the way in with the spot Ground gave; whatever the pilot picks afterwards wins.
      */
     radio: com.bmscompanion.app.data.mission.RadioTaxi? = null,
+    /**
+     * The airfield page's Info box (coordinates as BMS shows them, elevation, runways, frequencies — [DivertBlock]),
+     * shown with the cards (the Mission section's Taxi page; null elsewhere: the airfield page has its own under its
+     * chart).
+     */
+    fieldInfo: (@Composable () -> Unit)? = null,
 ) {
     /**
      * A carrier is the deck and nothing else.
@@ -321,7 +327,7 @@ fun TaxiView(
         val chart = @Composable { m: Modifier ->
             BoxWithConstraints(m.border(1.dp, Hud.Outline.copy(alpha = 0.6f), RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp))) {
                 // a short chart (a tablet on its side under the Mission header) puts the turn buttons beside the zoom ones
-                val shortChart = maxHeight < 330.dp
+                val shortChart = maxHeight < ChartKeys.shortBelow
                 val tallNow = maxHeight > maxWidth
                 SideEffect {
                     if (TaxiPrefs.tall != tallNow) TaxiPrefs.tall = tallNow
@@ -359,6 +365,8 @@ fun TaxiView(
         val cards = @Composable { m: Modifier ->
             Column(m.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 ClearanceCard(live, spot, outbound, route, liveSpot, clearance, chosenRunway) { highlight = it }
+                // the field's position, elevation, runways and frequencies right under the clearance, before the ramp
+                fieldInfo?.invoke()
                 SpotCard(route, spot, liveSpot, outbound, chosenRunway) { pickedSpot = it }
                 FieldCard(field, route, live, if (outbound) null else chosenRunway, chosenRunway)
             }
@@ -532,22 +540,37 @@ private fun ZoomButtons(modifier: Modifier, inks: ChartInks, state: com.bmscompa
     }
     // the turn buttons in a column of their own beside the zoom ones when the chart is short, else above them
     if (sideBySide) {
-        Row(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.Bottom) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { turnButtons() }
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { zoomColumn(inks, state) }
+        Row(modifier, horizontalArrangement = Arrangement.spacedBy(ChartKeys.groupGap), verticalAlignment = Alignment.Bottom) {
+            Column(verticalArrangement = Arrangement.spacedBy(ChartKeys.gap)) { turnButtons() }
+            Column(verticalArrangement = Arrangement.spacedBy(ChartKeys.gap)) { zoomColumn(inks, state) }
         }
     } else {
-        Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(ChartKeys.gap)) {
             turnButtons()
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(ChartKeys.groupGap - ChartKeys.gap))
             zoomColumn(inks, state)
         }
     }
 }
 
+/**
+ * The chart's buttons, a mouse's size or a finger's ([com.bmscompanion.app.data.Platform.touchFirst]: Android, a
+ * phone's or a tablet's browser): by finger 46 dp keys, 10 dp apart, and the turn buttons 32 dp clear of the zoom
+ * ones stacked (22 beside them) — at 34 dp, 6 apart and 16 clear a finger reaching for + turned the chart instead.
+ */
+private object ChartKeys {
+    val finger: Boolean get() = com.bmscompanion.app.data.Platform.touchFirst
+    val key get() = if (finger) 46.dp else 34.dp
+    val gap get() = if (finger) 10.dp else 6.dp
+    val groupGap get() = if (finger) 22.dp else 10.dp
+    val glyph get() = if (finger) 20.sp else 15.sp
+    /** under this the turn buttons go beside the zoom ones: six keys stacked, their gaps and the corner's padding */
+    val shortBelow get() = if (finger) 380.dp else 330.dp
+}
+
 @Composable
 private fun buttonFace(inks: ChartInks, on: Boolean, describe: String, action: () -> Unit, face: @Composable () -> Unit) = Box(
-    Modifier.size(34.dp).clip(RoundedCornerShape(8.dp))
+    Modifier.size(ChartKeys.key).clip(RoundedCornerShape(8.dp))
         .background(if (on) inks.accent.copy(alpha = 0.9f) else inks.ground.copy(alpha = 0.88f))
         .border(1.dp, inks.dim.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
         .clickable(onClick = action)
@@ -562,8 +585,8 @@ private fun iconFace(inks: ChartInks, v: androidx.compose.ui.graphics.vector.Ima
 /** Zoom in, zoom out, fit — the fit button an icon: the browser's font has no ⤢ (CLAUDE.md, the glyph gotcha). */
 @Composable
 private fun zoomColumn(inks: ChartInks, state: com.bmscompanion.app.ui.components.ChartState) {
-    buttonFace(inks, false, "Zoom in", { state.zoomBy(com.bmscompanion.app.ui.components.ZoomMath.BUTTON) }) { Text("+", color = inks.ink, fontSize = 15.sp) }
-    buttonFace(inks, false, "Zoom out", { state.zoomBy(1f / com.bmscompanion.app.ui.components.ZoomMath.BUTTON) }) { Text("−", color = inks.ink, fontSize = 15.sp) }
+    buttonFace(inks, false, "Zoom in", { state.zoomBy(com.bmscompanion.app.ui.components.ZoomMath.BUTTON) }) { Text("+", color = inks.ink, fontSize = ChartKeys.glyph) }
+    buttonFace(inks, false, "Zoom out", { state.zoomBy(1f / com.bmscompanion.app.ui.components.ZoomMath.BUTTON) }) { Text("−", color = inks.ink, fontSize = ChartKeys.glyph) }
     buttonFace(inks, false, "Fit the chart", { state.reset() }) { iconFace(inks, androidx.compose.material.icons.Icons.Default.FitScreen, false) }
 }
 

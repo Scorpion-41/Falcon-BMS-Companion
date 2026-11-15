@@ -103,19 +103,28 @@ object PlannerWindows {
     var arg: String? by mutableStateOf(null)
         private set
 
-    fun show(w: PlannerWindow, arg: String? = null) {
+    /** the window on screen was opened with `share = false`: neither it nor its closing goes to the other devices */
+    private var local = false
+
+    /**
+     * [share] false: a window opened outside the Mission section (Upd Kneeboard over the chart viewer), which the other
+     * devices must not open in theirs when they become active.
+     */
+    fun show(w: PlannerWindow, arg: String? = null, share: Boolean = true) {
         val was = open to this.arg
         this.arg = arg
         open = w
+        local = !share
         // where the pilot is: the other devices take it when they become active (PlannerSessionSync, 1.4.2)
-        if (was != (w to arg)) PlannerSessionSync.navChanged()
+        if (share && was != (w to arg)) PlannerSessionSync.navChanged()
     }
 
     fun close() {
         val was = open
         open = null
         arg = null
-        if (was != null) PlannerSessionSync.navChanged()
+        if (was != null && !local) PlannerSessionSync.navChanged()
+        local = false
     }
 
     val isOpen: Boolean get() = open != null

@@ -334,6 +334,23 @@ object PrintPagesOutcome {
                     val st = com.bmscompanion.app.ui.components.MapLook.style
                     check(s.contains("/${if (com.bmscompanion.app.ui.components.BmsChart.isChart(st)) "" else st}"), "routemap in EZBoards mode: on the Mission map's style ($st)", s)
                 }
+                // 1.4.2: the Radio presets (the Comms page's) and a chart page put on a half by the chart viewer
+                line("== 1c. The Radio presets and a chart page (1.4.2)")
+                check(KneeboardPrintSession.EZ_KINDS.containsAll(listOf(KbKind.RADIO, KbKind.CHART)), "radio and chart: offered in EZBoards mode too")
+                KneeboardPages.of(KbKind.RADIO)?.let { spike2.capture(it) }?.also { File(pics, "drawn-radio.png").writeBytes(it) }
+                val radioSaid = KneeboardExtraPages.drawn[KbKind.RADIO].orEmpty()
+                val radioRows = KneeboardExtraPages.rows[KbKind.RADIO].orEmpty()
+                line("    radio: $radioSaid" + (spike2.error?.let { "; $it" } ?: ""))
+                check(radioRows.isNotEmpty(), "radio: the presets and the comm ladder are on the page (${radioRows.size} rows)", radioSaid)
+                // (a two-page instrument chart the app bundles; its second page)
+                KneeboardPrintSession.charts["7L"] = com.bmscompanion.app.ui.screens.wdp.KbChartPick("charts/00afc0c9a17f2275-2.webp", "Check · an instrument chart, page 2 of 2")
+                val chartPng = KneeboardPages.of(KbKind.CHART)?.let { spike2.capture(it) }?.also { File(pics, "drawn-chart.png").writeBytes(it) }
+                val chartSaid = KneeboardExtraPages.drawn[KbKind.CHART].orEmpty()
+                line("    chart: $chartSaid" + (spike2.error?.let { "; $it" } ?: ""))
+                val chartImg = chartPng?.let { runCatching { ImageIO.read(ByteArrayInputStream(it)) }.getOrNull() }
+                check(chartSaid.startsWith("chart charts/") && chartImg != null && count(chartImg) { r, g, b -> r + g + b < 600 } > 1500,
+                    "chart: the chart page is drawn on the half", chartSaid)
+                KneeboardPrintSession.charts.remove("7L")
                 Bridge.update { it.copy(MissionSource = com.bmscompanion.app.data.mission.MissionMode.WDP) }
                 waitFor(20_000) { MissionLink.info.value?.mission?.mode == com.bmscompanion.app.data.mission.MissionMode.WDP }
             } finally { spike2.close() }

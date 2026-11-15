@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { loadTheaters, readPptTable } from './theaters.mjs';
 import { theaterProjection } from './projection.mjs';
 import { buildReference, writePictures, withThreatPictures, TACREF_CATS, TACREF_SUBCATS } from './reference.mjs';
+import { loadRadarMapping, readRadars, withEcmPrograms } from './ecm.mjs';
 import { buildCatalog as buildCfgCatalog } from './cfgcatalog.mjs';
 import { buildAirports } from './airports.mjs';
 import { buildAirfields } from './airfields.mjs';
@@ -150,9 +151,13 @@ async function main() {
   // threat_pictures.json reaches the app as each threat's `tacref` (withThreatPictures), and the photographs from
   // Wikimedia Commons (photos.mjs) stand in for BMS's pictures and give entries without one theirs (applyPhotos)
   const threatPictures = JSON.parse(fs.readFileSync(path.join(CURATED, 'threat_pictures.json'), 'utf8'));
+  // threat_radars.json + BMS's radar data give each air-defence threat its ECM pod programs (ecm.mjs)
+  const radarMapping = loadRadarMapping(CURATED);
+  const radars = readRadars();
   const threats = {};
   for (const f of fs.readdirSync(CURATED).filter((f) => /^threats_.*\.json$/.test(f))) {
     threats[f] = withThreatPictures(f, JSON.parse(fs.readFileSync(path.join(CURATED, f), 'utf8')), threatPictures, encList);
+    withEcmPrograms(f, threats[f], radarMapping, radars);
   }
   const { replaced: photoReplaced } = applyPhotos({ acList, wpList, encList, threats });
   writeJson(path.join(OUT, 'aircraft.json'), acList);
@@ -184,7 +189,7 @@ ground charts: ${airfieldFiles.size} fields, all agreeing with their airport rec
   // reaches the app inside the ground charts and the config catalogue, so the files themselves are not shipped
   // threat_pictures.json reaches the app as each threat's `tacref`, photos.json as pictures and photo_credits.json as
   // data/credits/photos.json (photos.mjs); the threats were read above
-  const EXTRACTOR_ONLY = new Set(['carriers.json', 'cfgnotes.json', 'threat_pictures.json', 'photos.json', 'photo_credits.json']);
+  const EXTRACTOR_ONLY = new Set(['carriers.json', 'cfgnotes.json', 'threat_pictures.json', 'threat_radars.json', 'photos.json', 'photo_credits.json']);
   for (const f of fs.existsSync(CURATED) ? fs.readdirSync(CURATED) : []) {
     if (!f.endsWith('.json') || EXTRACTOR_ONLY.has(f)) continue;
     let obj = JSON.parse(fs.readFileSync(path.join(CURATED, f), 'utf8'));

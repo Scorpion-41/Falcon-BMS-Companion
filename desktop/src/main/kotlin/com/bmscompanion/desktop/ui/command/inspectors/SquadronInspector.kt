@@ -84,9 +84,16 @@ object SquadronInspector : CmdInspector {
                 }
                 if (sq.ver >= 105) NumLine("Paint", sq.texSet.toLong(), -1L..99L, tip = "The skin set its aircraft wear") { v -> ctx.apply(GroundOps.squadron(doc, sq, "Paint of ${AirOps.nameOf(doc, sq)}") { texSet = v.toInt() }) }
                 NumLine("Fuel", sq.fuel.toLong(), 0L..Int.MAX_VALUE.toLong(), unit = "lb") { v -> ctx.apply(GroundOps.squadron(doc, sq, "Fuel of ${AirOps.nameOf(doc, sq)}") { fuel = v.toInt() }) }
-                Line("Planned by BMS", tip = "Off: the campaign's air tasking does not plan missions for it") {
-                    CheckLine("", sq.unitFlags and GroundOps.U_NO_PLANNING == 0) { on -> ctx.apply(GroundOps.squadron(doc, sq, "Planning of ${AirOps.nameOf(doc, sq)}") { unitFlags = if (on) unitFlags and GroundOps.U_NO_PLANNING.inv() else unitFlags or GroundOps.U_NO_PLANNING }) }
+                val offMap = GroundOps.offMap(doc, sq)
+                Line("NoPlan", tip = "On: BMS's air tasking plans no missions from this squadron. Every squadron based off the map needs it") {
+                    CheckLine(if (offMap && sq.unitFlags and GroundOps.U_NO_PLANNING == 0) "needed: based off the map" else "", sq.unitFlags and GroundOps.U_NO_PLANNING != 0) { on ->
+                        ctx.apply(GroundOps.setFlag(doc, listOf(sq), GroundOps.U_NO_PLANNING, on, "NoPlan ${if (on) "on" else "off"}: ${AirOps.nameOf(doc, sq)}"))
+                    }
                 }
+                Line("Set by HQ", tip = "BMS's own name (flag 0x80 clear): its headquarters may task and use the squadron as it sees fit. Off, BMS passes it over where the HQ chooses squadrons. Not the same as NoPlan") {
+                    CheckLine("", GroundOps.setByHq(sq)) { on -> ctx.apply(GroundOps.setFlag(doc, listOf(sq), GroundOps.U_NOT_BY_HQ, !on, "Set by HQ ${if (on) "on" else "off"}: ${AirOps.nameOf(doc, sq)}")) }
+                }
+                if (offMap) Hint("Based off the map (no airbase in the theater): BMS's own campaigns set NoPlan on such squadrons.")
                 Line("Active", tip = "An inactive squadron waits (a reinforcement)") {
                     CheckLine("", sq.unitFlags and GroundOps.U_INACTIVE == 0) { on -> ctx.apply(GroundOps.squadron(doc, sq, "Active ${AirOps.nameOf(doc, sq)}") { unitFlags = if (on) unitFlags and GroundOps.U_INACTIVE.inv() else unitFlags or GroundOps.U_INACTIVE }) }
                 }

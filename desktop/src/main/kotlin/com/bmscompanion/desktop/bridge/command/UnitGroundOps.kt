@@ -25,9 +25,21 @@ object GroundOps {
     const val U_ORDERED = 0x8
     const val U_NO_PLANNING = 0x10
     const val U_INACTIVE = 0x20000
+    /**
+     * Set: the unit is **not** "Set by HQ" — BMS's headquarters leaves its orders alone (BattalionClass::SetUnitOrders
+     * returns at once when it is set); clear in most units of BMS's saves.
+     */
+    const val U_NOT_BY_HQ = 0x80
+    const val U_REFUSED = 0x800
+    /** A ground unit's temporary destination; the same bit is a flight's "Locked" (one bit, two names in BMS). */
+    const val U_TEMP_DEST = 0x1000000
     const val SUB_AIR_DEFENCE = 1
     const val SUB_SUPPLY = 13
     const val SUB_ENGINEER = 5
+    /** artillery battalions: rockets (10), self-propelled (11), missiles (12), towed (14) */
+    val SUB_ARTILLERY = setOf(10, 11, 12, 14)
+    /** the orders BMS gives only for an objective of the unit's own team (BattalionClass::SetUnitOrders: 0x241) */
+    val OWN_SIDE_ORDERS = setOf(0, 6, 9)
 
     val ORDERS = listOf("Reserve", "Capture", "Secure", "Assault", "Airborne", "Commando", "Defend", "Support", "Repair", "Air defence", "Recon", "Radar")
     val SPECIALTIES = listOf("General", "Air-to-air", "Air-to-ground", "Anti-ship", "SEAD", "CSAR")
@@ -105,9 +117,11 @@ object GroundOps {
         if (base is CmdObjective && !AirOps.allied(doc, sq.owner, doc.ownerNow(base))) UnitEdit.refuse("${objName(doc, base)} belongs to a team not allied to the squadron's")
         val old = sq.airbaseId
         val now = doc.cmp?.currentTime ?: 0L
+        val wasAway = offMap(doc, sq) || doc.unit(old) is CmdTaskForce
         touch(sq)
         sq.airbaseId = id; sq.x = cell.first; sq.y = cell.second
-        sq.unitFlags = if (base is CmdTaskForce) sq.unitFlags or U_NO_PLANNING else sq.unitFlags and U_NO_PLANNING.inv()
+        // NoPlan on a carrier; taken off only when it was there for an off-map base or a carrier (one chosen for an airbase stays)
+        if (base is CmdTaskForce) sq.unitFlags = sq.unitFlags or U_NO_PLANNING else if (wasAway) sq.unitFlags = sq.unitFlags and U_NO_PLANNING.inv()
         for (f in doc.flights.filter { it.squadronId == sq.id && it.waypoints.isNotEmpty() }) {
             touch(f)
             val w0 = f.waypoints[0]
@@ -330,6 +344,86 @@ object GroundOps {
             when (what) { "Orders" -> b.orders = br.orders; "Owner" -> b.owner = br.owner; "Division" -> b.division = br.division; "Objective" -> { b.aobj = br.aobj; b.destX = br.destX; b.destY = br.destY } }
         }
     }
+
+    // ---------------------------------------------------------------- orders, halt, flags
+
+    /** Whether BMS's HQ gives [u] its orders ("Set by HQ": bit 0x80 clear). */
+    fun setByHq(u: CmdUnit): Boolean = u.unitFlags and U_NOT_BY_HQ == 0
+
+    /** Whether a squadron is based off the map: no base objective or task force, or its cell outside the theater. */
+    fun offMap(doc: CommandSave, sq: CmdSquadron): Boolean {
+        if (sq.airbaseId.isNone) return true
+        val h = doc.cmp ?: return false
+        val n = h.theaterSizeX.takeIf { it > 0 } ?: return false
+        val m = h.theaterSizeY.takeIf { it > 0 } ?: n
+        return sq.x < 0 || sq.y < 0 || sq.x >= n || sq.y >= m
+    }
+
+    /**
+     * One bit of the unit flags set or cleared on every unit of [units] (a squadron's header row follows): NoPlan
+     * ([U_NO_PLANNING]), not set by HQ ([U_NOT_BY_HQ]), a temporary destination ([U_TEMP_DEST]).
+     */
+    fun setFlag(doc: CommandSave, units: List<CmdUnit>, bit: Int, on: Boolean, label: String): CommandEdit = UnitEdit.mutate(label, doc, setOf("uni", "cmp")) {
+        val list = units.filter { (it.unitFlags and bit != 0) != on }
+        if (list.isEmpty()) UnitEdit.refuse(if (units.size == 1) "it is so already" else "every one of them is so already")
+        for (u in list) { touch(u); u.unitFlags = if (on) u.unitFlags or bit else u.unitFlags and bit.inv(); if (u is CmdSquadron) syncInfo(this, u) }
+    }
+
+    /**
+     * Halt: the battalions and brigades of [units] stop where they stand — route cleared (current waypoint 0), the
+     * destination their own cell (+ 1, BMS's way of storing it), not moving and no temporary destination (with one,
+     * BattalionClass::MoveUnit picks the final place from the orders again). A brigade's battalions halt with it when
+     * [withElements]. Orders and objective stay; BMS's HQ may order the unit on later unless NoPlan is set.
+     */
+    fun halt(doc: CommandSave, units: List<CmdUnit>, withElements: Boolean = true): CommandEdit {
+        val ground = units.filterIsInstance<CmdGroundUnit>()
+        val all = (ground + if (withElements) ground.filterIsInstance<CmdBrigade>().flatMap { doc.battalionsOf(it) } else emptyList()).distinct()
+        val label = if (ground.size == 1) "Halt ${AirOps.nameOf(doc, ground[0])}" else "Halt ${ground.size} ground units"
+        return UnitEdit.mutate(label, doc) {
+            if (all.isEmpty()) UnitEdit.refuse("only battalions and brigades halt")
+            for (g in all) {
+                touch(g)
+                g.waypoints.clear(); g.currentWp = 0
+                g.destX = g.x + 1; g.destY = g.y + 1
+                g.unitFlags = g.unitFlags and (U_MOVING or U_TEMP_DEST).inv()
+            }
+        }
+    }
+
+    /**
+     * Orders for a battalion or a brigade, as BMS gives them (BattalionClass / BrigadeClass::SetUnitOrders): the orders
+     * and the assigned objective [o] (its destination that objective's cell), ordered, not refused, no temporary
+     * destination, last check 0 (it is looked at again at once), its old route cleared so BMS plots one to the
+     * objective. Reserve for an air-defence battalion is Air defence. Reserve, Defend and Air defence are refused for an
+     * objective of another team (BMS ignores them). A brigade also gets tactic 0 and moving (when not on the objective),
+     * and its battalions are left unassigned for the brigade to hand out (BMS's way); [battalionsToo] gives them the
+     * same orders and objective at once — except a battalion not set by HQ, which BMS never orders.
+     */
+    fun giveOrders(doc: CommandSave, u: CmdGroundUnit, orders: Int, o: CmdObjective?, battalionsToo: Boolean): CommandEdit =
+        UnitEdit.mutate("Orders of ${AirOps.nameOf(doc, u)}: ${ORDERS.getOrElse(orders) { "$orders" }}${o?.let { " — ${objName(doc, it)}" } ?: ""}", doc) {
+            if (orders !in ORDERS.indices) UnitEdit.refuse("BMS's orders are 0 to ${ORDERS.size - 1}")
+            if (o != null && orders in OWN_SIDE_ORDERS && doc.ownerNow(o) != u.owner)
+                UnitEdit.refuse("${ORDERS[orders]} is an order for an objective of the unit's own team; ${objName(doc, o)} belongs to ${doc.teamName(doc.ownerNow(o))}")
+            fun order(g: CmdGroundUnit, n: Int) {
+                touch(g)
+                g.orders = if (n == 0 && g is CmdBattalion && subOf(doc, g) == SUB_AIR_DEFENCE) 9 else n
+                g.aobj = o?.id ?: VuId.NONE
+                if (o != null) { val (x, y) = objCell(o); g.destX = x + 1; g.destY = y + 1 }
+                g.unitFlags = (g.unitFlags or U_ORDERED) and (U_REFUSED or U_TEMP_DEST).inv()
+                g.lastCheck = 0
+                g.waypoints.clear(); g.currentWp = 0
+            }
+            order(u, orders)
+            if (u is CmdBrigade) {
+                u.tactic = 0
+                if (o != null && objCell(o) != (u.x to u.y)) u.unitFlags = u.unitFlags or U_MOVING
+                for (b in doc.battalionsOf(u)) {
+                    // (ordered here: assigned, so the brigade does not hand them out again over these orders)
+                    if (battalionsToo && setByHq(b)) { order(b, orders); b.unitFlags = b.unitFlags or U_ASSIGNED }
+                    else { touch(b); b.unitFlags = b.unitFlags and U_ASSIGNED.inv() }
+                }
+            }
+        }
 
     /**
      * An air-defence battalion on objective [o]: BMS stands its vehicles on the objective's SAM and AAA sites (the

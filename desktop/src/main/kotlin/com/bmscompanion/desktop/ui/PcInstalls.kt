@@ -31,7 +31,7 @@ object PcInstalls : BmsInstallsSource {
 
     override suspend fun change(op: String, args: Map<String, String>) = withContext(Dispatchers.IO) { call("POST", "/api/bms/installs/$op", args) }
 
-    override suspend fun pickFolder(start: String?): String? = pickFolder("Add a Falcon BMS folder", start)
+    override suspend fun pickFolder(start: String?): String? = pickFolderAwait("Add a Falcon BMS folder", start)
 }
 
 /** The card on the server page: live while this PC reads Falcon BMS. */

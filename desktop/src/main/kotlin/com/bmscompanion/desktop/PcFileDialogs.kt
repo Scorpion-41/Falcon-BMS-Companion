@@ -59,6 +59,23 @@ object PcFileDialogs : NativeFileDialogs {
         return done.await()
     }
 
+    /**
+     * The settings' folder pickers (`pickFolder` in `PcCards.kt`): Windows' folder dialog on a thread of its own,
+     * opening in [start]; [done] is called on that thread with the answer. Never a modal loop on the thread Compose
+     * draws on: a Swing chooser opened from a click ran one, and Compose drew a frame from inside it and crashed in
+     * Skia (a pilot's report on 1.4.2, `CanvasKt._nRestore`).
+     */
+    fun pickFolder(title: String, start: File?, done: (NativeAnswer) -> Unit) {
+        Thread({
+            val answer = try {
+                ItemDialog.show(FileRequest(FileMode.FOLDER, title, null, null, emptyList(), 0, null), start)
+            } catch (e: Throwable) {
+                NativeAnswer.Failed(e.message ?: e.javaClass.simpleName)
+            }
+            done(answer)
+        }, "folder dialog").apply { isDaemon = true }.start()
+    }
+
     /** File Explorer on [folder] (made first when it is missing, as WDP's DataCards folders are), for Cards Directory. */
     override fun explore(folder: String): Boolean = try {
         val f = (PcFileRoutes.resolve(folder) as? PcFileRoutes.Target.Ok)?.file

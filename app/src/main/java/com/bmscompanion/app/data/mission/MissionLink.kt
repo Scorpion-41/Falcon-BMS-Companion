@@ -536,18 +536,20 @@ object MissionLink {
     }
 
     /** The kneeboard pages of the theater BMS is set to, and who made each half now. */
-    suspend fun kbState(): PcAnswer<KbPrintState> = answer("GET", "/api/kbprint/state", KbPrintState.serializer(), timeoutMs = 20_000)
+    suspend fun kbState(ac: String = KbAircraft.F16): PcAnswer<KbPrintState> =
+        answer("GET", "/api/kbprint/state" + KbAircraft.query(ac).let { if (it.isEmpty()) "" else "?$it" }, KbPrintState.serializer(), timeoutMs = 20_000)
 
-    /** Where a picture of what one half page holds now is fetched from ([fetchBytes]); [side] `L` or `R`, [width] 0 for the PC's default. */
-    fun kbThumbPath(n: Int, side: Char, width: Int = 0) = "/api/kbprint/thumb?n=$n&side=$side" + if (width > 0) "&w=$width" else ""
+    /** Where a picture of what one half page holds now is fetched from ([fetchBytes]); [side] `L` or `R`, [width] 0 for the PC's default; [ac] whose pages (KbAircraft). */
+    fun kbThumbPath(n: Int, side: Char, width: Int = 0, ac: String = KbAircraft.F16) = "/api/kbprint/thumb?n=$n&side=$side" + (if (width > 0) "&w=$width" else "") +
+        KbAircraft.query(ac).let { if (it.isEmpty()) "" else "&$it" }
 
     /** Prints one page file: each half drawn on this device as a 1024x1536 PNG, or left as it is when null. */
     suspend fun kbPrintFile(send: KbFileSend): PcAnswer<KbFileResult> =
         answer("POST", "/api/kbprint/file", KbFileResult.serializer(), Repo.json.encodeToString(KbFileSend.serializer(), send), timeoutMs = 90_000)
 
     /** Puts BMS's own shipped page back into page file [n], or into every page when [n] is null. */
-    suspend fun kbShipped(n: Int? = null): PcAnswer<List<KbFileResult>> =
-        answer("POST", "/api/kbprint/shipped?n=" + (n?.toString() ?: "all"), ListSerializer(KbFileResult.serializer()), timeoutMs = 90_000)
+    suspend fun kbShipped(n: Int? = null, ac: String = KbAircraft.F16): PcAnswer<List<KbFileResult>> =
+        answer("POST", "/api/kbprint/shipped?n=" + (n?.toString() ?: "all") + KbAircraft.query(ac).let { if (it.isEmpty()) "" else "&$it" }, ListSerializer(KbFileResult.serializer()), timeoutMs = 90_000)
     // ---- files on the BMS PC, for the Planner's file windows (docs/PROTOCOL.md, "Files on the BMS PC") ----
 
     /** The Planner's folders on the PC that exist there (the BMS folder, User\Config, the campaign folders, WDP's…) and its drives. */

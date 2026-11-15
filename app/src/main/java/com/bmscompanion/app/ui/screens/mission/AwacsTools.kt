@@ -221,20 +221,22 @@ private fun stackCall(g: AwGroup) = if (g.maxAlt - g.minAlt >= 4000) "stack ${al
 
 /** "GROUP BULLSEYE 270/35, 20 THOUSAND, TRACK NORTH, HOSTILE" */
 fun bullseyeCall(g: AwGroup, bull: Pair<Double, Double>, label: String = "group"): String {
-    val (brg, rng) = com.bmscompanion.app.ui.screens.bearingRange(bull.first, bull.second, g.x, g.y)
+    val (t, rng) = com.bmscompanion.app.ui.screens.bearingRange(bull.first, bull.second, g.x, g.y)
+    val brg = shownBearing(t, bull.first, bull.second)
     return "$label bullseye ${b3(brg)}/${rng.roundToInt()}, ${stackCall(g)}, track ${cardinal(g.hdg)}${speedCall(g)}, hostile${sizeCall(g)}".uppercase(Locale.US)
 }
 
 /** "COLT1, GROUP BRAA 045/22, 18 THOUSAND, HOT, HOSTILE" */
 fun braaCall(friendly: Contact, g: AwGroup): String {
-    val (brg, rng) = com.bmscompanion.app.ui.screens.bearingRange(friendly.x, friendly.y, g.x, g.y)
+    val (t, rng) = com.bmscompanion.app.ui.screens.bearingRange(friendly.x, friendly.y, g.x, g.y)
+    val brg = shownBearing(t, friendly.x, friendly.y)
     val asp = aspect(g.hdg, g.x, g.y, friendly.x, friendly.y)
     return "${friendly.group ?: friendly.name}, group BRAA ${b3(brg)}/${rng.roundToInt()}, ${stackCall(g)}, $asp${speedCall(g)}, hostile${sizeCall(g)}".uppercase(Locale.US)
 }
 
 /** "COLT1, VECTOR 315 FOR 28, GROUP 24 THOUSAND, INTERCEPT IN 3 MIN" */
 fun vectorCall(friendly: Contact, g: AwGroup, i: Intercept): String =
-    "${friendly.group ?: friendly.name}, vector ${b3(i.heading)} for ${i.rangeNm.roundToInt()}, ${stackCall(g)}, intercept in ${i.minutes.roundToInt()} min".uppercase(Locale.US)
+    "${friendly.group ?: friendly.name}, vector ${b3(shownBearing(i.heading, friendly.x, friendly.y))} for ${i.rangeNm.roundToInt()}, ${stackCall(g)}, intercept in ${i.minutes.roundToInt()} min".uppercase(Locale.US)
 
 /** Full picture: "PICTURE, 2 GROUPS. NORTH GROUP BULLSEYE …; SOUTH GROUP …" */
 fun pictureCall(groups: List<AwGroup>, bull: Pair<Double, Double>?): String {

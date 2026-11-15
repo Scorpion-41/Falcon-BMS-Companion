@@ -86,6 +86,8 @@ fun main() {
     // Compose for Web hands the maps a wheel event's raw deltaY: about 100 a notch in pixels (Chrome, Edge, Safari),
     // 3 in lines (Firefox). The unit is read off each event's deltaMode, so a notch zooms the same in every browser.
     watchWheelMode()
+    // two fingers on a map: Compose for Web passes on only the fingers that changed, and drops the rest (fixTouchLists)
+    fixTouchLists()
     com.bmscompanion.app.ui.components.ZoomMath.wheelUnit = {
         when (wheelMode()) { 1 -> 3f; 2 -> 1f; else -> 100f }
     }
@@ -213,6 +215,45 @@ private external fun watchWheelMode()
 
 @JsFun("() => { try { return (window.__bmscWheelMode | 0); } catch (e) { return 0; } }")
 private external fun wheelMode(): Int
+
+/**
+ * Two fingers on a map (a pinch, a two-finger pan, the taxi chart's twist). Compose for Web 1.7 turns each touch event
+ * into a pointer event of its `changedTouches` alone, and the scene then takes every finger missing from that list as
+ * lifted (`SyntheticEventSender.sendMissingReleases`): the second finger's touchstart released the first, and a
+ * touchmove in which one finger held still released it — so no gesture ever saw two fingers down at once, and a pinch
+ * was at best a pan. Here, in the capture phase before Compose's own listener on its canvas, a touchstart or touchmove
+ * is handed over with `changedTouches` = every finger on the screen (`touches`). A touchend that leaves fingers down
+ * releases them all (`changedTouches` = the lifted and the remaining), and the next move of one still down presses it
+ * again, so it carries on as a fresh one-finger drag. Not "a touchmove of those that remain": that left the lifted
+ * finger to a synthetic release, after which a browser that reuses touch identifiers (Chrome numbers fingers 0, 1, …
+ * every time) had that finger ignored in every later pinch — checked headless in Edge, the second pinch only panned.
+ * The last finger's touchend and a touchcancel go through as they are. Safari's own page pinch (it ignores
+ * `user-scalable=no`) is refused through its gesture events. `window.__bmscNoTouchFix` (set before the page starts)
+ * leaves it all out, for a before/after check.
+ */
+@JsFun(
+    """() => {
+    try {
+        if (window.__bmscTouchFix || window.__bmscNoTouchFix) return;
+        window.__bmscTouchFix = true;
+        const own = (e, k, v) => Object.defineProperty(e, k, { value: v, configurable: true });
+        // a list Compose reads as a TouchList (length, [i], item(i))
+        const list = (a) => { const o = Array.from(a); o.item = (i) => o[i] || null; return o; };
+        const fix = (e) => {
+            try {
+                const t = e.target;
+                if (!t || t.tagName !== 'CANVAS' || !e.touches) return;
+                if (e.type === 'touchstart' || e.type === 'touchmove') own(e, 'changedTouches', e.touches);
+                else if (e.type === 'touchend' && e.touches.length > 0) own(e, 'changedTouches', list([...e.changedTouches, ...e.touches]));
+            } catch (x) {}
+        };
+        for (const k of ['touchstart', 'touchmove', 'touchend']) window.addEventListener(k, fix, { capture: true, passive: true });
+        const no = (e) => { try { e.preventDefault(); } catch (x) {} };
+        for (const k of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(k, no, { passive: false });
+    } catch (e) {}
+}""",
+)
+private external fun fixTouchLists()
 
 private suspend fun loadFallbackFont(fonts: FontFamily.Resolver) {
     val bytes = runCatching { httpBytes("/fonts/SymbolsFallback.ttf") }.getOrNull() ?: return

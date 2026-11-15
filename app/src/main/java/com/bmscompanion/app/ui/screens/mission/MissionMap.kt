@@ -709,8 +709,10 @@ fun LiveMap(
                     HudChip("Labels", MapLayers.labels) { MapLayers.labels = !MapLayers.labels; MapLayers.save() }
                     HudChip("All fields", MapLayers.fields) { MapLayers.fields = !MapLayers.fields; MapLayers.save() }
                     HudChip("My jet", MapLayers.ownship) { MapLayers.ownship = !MapLayers.ownship; MapLayers.save() }
-                    // the jet's size on every map of this device: one press steps Small → Medium → Large
-                    if (MapLayers.ownship) HudChip("Jet size ${OwnJetLook.labels[OwnJetLook.size]}", false) { OwnJetLook.cycle() }
+                    // the jet's size, shape and colour on every map of this device (OwnJetSettings.kt)
+                    if (MapLayers.ownship) OwnJetChip()
+                    // the bearings printed (ownship box, cards, steerpoint list): magnetic as the jet, or true
+                    BearingChip()
                     HudChip("Ownship box", MapLayers.ownInfo) { MapLayers.ownInfo = !MapLayers.ownInfo; MapLayers.save() }
                 }
             }
@@ -754,10 +756,8 @@ private fun MapOptionsButton() {
             LayerRow("Labels", MapLayers.labels) { MapLayers.labels = it }
             LayerRow("All airfields", MapLayers.fields) { MapLayers.fields = it }
             LayerRow("My jet", MapLayers.ownship) { MapLayers.ownship = it }
-            Row(Modifier.padding(start = 16.dp, end = 14.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Jet size", color = Hud.TextDim, fontSize = 13.sp)
-                OwnJetLook.names.forEachIndexed { i, n -> HudChip(n, OwnJetLook.size == i) { OwnJetLook.choose(i) } }
-            }
+            OwnJetSettings(Modifier.padding(start = 16.dp, end = 14.dp, bottom = 4.dp).width(300.dp))
+            BearingChoice(Modifier.padding(start = 16.dp, end = 14.dp, bottom = 4.dp))
             LayerRow("Ownship box", MapLayers.ownInfo) { MapLayers.ownInfo = it }
             HorizontalDivider(color = Hud.Outline.copy(alpha = 0.6f))
             MapLookMenuItems()
@@ -1129,7 +1129,14 @@ fun SteerpointList(stpts: List<Stpt>, own: Pair<Double, Double>?, bull: Pair<Dou
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         PlanTags(s.fromPlan, s.notInJet, Modifier.padding(end = 6.dp), compact = true)
                         if (s.cleared) ClearedTag(Modifier.padding(end = 6.dp))
-                        Text(listOfNotNull(s.time, s.altText, s.action).joinToString(" · "), fontSize = 11.sp, color = Hud.TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        // the Briefing's Flight plan row's words (the comment too: a CAP's "(Departure: …)"), wrapped, never cut
+                        Text(
+                            listOfNotNull(
+                                s.time, s.altText, s.action?.takeIf { it != s.title }, s.cas?.let { "$it kt" },
+                                s.comments?.takeIf { it != s.desc },
+                            ).joinToString(" · "),
+                            Modifier.weight(1f, fill = false), fontSize = 11.sp, lineHeight = 14.sp, color = Hud.TextDim,
+                        )
                     }
                 }
                 if (s.hasPos) {
@@ -1138,6 +1145,6 @@ fun SteerpointList(stpts: List<Stpt>, own: Pair<Double, Double>?, bull: Pair<Dou
                 }
             }
         }
-        Text(if (own != null) "Bearing/range from you" else "Bearing/range from bullseye", fontSize = 10.sp, color = Hud.TextFaint)
+        Text((if (own != null) "Bearing/range from you" else "Bearing/range from bullseye") + ", ${BearingPrefs.word}", fontSize = 10.sp, color = Hud.TextFaint)
     }
 }

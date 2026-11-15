@@ -5,7 +5,7 @@
  *   node src/referencerun.mjs [--no-images]          (BMS_ROOT points at the install)
  *
  * Writes `data/encyclopedia.json`, `data/aircraft.json`, `data/weapons.json`, `data/curated/threats_*.json` (with
- * each threat's `tacref`), the pictures not yet in `img/tacref/`, and the counts and aircraft numbers in
+ * each threat's `tacref` and its radars' ECM programs, `ecm.mjs`),the pictures not yet in `img/tacref/`, and the counts and aircraft numbers in
  * `data/index.json`, with the photographs `photos.mjs` fetched put in place (`applyPhotos`; run it first when
  * `tools/curated/photos.json` changed). A full `main.mjs` run produces exactly the same files.
  */
@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { loadTheaters } from './theaters.mjs';
 import { buildReference, writePictures, withThreatPictures } from './reference.mjs';
 import { applyPhotos } from './photos.mjs';
+import { loadRadarMapping, readRadars, withEcmPrograms } from './ecm.mjs';
 import { writeJson } from './util.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -27,9 +28,12 @@ const theaters = loadTheaters();
 const { acList, wpList, encList, aircraftCount, imageJobs, sameNation } = buildReference(theaters);
 console.log(`same type, same nation: ${sameNation.length} aircraft: ${sameNation.join(', ')}`);
 const mapping = JSON.parse(fs.readFileSync(path.join(CURATED, 'threat_pictures.json'), 'utf8'));
+const radarMapping = loadRadarMapping(CURATED);
+const radars = readRadars();
 const threats = {};
 for (const f of fs.readdirSync(CURATED).filter((f) => /^threats_.*\.json$/.test(f))) {
   threats[f] = withThreatPictures(f, JSON.parse(fs.readFileSync(path.join(CURATED, f), 'utf8')), mapping, encList);
+  withEcmPrograms(f, threats[f], radarMapping, radars);
 }
 // the photographs from Wikimedia Commons (photos.mjs): in place of BMS's pictures, and for entries with none
 const { replaced, used } = applyPhotos({ acList, wpList, encList, threats });

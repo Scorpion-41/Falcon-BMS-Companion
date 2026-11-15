@@ -122,11 +122,29 @@ private fun MissionTaxiBody(env: MissionEnv) {
         onChoice = { MissionLink.publishTaxi(it.airportId, it.runway, it.outbound, it.spot) },
         // Ground's and Tower's calls to the flight, while BMS writes its debug log (RadioLog on the PC); nothing without it
         radio = com.bmscompanion.app.data.mission.RadioFeed.log.taxi,
+        // the airfield page's Info box (coordinates as BMS shows them, elevation, runways, every frequency), folded on
+        // the pilot's word and remembered on every device (open_taxi_info)
+        fieldInfo = airport?.let { a -> env.theater?.let { th -> { TaxiFieldInfo(th, a) } } },
     )
     com.bmscompanion.app.data.mission.RadioPolling(
         on = info?.radio?.state.let { it == com.bmscompanion.app.data.mission.RadioLogStatus.LIVE || it == com.bmscompanion.app.data.mission.RadioLogStatus.WAITING },
         periodMs = 2000,
     )
+}
+
+/**
+ * The airfield page's Info box on the Taxi page ([DivertBlock], unframed inside a fold): open to begin with, its
+ * folded line the field's position and elevation.
+ */
+@Composable
+private fun TaxiFieldInfo(th: com.bmscompanion.app.data.Theater, a: com.bmscompanion.app.data.Airport) {
+    val preview = remember(th, a.id) {
+        val c = com.bmscompanion.app.ui.screens.divertCoords(th, a)
+        listOfNotNull(c?.let { "${it.lat}  ${it.lng}" }, a.elevationFt?.let { "ELEV ${com.bmscompanion.app.ui.components.Fmt.num(it)} ft" }).joinToString("  ·  ")
+    }
+    com.bmscompanion.app.ui.components.CollapsibleCard(
+        "Airfield info", initiallyOpen = true, accent = Hud.Green, preview = preview, rememberKey = "taxi_info",
+    ) { com.bmscompanion.app.ui.screens.DivertBlock(th, a, framed = false) }
 }
 
 @Composable

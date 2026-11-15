@@ -103,7 +103,9 @@ object KneeboardPages {
      * 1.4.1), the rest of this file's, then [KneeboardExtraPages]'s and Target pictures.
      */
     val kinds: List<KbPageKind> get() = BASE.take(2) + KneeboardNotes.kinds + BASE.drop(2) +
-        KneeboardExtraPages.kinds.filter { k -> BASE.none { it.id == k.id } } + KneeboardTargets.kind
+        KneeboardExtraPages.kinds.filter { k -> BASE.none { it.id == k.id } } + KneeboardTargets.kind +
+        // 1.4.2: the radio presets, and a chart page put on a half by the chart viewer
+        KneeboardMorePages.kinds
 
     fun of(id: String?): KbPageKind? = kinds.firstOrNull { it.id == id }
 
@@ -111,7 +113,7 @@ object KneeboardPages {
     fun label(id: String?): String = of(id)?.label ?: id ?: LEAVE.label
 
     /** What a page file is called on the PC, for the answers before the PC has named it. */
-    fun fileOf(n: Int) = "${7981 + n}.dds"
+    fun fileOf(n: Int, ac: String = KneeboardPrintSession.aircraft) = com.bmscompanion.app.data.mission.KbAircraft.fileOf(ac, n)
 
     /** "left knee" / "right knee" */
     fun knee(side: Char) = if (side == 'L') "left knee" else "right knee"
@@ -125,6 +127,7 @@ object KneeboardPages {
         if (KneeboardEzSource.active) KneeboardEzSource.prepare()
         // the other page kinds load their own data (maps, airfields, forms): asked directly, not left to warm()
         if (kind in KneeboardExtraPages.ids) { KneeboardExtraPages.preload(kind); return }
+        if (kind in KneeboardMorePages.ids) { KneeboardMorePages.preload(kind); return }
         // a Noteboard: every change kept on the PC first, so the page printed is the one the VR board shows
         if (kind in KneeboardNotes.ids) { KneeboardNotes.preload(); return }
         if (kind !in CARD_KINDS) return

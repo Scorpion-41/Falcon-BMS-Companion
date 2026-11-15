@@ -1335,8 +1335,8 @@ internal object PlannerGuideText {
                 p("Where the port differs from WDP, it fixes one of WDP's bugs; each fix is numbered and documented with its evidence."),
                 p(
                     "Not in this Planner: WDP's Threats and Munition pages (the app's Threat Guide and Arsenal do that " +
-                        "job), its own map window (the Planner's Map page is BMS Companion's), paper printing and the " +
-                        "F-15C's kneeboard pages.",
+                        "job), its own map window (the Planner's Map page is BMS Companion's) and paper printing. " +
+                        "Upd Kneeboard writes the F-15C's kneeboard pages too (its right-leg pages, 1403-1418.dds): choose F-15C at the top of its window.",
                 ),
             ),
         ),

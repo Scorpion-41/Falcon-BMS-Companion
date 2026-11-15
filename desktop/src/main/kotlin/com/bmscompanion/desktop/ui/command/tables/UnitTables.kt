@@ -87,7 +87,7 @@ fun FilterBox(text: String, hint: String, width: Dp = 180.dp, onChange: (String)
  * (the package, squadron or brigade selected: its flights or battalions). A row with an issue BMS would trip over is
  * red, one with a warning amber (the Issues column says what; the inspector has the Fix). The columns are a campaign
  * designer's usual list — Nr, Name (type and role, no callsign), Type, Squad Patch (BMS's own picture), Callsign,
- * Flag, Info (the team), Home, Elements, Time, ID, CampId, UHF, VHF, InActive, NoPlan — then Parent, Wpts, Grid,
+ * Flag, Info (the team), Home, Elements, Time, ID, CampId, UHF, VHF, InActive, NoPlan, Set by HQ — then Parent, Wpts, Grid,
  * State and Issues; Nr and Name stay in place while the rest scroll sideways ([UnitRowFacts]).
  */
 object UnitsTable : CmdTable {
@@ -126,6 +126,7 @@ object UnitsTable : CmdTable {
                 MiniChip(parent?.let { "Of ${world.nameOf(it).take(18)}" } ?: "Of the selection", ofParent && parent != null, enabled = parent != null) { ofParent = !ofParent }
                 MiniChip("With issues (${issues.size})", issuesOnly) { issuesOnly = !issuesOnly }
                 Box(Modifier.weight(1f))
+                DeskButton("Add…", strong = true, tip = "A new squadron (at an airbase or a carrier), flight, battalion, brigade or task force — in any save") { UnitDialogs.open(UnitDialogs.AddAny) }
                 DeskButton("Export CSV…", tip = "Every unit of the file as a CSV list (names, types, teams, strength, bases), where you pick") { com.bmscompanion.desktop.ui.command.inspectors.exportCsv(ctx, objectives = false) }
                 DeskButton("Bulk…", tip = "Operations on many units at once") { UnitDialogs.open(UnitDialogs.Bulk) }
             }
@@ -150,6 +151,8 @@ object UnitsTable : CmdTable {
                     GridCol("VHF", 72.dp, numeric = true) { u -> info[u.ref.id]?.vhf.orEmpty() },
                     GridCol("InActive", 70.dp) { u -> if (u.inactive) "Yes" else "" },
                     GridCol("NoPlan", 64.dp) { u -> if (u.unitFlags and 0x10 != 0) "Yes" else "" },
+                    // (BMS's "Set by HQ": flag 0x80 clear — the headquarters gives the unit its orders; not the same as NoPlan)
+                    GridCol("Set by HQ", 72.dp) { u -> if (u.unitFlags and 0x80 == 0) "Yes" else "No" },
                     GridCol("Parent", 160.dp) { u -> (u.parent ?: u.squadron)?.let { world.unit(it)?.name }.orEmpty() },
                     GridCol("Wpts", 50.dp, numeric = true, sort = { it.route.size }) { "${it.route.size}" },
                     GridCol("Grid", 90.dp, sort = { it.east }) { "${(it.east / CampaignArchive.FEET_PER_CELL).toInt()}, ${(it.north / CampaignArchive.FEET_PER_CELL).toInt()}" },

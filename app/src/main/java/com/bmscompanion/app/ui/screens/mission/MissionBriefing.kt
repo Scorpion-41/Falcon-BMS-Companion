@@ -105,7 +105,7 @@ fun MissionBriefingPane(env: MissionEnv, showOnMap: (MapSel, Double, Double) -> 
             TargetsCard(merged, bull, showOnMap)
             PlanCard(merged)
             PackageCard(b)
-            LoadoutCard(b, weapons) { w -> env.nav.go("m/weapon/${android.net.Uri.encode(w.key)}") }
+            LoadoutCard(b, weapons, env.theater?.id) { w -> env.nav.go("m/weapon/${android.net.Uri.encode(w.key)}") }
             // Bingo, Joker, playtime and the minimum fuel at each steerpoint, from the flight plan (MissionFuelPlan.kt)
             FuelPlanCard(merged, env)
             ThreatCard(b, threats, ppts, bull, showPpt, openThreat)
@@ -262,8 +262,8 @@ private fun SteerpointTable(stpts: List<Stpt>, own: Pair<Double, Double>?, bull:
                 Text("${s.n}", Modifier.width(28.dp), style = LocalExtra.current.monoSmall, color = if (s.fromPlan || s.notInJet) PlanInk else if (s.isTarget) Hostile else Hud.Amber)
                 Column(Modifier.weight(1f)) {
                     Text(
+                        // word-wrapped, never cut: a steerpoint's name and its comment are shown whole
                         s.title, fontSize = 13.sp, color = if (s.cleared) Hud.TextFaint else if (s.isTarget) Hostile else Hud.Text,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
                         textDecoration = if (s.cleared) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
                     )
                     // the plan's mark leads the second line, so the name keeps the width on a phone
@@ -276,7 +276,7 @@ private fun SteerpointTable(stpts: List<Stpt>, own: Pair<Double, Double>?, bull:
                             s.comments?.takeIf { it != s.desc },
                             if (!s.onRoute && s.isTarget && s.desc == null) "precision target" else null,
                         ).joinToString(" · ").takeIf { it.isNotBlank() }?.let {
-                            Text(it, fontSize = 11.sp, color = Hud.TextDim, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(it, Modifier.weight(1f, fill = false), fontSize = 11.sp, lineHeight = 14.sp, color = Hud.TextDim)
                         }
                     }
                 }
@@ -364,8 +364,10 @@ private fun PackageCard(b: Briefing) {
 }
 
 @Composable
-private fun LoadoutCard(b: Briefing, weapons: Map<String, Weapon>, onWeapon: (Weapon) -> Unit) {
+private fun LoadoutCard(b: Briefing, weapons: Map<String, Weapon>, theaterId: String?, onWeapon: (Weapon) -> Unit) {
     if (b.ordnance.isEmpty()) return
+    // each jet's drag index and load, as the Planner's Performance page counts them (LoadoutDrag.kt; F-16s only)
+    val tables by produceState<LoadoutTables?>(null) { value = loadoutTables() }
     SectionCard("Loadout", accent = Hud.Amber) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             b.ordnance.forEach { f ->
@@ -374,6 +376,13 @@ private fun LoadoutCard(b: Briefing, weapons: Map<String, Weapon>, onWeapon: (We
                 f.aircraft.groupBy { a -> a.stores }.forEach { (stores, jets) ->
                     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Hud.Surface2).padding(10.dp)) {
                         Text(jets.joinToString(", ") { it.name }, fontSize = 12.sp, color = Hud.TextDim)
+                        val fig = tables?.let { t ->
+                            androidx.compose.runtime.remember(t, f.flight, stores, theaterId) { loadoutFigures(t, b.ordnanceType(f.flight), theaterId, stores) }
+                        }
+                        if (fig != null) Text(
+                            "Drag index ${fig.drag} · load ${"%,d".format(java.util.Locale.US, fig.loadLb)} lb (stores, pylons and racks)",
+                            fontSize = 11.sp, color = Hud.Amber, modifier = Modifier.padding(top = 2.dp),
+                        )
                         Spacer(Modifier.height(4.dp))
                         TagFlow {
                             stores.forEach { s ->

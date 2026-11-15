@@ -732,6 +732,56 @@ object PrintOutcome {
                 phone.shot(File(pics, "window-phone.png"))
                 check(WdpProbe.rects.containsKey("planner/Print/Preview"), "a phone's window shows the table and the preview under it", "")
             } finally { phone.close() }
+            line("")
+            // ---------------------------------------------------------------- 11. Add to kneeboard from the chart viewer
+            line("== 11. Add to kneeboard (the chart viewer): the page chosen in the window, two charts on two halves")
+            val cs = Stage(SCENE_W, SCENE_H)
+            try {
+                val s = KneeboardPrintSession
+                val one = "charts/00afc0c9a17f2275-1.webp"
+                val two = "charts/00afc0c9a17f2275-2.webp"
+                cs.onUi { s.leaveAll() }
+                cs.onUi { com.bmscompanion.app.ui.screens.wdp.ChartToKneeboard.add(one, "Check · chart page 1") }
+                cs.frames(20, 30)
+                val first = s.chartBrowse
+                check(PlannerWindows.open == PlannerWindow.PRINT && first != null && WdpProbe.rects.containsKey("planner/Print/Chart/InsertR"),
+                    "Add to kneeboard opens the window on the chart chooser", "${PlannerWindows.open} ${first?.page}")
+                val p1 = first?.page ?: 0
+                val side1 = first?.side ?: 'L'
+                check(p1 in 1..16 && s.kind(p1, side1) == KbKind.LEAVE, "the chooser offers a half with nothing planned", "page $p1 $side1")
+                cs.shot(File(pics, "chart-chooser.png"))
+                cs.click(if (side1 == 'L') "Print/Chart/InsertL" else "Print/Chart/InsertR")
+                cs.frames(8)
+                check(s.chartBrowse == null && s.plan["$p1$side1"] == KbKind.CHART && s.charts["$p1$side1"]?.file == one,
+                    "Insert puts the chart on that half and the table comes back", "${s.plan}")
+                cs.onUi { com.bmscompanion.app.ui.screens.wdp.ChartToKneeboard.add(two, "Check · chart page 2") }
+                cs.frames(20, 30)
+                val second = s.chartBrowse
+                check(second != null && "${second.page}${second.side}" != "$p1$side1" && s.kind(second.page, second.side ?: 'L') == KbKind.LEAVE,
+                    "a second chart is offered another half, not the first one's", "${second?.page}${second?.side}")
+                cs.click(if (second?.side == 'L') "Print/Chart/InsertL" else "Print/Chart/InsertR")
+                cs.frames(8)
+                // (a half set to another kind keeps its chart pick, as a picture half keeps its path: count the planned ones)
+                val chartHalves = s.plan.filterValues { it == KbKind.CHART }.keys
+                check(s.charts["$p1$side1"]?.file == one && chartHalves.size == 2 && chartHalves.count { s.charts[it]?.file == two } == 1,
+                    "both charts are planned, each on its own half", "${s.plan} ${s.charts}")
+                // the same page picked by hand: Insert there replaces the first chart
+                cs.onUi { com.bmscompanion.app.ui.screens.wdp.ChartToKneeboard.add(two, "Check · chart page 2 again") }
+                cs.frames(20, 30)
+                cs.onUi { s.chartBrowse?.page = p1 }
+                cs.frames(6)
+                cs.click(if (side1 == 'L') "Print/Chart/InsertL" else "Print/Chart/InsertR")
+                cs.frames(8)
+                check(s.charts["$p1$side1"]?.title == "Check · chart page 2 again", "the same page picked by hand replaces the chart there", "${s.charts}")
+                // Cancel leaves the plan as it was
+                val planBefore = s.plan.toMap()
+                cs.onUi { com.bmscompanion.app.ui.screens.wdp.ChartToKneeboard.add(one, "Check · cancelled") }
+                cs.frames(20, 30)
+                cs.click("Print/Chart/Cancel")
+                cs.frames(6)
+                check(s.chartBrowse == null && s.plan.toMap() == planBefore, "Cancel leaves the plan as it was", "${s.plan}")
+                cs.shot(File(pics, "chart-placed.png"))
+            } finally { cs.close() }
         } catch (e: Throwable) {
             fails++
             line("FAIL: threw ${e::class.java.simpleName}: ${e.message}")
@@ -803,6 +853,8 @@ object PrintOutcome {
             // the kind menu of a half, and every kind in it
             for (k in KneeboardPages.kinds) {
                 val want = if (k.id == KbKind.LEAVE) KbKind.BLANK else KbKind.LEAVE
+                // a chart page (1.4.2) is in a half's menu only once the chart viewer put one there
+                if (k.id == KbKind.CHART) s.charts["${b}L"] = com.bmscompanion.app.ui.screens.wdp.KbChartPick("charts/00afc0c9a17f2275-2.webp", "Check · an instrument chart")
                 if (!s.offered(k.id)) {
                     // EZBoards mode (1.4.1): a page of the Planner's is not in the menu at all
                     press("Print/Pick/${b}L", "opens the kind menu, without ${k.id} (a page of the Planner's)", { s.cancelPicture(); KneeboardTargets.picking = null; KneeboardNotes.editing = null; s.set(b, 'L', want) }) {

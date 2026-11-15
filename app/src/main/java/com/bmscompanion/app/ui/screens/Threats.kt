@@ -76,6 +76,8 @@ import com.bmscompanion.app.ui.components.ListRow
 import com.bmscompanion.app.ui.components.LoadingBox
 import com.bmscompanion.app.ui.components.Paragraph
 import com.bmscompanion.app.ui.components.RwrBadge
+import com.bmscompanion.app.ui.components.RwrMark
+import com.bmscompanion.app.ui.components.RwrMarks
 import com.bmscompanion.app.ui.components.SearchField
 import com.bmscompanion.app.ui.components.SectionCard
 import com.bmscompanion.app.ui.components.Stat
@@ -161,9 +163,8 @@ internal fun ThreatsPage(nav: NavHostController) {
                                     leading = {
                                         Box(Modifier.size(width = 4.dp, height = 40.dp).background(sideColor(t.side), RoundedCornerShape(2.dp)))
                                         Spacer(Modifier.width(10.dp))
-                                        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                                            RwrBadge(t.rwrSymbol() ?: "–", color = if (t.rwrSymbol() == null) Hud.TextFaint else Hud.Green)
-                                        }
+                                        // both RWRs, as the threat page shows them: the ALR-56M in green, the ALR-93 in cyan
+                                        RwrPair(t, 34.dp)
                                     },
                                     onClick = { if (wide) selected = t.id else nav.go(Routes.threat(t.id)) },
                                 )
@@ -176,6 +177,20 @@ internal fun ThreatsPage(nav: NavHostController) {
         },
         detail = { selected?.let { ThreatDetail(nav, it, null) } },
     )
+}
+
+/**
+ * A threat's two RWR symbols side by side, ALR-56M (green) then ALR-93 (cyan), each with its mark; a system an RWR
+ * does not show is a faint dash, so the list's columns stay in line.
+ */
+@Composable
+internal fun RwrPair(t: Threat, size: androidx.compose.ui.unit.Dp) {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        val a = t.rwr["alr56m"]?.takeIf { it.isNotBlank() }
+        val b = t.rwr["alr93"]?.takeIf { it.isNotBlank() }
+        RwrBadge(a ?: "–", size, if (a == null) Hud.TextFaint else Hud.Green, if (a == null) RwrMark.NONE else RwrMarks.forThreat(t, alr93 = false))
+        RwrBadge(b ?: "–", size, if (b == null) Hud.TextFaint else Hud.Cyan, if (b == null) RwrMark.NONE else RwrMarks.forThreat(t, alr93 = true))
+    }
 }
 
 /** One of the Threats page's three tools: a small outlined button with its name on it. */
@@ -282,9 +297,9 @@ fun ThreatDetail(nav: NavHostController, id: String, onBack: (() -> Unit)?) {
                         }
                         if (th.aliases.isNotEmpty()) Text("aka " + th.aliases.joinToString(", "), style = MaterialTheme.typography.bodySmall, color = Hud.TextDim)
                     }
-                    th.rwr["alr56m"]?.takeIf { it.isNotBlank() }?.let { Column(horizontalAlignment = Alignment.CenterHorizontally) { RwrBadge(it, 56.dp); Text("ALR-56M", fontSize = 9.sp, color = Hud.TextDim) } }
+                    th.rwr["alr56m"]?.takeIf { it.isNotBlank() }?.let { Column(horizontalAlignment = Alignment.CenterHorizontally) { RwrBadge(it, 56.dp, mark = RwrMarks.forThreat(th, alr93 = false)); Text("ALR-56M", fontSize = 9.sp, color = Hud.TextDim) } }
                     Spacer(Modifier.width(8.dp))
-                    th.rwr["alr93"]?.takeIf { it.isNotBlank() }?.let { Column(horizontalAlignment = Alignment.CenterHorizontally) { RwrBadge(it, 56.dp, Hud.Cyan); Text("ALR-93", fontSize = 9.sp, color = Hud.TextDim) } }
+                    th.rwr["alr93"]?.takeIf { it.isNotBlank() }?.let { Column(horizontalAlignment = Alignment.CenterHorizontally) { RwrBadge(it, 56.dp, Hud.Cyan, RwrMarks.forThreat(th, alr93 = true)); Text("ALR-93", fontSize = 9.sp, color = Hud.TextDim) } }
                 }
                 SectionCard("Key numbers", accent = Hud.Red) {
                     StatGrid(
@@ -310,6 +325,7 @@ fun ThreatDetail(nav: NavHostController, id: String, onBack: (() -> Unit)?) {
             }, right = {
                 com.bmscompanion.app.ui.components.TextCard("Tactics", th.tactics, Hud.Green, threshold = 320)
                 com.bmscompanion.app.ui.components.TextCard("Notes", th.notes)
+                if (th.ecm.isNotEmpty()) EcmProgramsCard(th.ecm)
                 if (th.stats.isNotEmpty()) CollapsibleCard("Threat guide data (${th.stats.size} values)", initiallyOpen = th.stats.size <= 8, preview = th.stats.take(4).joinToString(" · ") { it.label + ": " + it.value }) { th.stats.forEach { KeyValueRow(it.label, it.value) } }
                 if (th.weapons.isNotEmpty()) SectionCard("Weapons") { TagFlow { th.weapons.forEach { Tag(it, Hud.Cyan) } } }
                 ency?.let { e ->
@@ -324,6 +340,39 @@ fun ThreatDetail(nav: NavHostController, id: String, onBack: (() -> Unit)?) {
                 Text("Source: BMS Threat Guide (4.38). Values observed in KTO; they vary with launch conditions.", style = MaterialTheme.typography.bodySmall, color = Hud.TextFaint)
             })
         }
+    }
+}
+
+/** The ECM pod's programs, 1 to 5, and the EW bands each jams (TO 1F-16CMAM-34-1-1 BMS 2.7.4.1.1). */
+private val ECM_BANDS = listOf(1 to "A–C", 2 to "D–E", 3 to "F–G", 4 to "H–I", 5 to "J–K")
+
+/**
+ * Which ALQ-131/ALQ-184 programs jam this threat: the five programs with the ones its radars need lit, then each
+ * radar with its band per mode (BMS's radar data) and its programs. A band beyond the pod (L, M) has none.
+ */
+@Composable
+private fun EcmProgramsCard(ecm: List<com.bmscompanion.app.data.ThreatEcm>) {
+    val all = ecm.flatMap { it.programs }.toSet()
+    SectionCard("ECM programs", accent = Hud.Cyan) {
+        TagFlow {
+            ECM_BANDS.forEach { (p, bands) ->
+                if (p in all) Tag("$p · $bands", Hud.Cyan, filled = true) else Tag("$p · $bands", Hud.TextFaint)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        ecm.forEach { r ->
+            val modes = listOfNotNull(
+                r.search.takeIf { it.isNotEmpty() }?.let { "search " + it.joinToString("/") },
+                r.acquisition?.let { "acquire $it" },
+                r.guidance?.let { "track $it" },
+            ).joinToString(" · ")
+            val progs = if (r.programs.isEmpty()) "none (beyond the pod's A–K)" else r.programs.joinToString(", ")
+            KeyValueRow(r.radar, "$modes\nprogram${if (r.programs.size == 1) "" else "s"} $progs")
+        }
+        Text(
+            "Bands from BMS's radar data; programs of the AN/ALQ-131 and AN/ALQ-184 pods (TO 1F-16CMAM-34-1-1 BMS). The IDIAS chooses its band by itself.",
+            style = MaterialTheme.typography.bodySmall, color = Hud.TextFaint,
+        )
     }
 }
 

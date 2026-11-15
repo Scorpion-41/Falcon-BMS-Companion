@@ -137,9 +137,20 @@ object CommandRender {
                         CommandSession.selection.set(flight?.let { com.bmscompanion.desktop.ui.command.CmdRef(CmdKind.WAYPOINT, it.ref.id, 2) })
                     }, focus = { flight?.ref?.let { CommandSession.flyTo(it) } })
                     shot("squadron-$w", w, h, { CommandSession.page = CmdPage.UNITS; CommandSession.selection.set(sqRef) }, focus = { sqRef?.let { CommandSession.flyTo(it) } })
+                    // ground orders: a brigade and a battalion with their assigned objective, the Assign tool, Add…
+                    val bdeRef = doc.world.units.firstOrNull { it.kind == CmdKind.BRIGADE && it.objective != null && it.elements.size >= 2 }?.ref
+                    val batRef = doc.world.units.firstOrNull { it.kind == CmdKind.BATTALION && it.objective != null && it.route.isNotEmpty() }?.ref
+                    shot("brigade-$w", w, h, { CommandSession.page = CmdPage.UNITS; CommandSession.selection.set(bdeRef) }, focus = { bdeRef?.let { CommandSession.flyTo(it) } })
+                    shot("battalion-$w", w, h, { CommandSession.selection.set(batRef); CommandSession.tool = com.bmscompanion.desktop.ui.command.CmdTool.ASSIGN }, focus = { batRef?.let { CommandSession.flyTo(it) } })
+                    shot("addunit-$w", w, h, {
+                        CommandSession.tool = com.bmscompanion.desktop.ui.command.CmdTool.SELECT
+                        CommandSession.selection.set(airbase?.ref)
+                        com.bmscompanion.desktop.ui.command.tables.UnitDialogs.open(com.bmscompanion.desktop.ui.command.tables.UnitDialogs.AddAny)
+                    })
                 }
                 // the objective, campaign and checks editors (a played save: objective changes as deltas)
                 shot("objectives-$w", w, h, {
+                    com.bmscompanion.desktop.ui.command.tables.UnitDialogs.close()
                     CmdLayers.update { it.copy(style = "relief", links = LinkView.SELECTED) }
                     CommandSession.page = CmdPage.OBJECTIVES; CommandSession.selection.set(airbase?.ref)
                 }, focus = { airbase?.ref?.let { CommandSession.flyTo(it) } })

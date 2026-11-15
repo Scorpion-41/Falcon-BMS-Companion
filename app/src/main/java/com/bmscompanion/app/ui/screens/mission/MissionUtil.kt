@@ -420,8 +420,18 @@ fun bullseye(live: Live?, contacts: List<com.bmscompanion.app.data.mission.Conta
         ?: contacts?.firstOrNull { it.kind == "bullseye" && it.friendly }?.let { it.x to it.y }
         ?: contacts?.firstOrNull { it.kind == "bullseye" }?.let { it.x to it.y }
 
-/** "045/32" bearing/range from a reference point, bearings true like the theater map. */
+/**
+ * "045/32" bearing/range from a reference point: magnetic as the F-16 shows them, or true like the theater map, as
+ * the device chose ([BearingPrefs], [shownBearing]).
+ */
 fun bra(fromX: Double, fromY: Double, toX: Double, toY: Double): String {
+    val (t, r) = bearingRange(fromX, fromY, toX, toY)
+    val b = shownBearing(t, fromX, fromY)
+    return String.format(Locale.US, "%03d/%d", (b.roundToInt() % 360 + 360) % 360, r.roundToInt())
+}
+
+/** [bra] always true, whatever the device chose: the Planner's DataCard, whose figures are WDP's. */
+fun braTrue(fromX: Double, fromY: Double, toX: Double, toY: Double): String {
     val (b, r) = bearingRange(fromX, fromY, toX, toY)
     return String.format(Locale.US, "%03d/%d", (b.roundToInt() % 360 + 360) % 360, r.roundToInt())
 }
