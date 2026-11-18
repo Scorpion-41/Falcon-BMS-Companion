@@ -839,6 +839,7 @@ internal object PlannerShell {
      */
     val OPTIONS: List<Triple<String, String, () -> Unit>> = listOf(
         Triple("Settings…", "Settings") { settings() },
+        Triple("F-15 SIT lines…", "SitLines") { F15SitLinesWindowState.open() },
         Triple("About WDP (Falcas)", "Credit") { credit() },
     )
     fun fullWindow() { WdpFocus.on = !WdpFocus.on; WdpFocus.auto = false }
@@ -875,7 +876,7 @@ internal fun hhmm(ms: Long): String =
  */
 internal fun identitySegments(mission: WdpMission, missionData: MissionData?, theaterName: String?, cardSeat: Int, wide: Boolean): List<String> {
     val out = ArrayList<String>()
-    val theater = mission.theater?.name ?: theaterName?.trim()?.takeIf { it.isNotEmpty() }
+    val theater = com.bmscompanion.app.data.TheaterLabels.ui(mission.theater?.name ?: theaterName?.trim()?.takeIf { it.isNotEmpty() })
     val f = mission.flight
     if (f != null && PlannerMissionState.fromSave) {
         if (wide && theater != null) out += theater
@@ -1089,7 +1090,7 @@ internal fun WdpPlanner(missionData: MissionData?, theaterName: String?, modifie
         val bmsTheater = info?.bms?.theater?.trim()
         val saveTheater = PlannerMissionState.theater?.trim()
         if (PlannerMissionState.fromSave && flight != null && !bmsTheater.isNullOrEmpty() && !saveTheater.isNullOrEmpty() && bmsTheater.norm() != saveTheater.norm())
-            add(ShellNotice("BMS is on $bmsTheater; this file is $saveTheater",
+            add(ShellNotice("BMS is on ${com.bmscompanion.app.data.TheaterLabels.of(bmsTheater)}; this file is ${com.bmscompanion.app.data.TheaterLabels.of(saveTheater)}",
                 "Falcon BMS is set to $bmsTheater, and the mission open in the Planner is from $saveTheater. The pages use " +
                     "$saveTheater's coordinates. To fly it, choose $saveTheater in Falcon BMS's launcher first."))
         // the card's weather when it is not what a pilot would take for granted (the save's file not used, or newer than PRINT)

@@ -1,8 +1,8 @@
 {
   "sourceDocs": [
-    "TO 1F-16CMAM-34-1-1 BMS (Change 4.38) - 4.2.5.1 AGM-88 HARM",
-    "BMS Training Manual 4.38.1 - Mission 12 (AGM-88 HARMs), Mission 28 (SEAD-EW)",
-    "BMS User Manual 4.38.1 - 5.1.7 DTC HARM tab",
+    "TO 1F-16CMAM-34-1-1 BMS (Change 4.38.2) - 4.2.5.1 AGM-88 HARM",
+    "BMS Training Manual 4.38.2 - Mission 12 (AGM-88 HARMs), Mission 28 (SEAD-EW)",
+    "BMS User Manual 4.38.2 - 5.1.7 DTC HARM tab",
     "BMS Threat Guide (Air Defense Vehicle charts)"
   ],
   "overview": "In BMS the AGM-88 HARM can be employed in three modes. POS (Position Known) fires the missile at a steerpoint (usually a PPT or markpoint) rather than at a radar: after launch it flies toward the steerpoint and opens its seeker at a trip point that depends on the submode - EOM (Equations Of Motion, narrow FOV, ~8 NM from the threat, most accurate), PB (Pre-Briefed, ~13 NM, wider FOV, long-range shots) or RUK (Range Unknown, ~30 NM, wide FOV, mainly self-defence). HAS (HARM As Sensor) uses the missile seeker itself (120 deg FOV) to display up to 10 emitting radars from the selected threat table on the WPN page; a detected threat is handed off with TMS up and the page is lost once the last HARM is fired. HAD (HARM Attack Display) is only available with the AN/ASQ-213 HTS pod (US F-16 Block 40/50/52 in BMS, left chin pylon): the pod passively detects and triangulates all radars (not limited to threat tables), shows them on an HSD-like page with PGM5 (worst) to PGM1 (best) position quality, and hands the estimated position to the missile which is then actually fired in POS mode (EOM or RUK chosen automatically from the PGM index, TMS up long to override). The DL mode is not implemented. Threats are loaded through three threat tables (TBL1-TBL3), each holding five entries (max 15 radars). Each entry is an ALIC code (decimal ID 0-4095, must be unique across all tables) for either a complete SAM system (e.g. 102 = SA-2, symbol \"2\"), its fire control/tracking radar (\"T\" suffix, e.g. 202 = Fan Song \"2T\") or its acquisition/early-warning radar (\"A\" suffix, e.g. 402 = Spoon Rest \"2A\"). If a SAM system code is loaded, both its FCR and EWR are searched. Tables are set in the DTC HARM tab (all codes default to 0000 - no defaults), or in the cockpit via ICP 0 (HARM DED page, A-G mode with HARM selected) or OSB 5 \"UFC\" on the POS/HAS page. The TER (tertiary) table is selected on the SMS page with OSB 2 (TBL0-TBL3, default TBL1; TBL0 = no tertiary targets): primary target = the handed-off threat, secondary = remaining threats of the active table (or HAD priority targets), tertiary = threats of the TER table. Target Isolate (TI: FLEX / GLIDE, OSB 10 or UNCAGE) and Geographic Specificity (GS, OSB 9) refine what the seeker will accept after launch.",
@@ -373,9 +373,9 @@
       "category": "FCR",
       "radar": null,
       "alic": "608",
-      "symbol": "8",
-      "notes": "Fire control radar - radar name column is blank in the Dash-34/Training Manual table.",
-      "source": "TO 1F-16CMAM-34-1-1 BMS 4.2.5.1.1 table; BMS Training Manual 12.1 table"
+      "symbol": "8T",
+      "notes": "Fire control / tracking radar (\"T\" = tracking); the radar name column is blank in the Dash-34/Training Manual table.",
+      "source": "TO 1F-16CMAM-34-1-1 BMS (Change 4.38.2) 4.2.5.1.1.1 table; BMS Training Manual 4.38.2 12.1 table"
     },
     {
       "system": "SA-9",
@@ -454,9 +454,9 @@
       "category": "FCR",
       "radar": "Scrum Half",
       "alic": "615",
-      "symbol": "15",
+      "symbol": "15T",
       "notes": "Fire control / tracking radar (\"T\" = tracking).",
-      "source": "TO 1F-16CMAM-34-1-1 BMS 4.2.5.1.1 table; BMS Training Manual 12.1 table"
+      "source": "TO 1F-16CMAM-34-1-1 BMS (Change 4.38.2) 4.2.5.1.1.1 table; BMS Training Manual 4.38.2 12.1 table"
     },
     {
       "system": "SA-17",
@@ -490,9 +490,9 @@
       "category": "FCR",
       "radar": "Hot Shot",
       "alic": "619",
-      "symbol": "19",
+      "symbol": "19T",
       "notes": "Fire control / tracking radar (\"T\" = tracking).",
-      "source": "TO 1F-16CMAM-34-1-1 BMS 4.2.5.1.1 table; BMS Training Manual 12.1 table"
+      "source": "TO 1F-16CMAM-34-1-1 BMS (Change 4.38.2) 4.2.5.1.1.1 table; BMS Training Manual 4.38.2 12.1 table"
     },
     {
       "system": "Patriot",
@@ -577,21 +577,30 @@
     },
     {
       "system": "SA-20",
+      "category": "SAM",
+      "radar": null,
+      "alic": "120",
+      "symbol": "20",
+      "notes": "Complete SAM system - searches for all radars of the system (FCR and EWR are both loaded).",
+      "source": "TO 1F-16CMAM-34-1-1 BMS (Change 4.38.2) 4.2.5.1.1.1 table; BMS Training Manual 4.38.2 12.1 table"
+    },
+    {
+      "system": "SA-20",
       "category": "FCR",
       "radar": "Tombstone",
       "alic": "220",
       "symbol": "20T",
-      "notes": "Listed only in the BMS Threat Guide OPFOR chart (HARM/ALIC columns), not in the Dash-34 ALIC table.",
-      "source": "BMS Threat Guide p.41 chart"
+      "notes": "Fire control / tracking radar (\"T\" = tracking).",
+      "source": "TO 1F-16CMAM-34-1-1 BMS (Change 4.38.2) 4.2.5.1.1.1 table; BMS Training Manual 4.38.2 12.1 table; BMS Threat Guide p.41 chart"
     },
     {
       "system": "SA-20",
       "category": "EWR",
       "radar": "Big Bird (64N6E)",
-      "alic": "420",
-      "symbol": "20A",
-      "notes": "Listed only in the BMS Threat Guide OPFOR chart, not in the Dash-34 ALIC table.",
-      "source": "BMS Threat Guide p.41 chart"
+      "alic": "620",
+      "symbol": "BB",
+      "notes": "Acquisition / early-warning radar. The Dash-34 (Change 4.38.2) gives it 620 \"BB\"; the BMS Threat Guide chart (unchanged in 4.38.2) gives 420 \"20A\".",
+      "source": "TO 1F-16CMAM-34-1-1 BMS (Change 4.38.2) 4.2.5.1.1.1 table; BMS Training Manual 4.38.2 12.1 table"
     },
     {
       "system": "SA-20",
@@ -599,7 +608,7 @@
       "radar": "Clam Shell (76N6)",
       "alic": "620",
       "symbol": null,
-      "notes": "Threat Guide radar page: \"Low altitude SA radar for SA-20A. ALIC 620.\" No HARM symbol given.",
+      "notes": "Threat Guide radar page: \"Low altitude SA radar for SA-20A. ALIC 620.\" No HARM symbol given. The Dash-34 (Change 4.38.2) gives 620 to the SA-20's Big Bird (\"BB\") instead.",
       "source": "BMS Threat Guide - Opfor Air Defense Vehicles, Clam Shell radar entry"
     }
   ],
@@ -700,7 +709,7 @@
     "FCR names for the SA-8 (608), Nike (696) and Skyguard (695) rows are blank in the Dash-34 table."
   ],
   "alicCodeNotes": [
-    "Threat Guide chart differences vs Dash-34: SA-6 EWR listed as Flat Face 403 \"F\"; SA-15 HARM symbol \"15T\" (Dash-34: \"15\"); SA-19 \"19T\" (Dash-34: \"19\"); SA-5 also has Odd Group (HARM \"5A\", no ALIC code). (BMS Threat Guide p.41)",
+    "Threat Guide chart differences vs Dash-34 (Change 4.38.2): SA-6 EWR listed as Flat Face 403 \"F\"; SA-20 Big Bird 420 \"20A\" (Dash-34: 620 \"BB\"); SA-5 also has Odd Group (HARM \"5A\", no ALIC code). (BMS Threat Guide p.41)",
     "Codes can be entered as 3 or 4 digits (e.g. 102 or 0102). IDs must be unique across TBL1-TBL3. (User Manual 5.1.7, Dash-34 4.2.5.1.1)"
   ]
 }

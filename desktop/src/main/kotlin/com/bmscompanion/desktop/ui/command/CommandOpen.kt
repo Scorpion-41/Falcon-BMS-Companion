@@ -141,7 +141,7 @@ internal fun OpenPanel(modifier: Modifier, inline: Boolean) {
                             .clickable { chosen = ot.t.appId }.padding(horizontal = 6.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(ot.t.name, color = if (on) Hud.Amber else Hud.Text, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                        Text(com.bmscompanion.app.data.TheaterLabels.of(ot.t.name), color = if (on) Hud.Amber else Hud.Text, fontSize = 12.sp, modifier = Modifier.weight(1f), maxLines = 1)
                         if (ot.current) Text("BMS's", color = Hud.TextFaint, fontSize = 10.5.sp)
                         Text("  ${ot.rows.size}", color = Hud.TextFaint, fontSize = 11.sp)
                     }

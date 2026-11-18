@@ -1,0 +1,11 @@
+{
+  "_doc": "Terrains laid on another georeference than their NewTerrain/Theater.txt projection string names. Used by the extractor for what it projects from latitude and longitude (Natural Earth borders and provinces, geo.mjs). Model 'sinusoidal': east metres = R * (lon - lon0) * cos(lat), north metres = R * (lat - lat0), R = 6371008.8 m (degrees as radians); then x (north feet) = x[0]*east + x[1]*north + x[2] and y (east feet) = y[0]*east + y[1]*north + y[2]. Refit with tools: the affine least-squares over real airport reference points against the theater's own airport records.",
+  "mideast": {
+    "_src": "Fitted on 2026-11-18 to 34 airports of Mideast4_38 (Add-On Mideast128, a 4.36/4.37 theater converted to 4.38's New Terrain keeping its original georeference) against their real reference points: median 0.90 km, worst 2.69 km (an objective's centre is not its airport's reference point). Every transverse Mercator tried (the string's own +lon_0=47.1 +lat_0=29.8 +k=1, or about the centre) left a median of 6.3 km and up to 16 km; the string's +x_0=0 +y_0=0 put the theater's centre 3,288 km north of the grid's middle. Left out of the fit: Kuwait International Airport and King Khalid Military Airbase (over 3 km).",
+    "type": "sinusoidal",
+    "lat0": 29.714391,
+    "lon0": 47.1933,
+    "x": [0.00046833324121176397, 3.2842857680841377, 3359458.28745777],
+    "y": [3.2797899027212103, -0.0008047006763932795, 3359186.1394501715]
+  }
+}

@@ -297,7 +297,7 @@ private fun CreditsCard(open: ((String) -> Unit)?) {
         )
         Credit(
             "Weapon Delivery Planner — Falcas",
-            "The Planner is a port of Falcas's Weapon Delivery Planner to Falcon BMS 4.38.1. " +
+            "The Planner is a port of Falcas's Weapon Delivery Planner to Falcon BMS 4.38. " +
                 "Its pages, attack geometry, ballistics and performance planning are his work.",
             "https://forum.falcon-bms.com/", open,
         )

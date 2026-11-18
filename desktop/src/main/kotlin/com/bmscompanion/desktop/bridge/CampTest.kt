@@ -711,9 +711,9 @@ object CampTest {
                     appendLine("      = " + sum.entries.joinToString(", ") { (id, n) -> "${n}x ${names.weapon(id) ?: "#$id"}" })
                 }
                 f.waypoints.forEachIndexed { i, w ->
-                    appendLine("    wp%-2d %-10s N %8.0f E %8.0f alt %6.0f  arr %s dep %s  act %d  ract %d  form 0x%x  target %s%s".format(
+                    appendLine("    wp%-2d %-10s N %8.0f E %8.0f alt %6.0f  arr %s dep %s  act %d  ract %d  form 0x%x  flags 0x%x  target %s%s".format(
                         i + 1, names.action(w.action) ?: "?", w.north, w.east, w.altFt, CampaignArchive.clock(w.arrive), CampaignArchive.clock(w.depart),
-                        w.action, w.routeAction, w.formation, place(w.target, w.building),
+                        w.action, w.routeAction, w.formation, w.flags, place(w.target, w.building),
                         w.designated?.withIndex()?.filter { !it.value.id.isNone }?.joinToString("") { (seat, d) -> "; seat ${seat + 1}: ${place(d.id, d.building)}" } ?: "",
                     ))
                 }

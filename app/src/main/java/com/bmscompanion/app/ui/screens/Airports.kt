@@ -142,7 +142,7 @@ fun TheaterPicker(current: String, modifier: Modifier = Modifier, prominent: Boo
                 // stretched across the line, the name takes the room and the count and the arrow sit at the far end
                 Column(Modifier.weight(1f, fill = fill)) {
                     Text("THEATER", color = Hud.TextDim, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp, maxLines = 1)
-                    Text(t?.name ?: current, color = Hud.Cyan, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(com.bmscompanion.app.data.TheaterLabels.of(t?.name ?: current), color = Hud.Cyan, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 t?.airportCount?.let { Text("$it airfields", color = Hud.TextDim, fontSize = 12.sp, maxLines = 1, modifier = Modifier.padding(start = 10.dp)) }
                 Icon(Icons.Default.ArrowDropDown, "Change theater", tint = Hud.Cyan)
@@ -154,7 +154,7 @@ fun TheaterPicker(current: String, modifier: Modifier = Modifier, prominent: Boo
             ) {
                 Icon(Icons.Default.Public, null, tint = Hud.Cyan, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text(t?.name ?: current, color = Hud.Cyan, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                Text(com.bmscompanion.app.data.TheaterLabels.of(t?.name ?: current), color = Hud.Cyan, style = MaterialTheme.typography.labelLarge, maxLines = 1)
                 Icon(Icons.Default.ArrowDropDown, null, tint = Hud.TextDim)
             }
         }
@@ -163,7 +163,7 @@ fun TheaterPicker(current: String, modifier: Modifier = Modifier, prominent: Boo
                 DropdownMenuItem(
                     text = {
                         Column(Modifier.widthIn(max = 320.dp)) {
-                            Text(th.name, color = if (th.id == current) Hud.Cyan else Color.Unspecified)
+                            Text(com.bmscompanion.app.data.TheaterLabels.of(th.name), color = if (th.id == current) Hud.Cyan else Color.Unspecified)
                             Text("${th.airportCount} airfields", fontSize = 11.sp, color = Hud.TextDim)
                         }
                     },
@@ -607,7 +607,7 @@ fun AirportDetail(nav: NavHostController, theaterId: String, id: Int, onBack: ((
     val set by produceState<AirportSet?>(null, th) { value = th?.let { Repo.airportSet(it.airportSet) } }
     val a = set?.airports?.firstOrNull { it.id == id }
     Column(Modifier.fillMaxSize()) {
-        BmsTopBar(a?.name ?: "Airfield", listOfNotNull(a?.icao, th?.name).joinToString(" · "), onBack = onBack, actions = { FavoriteButton("ap:$theaterId:$id") })
+        BmsTopBar(a?.name ?: "Airfield", listOfNotNull(a?.icao, com.bmscompanion.app.data.TheaterLabels.ui(th?.name)).joinToString(" · "), onBack = onBack, actions = { FavoriteButton("ap:$theaterId:$id") })
         if (a == null || th == null) { if (set == null) LoadingBox() else EmptyState("Not found"); return@Column }
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
             AdaptiveSplit(left = {

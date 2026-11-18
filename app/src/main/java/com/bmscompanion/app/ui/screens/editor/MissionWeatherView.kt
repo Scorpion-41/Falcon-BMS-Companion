@@ -439,7 +439,7 @@ internal fun WxMissionMap(
 ) {
     if (theater == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("The app has no map of ${w.theater.ifBlank { "this theater" }}.", color = Hud.TextDim, fontSize = 12.sp)
+            Text("The app has no map of ${com.bmscompanion.app.data.TheaterLabels.of(w.theater).ifBlank { "this theater" }}.", color = Hud.TextDim, fontSize = 12.sp)
         }
         return
     }

@@ -350,7 +350,7 @@ private fun androidx.compose.foundation.layout.RowScope.Identity(doc: CmdDocumen
         withStyle(androidx.compose.ui.text.SpanStyle(color = if (e != null && e.editCount > 0) Hud.Amber else if (e == null) Hud.TextFaint else Hud.TextDim)) { append(edits) }
     }
     Box(Modifier.weight(1f).widthIn(min = 180.dp)) {
-        Tip("${doc.theaterName} › ${doc.file.name} · version ${doc.version ?: "?"} · $kind · $edits\n${doc.file.path}") {
+        Tip("${com.bmscompanion.app.data.TheaterLabels.ui(doc.theaterName)} › ${doc.file.name} · version ${doc.version ?: "?"} · $kind · $edits\n${doc.file.path}") {
             Text(words, fontSize = 12.sp, maxLines = 1, softWrap = false, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
         }
     }

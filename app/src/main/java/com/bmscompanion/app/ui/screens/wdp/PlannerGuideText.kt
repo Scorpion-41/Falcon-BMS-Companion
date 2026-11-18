@@ -27,7 +27,7 @@ internal object PlannerGuideText {
             blocks = listOf(
                 p(
                     "The **Planner** is Weapon Delivery Planner (WDP), Falcas's mission planner, made for Falcon BMS " +
-                        "4.38.1 and built into BMS Companion. You open the mission you saved in BMS, pick your flight, " +
+                        "4.38 and built into BMS Companion. You open the mission you saved in BMS, pick your flight, " +
                         "and plan: the data card, your cartridge (steerpoints, targets, threats, lines, countermeasures, " +
                         "radios, MFD pages, HARM tables, laser codes), your take-off performance and your attack " +
                         "(the **Attack** tab: Pop-up, HADB or TOSS). Then you put the plan where you need it:",
@@ -879,7 +879,7 @@ internal object PlannerGuideText {
                         "**Temperature, wind and QNH**: the DataCard's take-off weather, from the save's own weather file (its " +
                             "**.twx**) or BMS's printed briefing of the same flight. It is the weather as saved, at the save's " +
                             "clock, and BMS may change it before take-off. When BMS picks the wind's direction itself the file " +
-                            "has none, and the take-off is planned without a head or tail wind. BMS 4.38.1's briefing prints " +
+                            "has none, and the take-off is planned without a head or tail wind. BMS 4.38's briefing prints " +
                             "no QNH, so the QNH is the save's file's; with neither it is 29.92 (1013), or what you type. " +
                             "What a new mission's weather does not give goes back to the page's own values.",
                     ),
@@ -905,11 +905,11 @@ internal object PlannerGuideText {
                 sub("Why WDP 3.7.24 shows other figures on the same save"),
                 p(
                     "The arithmetic is WDP's own: given the same inputs, every take-off figure is identical in both programs. " +
-                        "The figures differ because the inputs differ, and on Falcon BMS 4.38.1 WDP's are wrong:",
+                        "The figures differ because the inputs differ, and on Falcon BMS 4.38 WDP's are wrong:",
                 ),
                 bullets(
-                    i("**The field.** WDP's airport table is not 4.38.1's: it cannot find a save's departure field and plans from its first row (Afyon, 3,310 ft). Here it is your field, at the height BMS gives it."),
-                    i("**Pylons and racks.** WDP looks for them where 4.38.1 no longer keeps them, so its weight and drag leave them out."),
+                    i("**The field.** WDP's airport table is not 4.38's: it cannot find a save's departure field and plans from its first row (Afyon, 3,310 ft). Here it is your field, at the height BMS gives it."),
+                    i("**Pylons and racks.** WDP looks for them where 4.38 no longer keeps them, so its weight and drag leave them out."),
                     i("**Your jet and fuel.** Here: the theater's own store figures, conformal tanks when the jet has them, and the fuel your jet really has (\"----\" once it is airborne)."),
                     i(
                         "**The weather.** WDP cannot read BMS 4.38's weather file: its ATIS is blank and it plans with its own " +
@@ -1326,7 +1326,7 @@ internal object PlannerGuideText {
             blocks = listOf(
                 p(
                     "**Weapon Delivery Planner** is Falcas's program, used by Falcon pilots for many years. The Planner is " +
-                        "a port of it for Falcon BMS 4.38.1: the pages, the attack, ballistics and performance planning " +
+                        "a port of it for Falcon BMS 4.38: the pages, the attack, ballistics and performance planning " +
                         "and the latitude and longitude are his work, checked against his program's own answers (the " +
                         "latitude and longitude against BMS's own ACMI recordings too: they agree to a metre; the " +
                         "Falklands, which no recording has checked yet, print the theater's own projection). The airports, runways, radios, " +

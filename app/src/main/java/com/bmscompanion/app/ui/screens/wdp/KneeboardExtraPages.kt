@@ -82,6 +82,7 @@ import com.bmscompanion.app.data.mission.MissionPicture
 import com.bmscompanion.app.data.wdp.PlannerIntel
 import com.bmscompanion.app.ui.components.AirfieldChart
 import com.bmscompanion.app.ui.components.BmsChart
+import com.bmscompanion.app.ui.components.BmsMovingMap
 import com.bmscompanion.app.ui.components.ChartInks
 import com.bmscompanion.app.ui.components.GeoPaths
 import com.bmscompanion.app.ui.components.MapDeep
@@ -309,6 +310,7 @@ object KneeboardExtraPages {
         val t = theater ?: return
         try {
             if (BmsChart.isChart(style)) BmsChart.refresh()
+            if (BmsMovingMap.isMoving(style)) BmsMovingMap.refresh()
             val id = mapIdOf(t.map)
             if (id != null && geo[id] == null) Repo.geo(id)?.let { geo[id] = GeoPaths(id, it, t.sizeFt) }
             if (theaterAirports[t.airportSet] == null) theaterAirports[t.airportSet] = Repo.airportSet(t.airportSet).airports
@@ -997,10 +999,13 @@ private fun mapFrame(theater: Theater, top: Double, minE: Double, k: Double, w: 
             for (r in r0..r1) for (c in c0..c1) into += key(r, c)
         }
         val want = ceil(ln(side / 512.0) / ln(2.0)).toInt()
-        val native = if (BmsChart.isChart(style)) BmsChart.nativeZ(id, BmsChart.theaterOf(style)) else null
+        // BMS's chart, or one of its cockpit moving-map pictures (BmsMovingMap): the PC's levels over a bundled style
+        val moving = BmsMovingMap.isMoving(style)
+        val native = if (BmsChart.isChart(style)) BmsChart.nativeZ(id, BmsChart.theaterOf(style)) else if (moving) BmsMovingMap.nativeZ(id, style) else null
         if (BmsChart.isChart(style) && native == null) drawn = "chart"
+        if (moving && native == null) drawn = BmsMovingMap.under(style)
         if (native != null) {
-            keys += "maps/$id/chart.webp"
+            keys += "maps/$id/${if (moving) BmsMovingMap.under(style) else "chart"}.webp"
             z = want.coerceIn(0, native.coerceIn(0, MapDeep.MAX_Z))
             if (z > 0) deep += "maps/$id/$style/0/0_0.pc"
             tiles(z, deep) { r, c -> "maps/$id/$style/$z/${r}_$c.pc" }

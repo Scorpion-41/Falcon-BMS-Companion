@@ -172,7 +172,7 @@ internal fun CardMap(
 internal object PlannerMapLook {
     /** "" = the Mission map's style ([MapLook.style]) */
     var style by prefState("wdp_maplook_style") {
-        Repo.getString("wdp_maplook_style")?.takeIf { s -> s.isEmpty() || MapLook.styles.any { it.first == s } || BmsChart.isChart(s) } ?: ""
+        Repo.getString("wdp_maplook_style")?.takeIf { s -> s.isEmpty() || MapLook.styles.any { it.first == s } || BmsChart.isChart(s) || com.bmscompanion.app.ui.components.BmsMovingMap.isMoving(s) } ?: ""
     }
         private set
     /** [MapLook.placeOptions]'s values without Mission: 0 off, 1 cities, 2 cities and towns (the default), 3 all places */

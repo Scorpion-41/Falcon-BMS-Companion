@@ -49,6 +49,10 @@ const KNOWN_SLIPS = new Map([
   ['Miramare 109.30 31', 'the sim serves 13 on that slot'],
   ['Palese 111.35 25', 'the sim serves 07 on that slot'],
   ['Nis 109.30 29', 'not a frequency of the station line'],
+  // the Balkans' 4.38.2 update's new fields: Peretola's slot serves 05 (the real airport's ILS runway, the list prints
+  // 23), Pristina's serves 35 (the list prints 17, the real one): BMS flies the slot, so the app shows that end
+  ['Peretola 110.30 23', 'the sim serves 05 on that slot'],
+  ['Pristina 110.10 17', 'the sim serves 35 on that slot'],
 ]);
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -167,7 +171,8 @@ const DOCS = [
   { theaters: ['korea-kto'], file: 'Docs/03 KTO Charts/KTO_AIP.pdf', read: ktoAip },
   { theaters: ['hellas', 'lhto'], file: 'Data/Add-On Hellas/Docs/HTO_Navaid_438.pdf', read: (f) => slotList(f, false) },
   { theaters: ['israel'], dir: 'Data/Add-On Israel/Docs/01 ITO Charts', match: /^BASIC NAVAIDS_LIST.*\.pdf$/i, read: (f) => slotList(f, true) },
-  { theaters: ['balkans', 'ef2000-bto'], file: 'Data/Add-On Balkans/Docs/Balkans Navaids List.pdf', read: balkansList },
+  // "Balkans Navaids List.pdf" up to the Balkans' 4.38.1 release, "Balkans Navaids List 4.38.pdf" since its 4.38.2 one
+  { theaters: ['balkans', 'ef2000-bto'], dir: 'Data/Add-On Balkans/Docs', match: /^Balkans Navaids List.*\.pdf$/i, read: balkansList },
 ];
 
 if (!fs.existsSync(PDFBOX)) { console.log(`FAIL no ${PDFBOX} (see charts.mjs for where to get it)`); process.exit(1); }
@@ -177,6 +182,9 @@ for (const doc of DOCS) {
     : (() => { const d = path.join(BMS_ROOT, doc.dir); const f = fs.existsSync(d) && fs.readdirSync(d).find((x) => doc.match.test(x)); return f ? path.join(d, f) : null; })();
   if (!file || !fs.existsSync(file)) { console.log(`info ${doc.file || doc.dir}: not in this install`); continue; }
   const pairs = doc.read(file);
+  // HTO_Navaid_438.pdf of Hellas's 4.38.2 update draws its channels and frequencies as figures that are not text, and
+  // marks an ILS end by its style: nothing to compare with (say so, rather than "ok" on no pairs)
+  if (!pairs.length) { console.log(`info ${path.basename(file)}: no ILS frequency could be read as text (${doc.theaters.join(', ')} not checked)`); continue; }
   for (const thId of doc.theaters) {
     const entry = index.theaters.find((t) => t.id === thId);
     if (!entry) continue;

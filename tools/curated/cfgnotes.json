@@ -48,6 +48,40 @@
     ]
   },
   "options": {
+    "g_bFLIRCircularMask": {
+      "group": "Cockpit & avionics"
+    },
+    "g_fFLIRMaskRadius": {
+      "group": "Cockpit & avionics"
+    },
+    "g_bRingCommMenu": {
+      "group": "Sound & comms"
+    },
+    "g_nPostAAMode": {
+      "group": "Graphics"
+    },
+    "g_bVolumetricCloud": {
+      "group": "Graphics"
+    },
+    "g_fTreesMinDensityFactor": {
+      "group": "Graphics"
+    },
+    "g_bDxgiFlipModel": {
+      "group": "Graphics"
+    },
+    "g_nCockpitDepthMaskMode": {
+      "group": "Graphics"
+    },
+    "g_nNewTreesDepthPrepassMode": {
+      "group": "Graphics"
+    },
+    "g_nNewShrubsDepthPrepassMode": {
+      "group": "Graphics"
+    },
+    "g_bXrVisibilityMask": {
+      "group": "VR",
+      "vr": 1
+    },
     "g_fCursorSpeed": {
       "text": "How fast the mouse cursor moves in the 3D cockpit.",
       "group": "Cockpit & avionics"
@@ -454,11 +488,11 @@
       "k": "g_bTacviewAcmi",
       "d": "1",
       "g": "Files & folders",
-      "t": "Records the flight to an ACMI file for replay."
+      "t": "1 (the default): records each flight as a Tacview .zip.acmi file for replay; 0: the legacy .vhs recording instead."
     },
     {
       "k": "g_nHotasShiftQuickPressTimeLimit",
-      "d": "0",
+      "d": "150",
       "g": "Cockpit & avionics",
       "t": "How long, in ms, a shifted HOTAS press counts as a quick press."
     },

@@ -121,7 +121,11 @@ fun TheaterMap(
         // On a board the map covers its box instead, and the smallest zoom becomes the fit rather than the cover, so
         // zooming out still shows the whole theater. A dashboard card asks for the same treatment: it is a wide
         // box, and fitting a square inside it leaves a black band down each side at the widest zoom.
-        val coverBox = fillBox || Kneeboard.on
+        // Since 1.4.4 every map does (the pilot's request): zoomed out as far as it goes, the theater fills the window,
+        // never a black band beside or above it — the smallest zoom is the one at which the square covers the box, and
+        // the pan is held inside it. [fillBox] is kept for the callers that asked for it before.
+        @Suppress("UNUSED_VARIABLE") val asked = fillBox || Kneeboard.on
+        val coverBox = true
         val cover = if (coverBox) max(w, h) else min(w, h)
         // A board is all map: the square never shrinks below the page, or the widest zoom step leaves a band of bare
         // board down one side. (It used to zoom out to the whole theater, which is what put that band there.)

@@ -1,7 +1,7 @@
 // Airports / navaids per theater: CampObjData + Stations+Ils.dat + ATC/*.dat + runway geometry (PHD/PDX/FED).
 import path from 'node:path';
 import fs from 'node:fs';
-import { DATA, parseRecords, findFileCI, readText } from './util.mjs';
+import { DATA, parseRecords, findFileCI, readText, ocdDir } from './util.mjs';
 import { loadDb } from './db.mjs';
 import { terrainSampler, groundUnder, levelledUnder } from './elevation.mjs';
 import { levelling } from './tld.mjs';
@@ -130,8 +130,7 @@ const norm360 = (d) => ((d % 360) + 360) % 360;
 
 function runwayGeometry(th, db, ocdIdx) {
   const id = String(ocdIdx).padStart(5, '0');
-  const dir = findFileCI(path.join(th.data3dDir, 'ObjectiveRelatedData'), `OCD_${id}`)
-    || findFileCI(path.join(DATA, 'TerrData/Objects/ObjectiveRelatedData'), `OCD_${id}`);
+  const dir = ocdDir(th, ocdIdx);
   if (!dir) return null;
   const phd = parseRecords(findFileCI(dir, `PHD_${id}.XML`), 'PHD') || [];
   const pd = parseRecords(findFileCI(dir, `PDX_${id}.XML`), 'PD') || [];
@@ -288,11 +287,9 @@ export function buildAirports(th) {
   const elevations = new Map();
 
   const ocdType = (ocd) => {
-    const ocdDir = findFileCI(path.join(th.data3dDir, 'ObjectiveRelatedData'), `OCD_${String(ocd).padStart(5, '0')}`)
-      || findFileCI(path.join(th.objectDir, 'ObjectiveRelatedData'), `OCD_${String(ocd).padStart(5, '0')}`)
-      || findFileCI(path.join(DATA, 'TerrData/Objects/ObjectiveRelatedData'), `OCD_${String(ocd).padStart(5, '0')}`);
-    if (!ocdDir) return null;
-    const rec = parseRecords(findFileCI(ocdDir, `OCD_${String(ocd).padStart(5, '0')}.XML`), 'OCD')?.[ocd];
+    const dir = ocdDir(th, ocd);
+    if (!dir) return null;
+    const rec = parseRecords(findFileCI(dir, `OCD_${String(ocd).padStart(5, '0')}.XML`), 'OCD')?.[ocd];
     if (!rec) return null;
     const c = db.ct[+rec.CtIdx];
     // DataRate is the field's number of runways to the sim (ATCBrain's constructor reads it as such: 1 or 2 at the

@@ -150,6 +150,11 @@ as EZBoards mode with nothing suspended. See *Mission source*.
   systems use; the header gives no sign, so a device checks it against `hdgTrue` − `hdgMag` before using it
   (`MagVar.jet`). Absent from an older PC.
 
+- `sunAzDeg`, `sunElDeg` (additive, 1.4.4): where the sun stands over the jet, degrees — FlightData2 version 24's
+  `sunAzimuth`/`sunElevation` (Falcon BMS 4.38.2, radians in shared memory): azimuth from north, elevation above the
+  horizon, negative below it. Null from an older BMS (its FlightData2 says version 23 or less) or an older PC. The
+  Briefing's Weather card shows the elevation in 3D under its Sun & Moon line.
+
 - `mfdLeft[]` / `mfdRight[]`: 20 entries each, `{a, b, inverted}` — the two lines of one MFD option-select button
   legend and whether BMS has boxed it, OSB 1 first and running clockwise from the top left, five to a side. Empty
   when BMS is not publishing them (not in 3D, or an older BMS).
@@ -177,6 +182,13 @@ block sets it off, `error` says so: the line is written, but the Launcher's come
 Falcon BMS has bound to it, only while BMS is the window in front (as `/api/mfd/osb`). `sym` and `con` answer that
 BMS does not implement them; a half whose callback the key file leaves unbound answers with the callback to bind.
 `GET /api/mfd/keys` (`rockers`) says which halves those are before anything is pressed.
+
+`&hold=start` / `&hold=end` (1.4.4, additive): Falcon BMS 4.38.2's BRT and GAIN rockers act only while their key is
+down (nothing for the first 500 ms, then end to end in 5 s; a tap does nothing), so the card sends `start` when a half
+is pressed — the PC presses the key and keeps it down — and `end` when it is let go; the PC lets go no sooner than
+750 ms after the press (one 5 % step for a tap), by itself after 8 s, and when another half is pressed. Without
+`hold` (an older device) the PC holds the key 750 ms and lets go. GAIN is the display's own callback since 4.38.2
+(`SimCBEOSB_GAINUP_L`…; a 4.38.1 key file's `SimRadarGainUp/Down` when the display's is not bound).
 
 Both press routes, and `GET /api/mfd/keys` as `blocked` (1.3.8, additive; "" when nothing is in the way), say so in
 a sentence when **Falcon BMS runs as administrator and the PC program does not**: Windows (UIPI) then drops every key
@@ -1222,11 +1234,13 @@ guards as above; only `txt log ini cfg md csv json xml lst tdf b` (text), `html 
 | GET / POST | `/api/boards` | the VR boards' configuration (`BoardConfig`), set by the PC's VR boards page and kept in `bridge-settings.json` as `Boards` |
 | GET | `/api/kneeboard/page?i=<n>&max=<px>` | page `n` of the kneeboard UOAF's HTML Briefing tool exported, as `image/jpeg` (`max` 320-3000, default 1400); 404 when there is none |
 | POST | `/api/kneeboard/open` | opens the HTML Briefing tool's own window on the BMS PC → `{message}`. **In WDP mode** (1.3.8) nothing is started: HTTP 409 `{error, message}`, both the sentence `MissionMode.HTML_BRIEF_SUSPENDED` (its export writes cockpit pages 1-3 over the Planner's Upd Kneeboard pages); `/api/kneeboard/page` still serves what it exported. `BridgeInfo.kneeboard.runSuspended` says which it is |
-| GET | `/api/mfd/keys` | what each of the forty OSBs is bound to in the pilot's key file → `{inFront, blocked, fromKeyFile, keys[{side, n, key}], rockers[{side, which, up, callback, key}]}`; `blocked` (1.3.8, additive): why no press can reach BMS (BMS elevated, the PC program not), else ""; `rockers` (1.3.8, additive): the sixteen rocker halves (`which` gain/sym/con/brt), `callback` the BMS callback (`SimCBEOSB_BRTDOWN_L`, `SimRadarGainUp`; empty for SYM/CON, which BMS has none for), `key` empty when it is not bound (`MfdRockerKey`) |
+| GET | `/api/mfd/keys` | what each of the forty OSBs is bound to in the pilot's key file → `{inFront, blocked, fromKeyFile, keys[{side, n, key}], rockers[{side, which, up, callback, key}]}`; `blocked` (1.3.8, additive): why no press can reach BMS (BMS elevated, the PC program not), else ""; `rockers` (1.3.8, additive): the sixteen rocker halves (`which` gain/sym/con/brt), `callback` the BMS callback (`SimCBEOSB_BRTDOWN_L`, `SimCBEOSB_GAINUP_R` — per display since BMS 4.38.2, `SimRadarGainUp` before; empty for SYM/CON, which BMS has none for), `key` empty when it is not bound (`MfdRockerKey`) |
 | POST | `/api/acmi/clear` | moves the ACMI recordings (never `.vhs`) to the BMS PC's Recycle Bin → `{deleted, bytes}` |
 | GET | `/api/maptile?map=<id>&style=<style>&z=<0-12>&r=<row>&c=<col>` | one 512 px map tile (1.4.0) as `image/jpeg`, for the levels past the ones the apps bundle (z5 and deeper; topographic z4 and deeper): `map` a map id (`korea`, `balkans`, `hellas`, `israel`, `falklands`), `style` `relief`/`satellite`/`dark`/`chart`/`topo`, tile `r`,`c` of the 2^z × 2^z grid counted from the north-west. Drawn on the PC from Falcon BMS's own terrain (`MapTiles.kt`: the height map for every style but satellite, BMS's photoreal textures — `GlobalColorMap`, `4K`, `16K`, `Hires/Day` — for satellite), read only; kept in the PC's memory (64 MB, least recently used dropped) and sent with `Cache-Control: max-age=86400` (the only API answer a browser may cache). 404 `{error}` with the reason when the theater's terrain is not on this PC or a file cannot be read; the map then shows the deepest bundled level enlarged |
 | GET | `/api/maptile?map=<id>&style=bms2d[&theater=<app theater id>]&z=<0-12>&r=&c=` | (additive) the **BMS chart** style: Falcon BMS's own 2D campaign map (`BIG_MAP_ID` of the theater's `CampMap.idx/.rsc`, under its `artdir`, else `Data\Art\Resource`), read at run time and never shipped (`command/CampMap2D.kt`): the whole campaign square, north up, linearly (the same square as every other style); the picture memory-mapped, level `nativeZ` (16,384 px → 5, Korea 2012's 4,096 → 3) copied, coarser ones box-averaged, two finer ones enlarged, deeper 404. `theater` picks the theater's own chart (KTO and Korea 2012 share a terrain, not a chart); without it, the theater BMS is set to when it is on that terrain, else the first of `/api/campmap/info`'s `maps`. JPEG q90, 32 MB in memory, the same caching as the other styles |
 | GET | `/api/campmap/info` | (additive) which theaters have a BMS chart → `BmsChartList` `{maps: [BmsChartMap], theaters: [BmsChartMap]}`, `BmsChartMap` = `{map, theater, name, nativeZ, width}`; `maps` holds one per map id (the chart a map shows when it names no theater). Devices offer the "BMS chart" style (`bms2d`, `MapBase.BmsChart`) only while `maps` is not empty; read once a minute until it answers, then every ten |
+| GET | `/api/maptile?map=<id>&style=<mmgnc, mmhill or mmdem>&z=<0-12>&r=&c=` | (additive) Falcon BMS 4.38.2's **cockpit moving-map pictures** as map styles: the GNC aeronautical chart, the hillshade and the coloured elevation (`<art>\CkptArt\MovingMap\GNC_Map.dds`, `HILLSHADE_Map.dds`, `COLOR_DEM_Map.dds`; Korea's in `Data\Art`, an add-on's in `<its folder>\Art`), read at run time and never shipped (`MapTiles.MOVING`, `movingFile`), laid like the GlobalColorMap in the terrain's frame; JPEG, the same caching as the other styles |
+| GET | `/api/movingmap/info` | (additive) which terrains have those pictures → `MovingMapList` `{maps: [{map, styles: {"mmgnc": 5, …}}]}` (style → its own level, log2 of its width / 512). Devices offer "BMS GNC chart", "BMS hillshade", "BMS elevation" (`MapBase.BmsMovingMap`) only for a style some terrain has, drawn over the bundled Chart (GNC) or Relief until the tiles come and on a terrain without it |
 | GET | `/api/radio?since=<seq>` | the radio calls from BMS's debug log after `since` (0 = all kept) → `RadioLog` (see *The radio*) |
 | POST | `/api/radio/cleanup?on=1\|0&keep=<n>&days=1\|0` | the old-debug-log clean-up's settings (`bridge-settings.json` `RadioLogCleanup`, `RadioLogKeep`, `RadioLogKeepDays`; nothing is deleted) → `RadioLogStatus` |
 | POST | `/api/radio/cleanup/now` | moves BMS's old debug logs to the Recycle Bin now (the same rule as the automatic run) → `RadioLogStatus`, its `cleanup.error` the reason when it could not; 409 in a developer run unless the logs folder is a copy |

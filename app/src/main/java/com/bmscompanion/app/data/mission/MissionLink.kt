@@ -773,6 +773,18 @@ object MissionLink {
         }.getOrElse { "Could not reach the PC: ${reasonOf(it)}" }
     }
 
+    /**
+     * Presses ([start]) or lets go of one MFD rocker half for as long as it is held on the card: Falcon BMS 4.38.2's
+     * BRT and GAIN rockers act only while their key is down (a tap does nothing), and the PC holds the key at least
+     * 0.75 s so a tap is one step. An older PC ignores `hold` and taps on each call, which is harmless.
+     */
+    suspend fun holdRocker(side: Char, which: String, up: Boolean, start: Boolean): String = withContext(Dispatchers.IO) {
+        runCatching {
+            val text = request("POST", "/api/mfd/rocker?side=$side&which=$which&dir=${if (up) "up" else "down"}&hold=${if (start) "start" else "end"}", timeoutMs = 12_000)
+            messageOf(text).orEmpty()
+        }.getOrElse { "Could not reach the PC: ${reasonOf(it)}" }
+    }
+
     suspend fun cfgState(): CfgState? = runCatching { get<CfgState>("/api/cfg") }.getOrNull()
 
     /** Every line a profile actually holds. These are the settings the page lists first. */

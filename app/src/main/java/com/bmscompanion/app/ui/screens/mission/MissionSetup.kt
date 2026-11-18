@@ -217,7 +217,7 @@ private fun StatusCard() {
     SectionCard("What the PC sees", accent = Hud.Green) {
         Row2("PC", "BMS Companion ${i.version} on ${i.host}", true)
         Row2("Falcon BMS", when { i.bms.running -> "running ${i.bms.version ?: ""} · ${if (i.bms.flying) "3D" else "UI"}"; i.bms.installed -> "installed, not running"; else -> "not found" }, i.bms.running)
-        Row2("Theater", i.bms.theater ?: "—", i.bms.theater != null)
+        Row2("Theater", com.bmscompanion.app.data.TheaterLabels.ui(i.bms.theater) ?: "—", i.bms.theater != null)
         Row2("Briefing", if (i.briefing.available) "printed ${i.briefing.generated ?: ""}" else "not printed yet", i.briefing.available)
         Row2("DTC file", if (i.briefing.dtcModified > 0) "found" else "not saved yet", i.briefing.dtcModified > 0)
         Row2("AWACS feed", if (i.tacview.connected) "connected · ${i.tacview.objects} objects" else i.tacview.state, i.tacview.connected)

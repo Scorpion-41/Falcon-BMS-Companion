@@ -5,7 +5,25 @@ A checklist for refreshing the Android app, BMS Companion for Windows and the br
 > Never modify the BMS install. Every tool here only reads it, and every developer check that writes runs against a copy. Copy files into the repo if something needs editing.
 
 ## 0. Prepare
+- [ ] **Before patching an install in place** (BMS's updater replaces the old files, so nothing is left to compare
+  with afterwards), keep a baseline of the old version outside the BMS folder: a manifest of every file (path, size,
+  time), copies (`cp -rp`) of what the app parses — `Bin/x64/Falcon BMS.exe` with its `.pdb` (every finding read out
+  of the exe was read from that build), `Tools/SharedMem`, `Tools/RwrEmulator`, the theater's `Campaign` folder (saves,
+  starts, `.b` scripts, `Strings.txt`, the database files), `Data/TerrData/Objects` class tables with
+  `ObjectiveRelatedData` and `TerrainRelatedData`, `TheaterDefinition`, `Data/Sounds/CommFile.xml` and `F4Talk.csv`,
+  `User/Config`, a printed `briefing.txt` — and the reports of the read-only checks (`--selftest`, `--theatertest`,
+  `--camsource`, `--camtest`, `--cmdreadtest`, `--supportsidetest`, `--targetsidetest`, `--divertcheck`, `--tldcheck`,
+  `--mapinteltest`) run on the old version. After the patch, the manifest diff says which steps below apply.
+- [ ] Put back BMS's own files the app or other tools changed (the cockpit kneeboard pages in `KoreaObj`; the weather
+  maps and campaign starts, if their **Restore** says they differ) so the updater finds the files it expects.
 - [ ] Install/patch BMS and the add-on theaters you want included.
+- [ ] After a patch, a backup the app took **once** of a BMS file the patch replaced is the old version's: the
+  Weather page offers **Refresh the backup** for a map that differs without the app's record; the Command section's
+  copies (`<campaigndir>\BMS Companion Backup\Command`) refresh themselves since 1.4.4 (`CommandBackup.refreshUpdated`:
+  a file an updater laid down — modified before it was created — that differs from its copy becomes the original, the
+  old copy kept in `Older copies\<date>`; `--cmdbackuptest`).
+- [ ] A patch rewrites BMS's own missions with the build's date (4.38.2: `TE_BMS_04_F-16_DCA.tac`); they are not the
+  pilot's newest save (`Theaters.laidByUpdate`), which `--theatertest`'s "newest save" line checks.
 - [ ] Note the install path, e.g. `D:/Falcon BMS 4.39`.
 - [ ] `git checkout -b bms-4.39`
 
@@ -13,21 +31,24 @@ A checklist for refreshing the Android app, BMS Companion for Windows and the br
 ```bash
 cd tools/extractor && npm install
 BMS_ROOT="D:/Falcon BMS 4.39" node src/main.mjs
-BMS_ROOT="D:/Falcon BMS 4.39" node src/charts.mjs   # plates + instrument chart PDFs (needs cache/pdfbox-app.jar)
+BMS_ROOT="D:/Falcon BMS 4.39" node src/charts.mjs   # instrument chart PDFs only (needs cache/pdfbox-app.jar); plates and their PDF twins are not shipped
 BMS_ROOT="D:/Falcon BMS 4.39" node src/maps.mjs   # only if terrain changed; ~30 min
 BMS_ROOT="D:/Falcon BMS 4.39" node src/geo.mjs
 ```
-- [ ] Read the extractor log for warnings (missing files, unparsed theaters, 0-count sections).
+- [ ] Read the extractor log for warnings (missing files, unparsed theaters, 0-count sections), and its last line: "Planner data missing" naming a theater means its `index.json` entry lost something (4.38.2: every KTO theater lost its `map` until `terrain.mjs` stopped needing the legacy `TERRAIN*.BIL`, which Korea no longer ships).
+- [ ] `node src/wdpracks.mjs` when `Data/TerrData/Objects/BmsRack.dat` changed (the Planner's pylons and racks); `node src/ilscheck.mjs` and `node src/apcverify.mjs` when `ObjectiveRelatedData` did.
 - [ ] `git diff --stat app/src/main/assets/data` should show sensible changes. Spot-check `index.json` (theaters, `primary`, `mainTheater`) and the aircraft and airport counts.
 - [ ] Maps (`maps.mjs`, `geo.mjs`): only needed when a theater's terrain changed or a theater with its own terrain was added.
   - New theater: add it to `MAP_SOURCES` in `maps.mjs` (id + terrain folder); `main.mjs` sets `mapId` in `index.json` from the terrain folder name.
+  - …and to `MapTiles.SOURCES`/`OBJECTS` (desktop) for the PC's deeper levels and `--maptiles <BMS folder> app/src/main/assets <id>` for its bundled Topographic levels (run the check from the packaged program, or give `java` `-Dskiko.library.path=<the app folder>`).
+  - **Its georeference**: `node <scratch>/centre.mjs`-style, project the terrain's own centre with `readTheaterTxt` + `makeProjector`; it must land in the middle (`centred` fixes a string that does not). Then project a dozen real airports and compare with the theater's airport records: a few hundred metres is right; kilometres growing away from the centre mean another grid — fit it as Mideast's was (`tools/curated/georef.json`, `georefProjector`), or the borders will not sit on the coast.
   - `maps.mjs` reads `NewTerrain/HeightMaps/HeightMap.raw` (int16 feet, row 0 = north; water = flat areas at or below 0, see `heightmap.mjs`, because land can lie below sea level) and `NewTerrain/Photoreal/GlobalColorMap.dds` (decoded by EZBoards' `texconv.exe` into a temp folder). `MAX_Z` must match `MAX_Z` in `app/.../ui/components/MapBase.kt`.
   - `geo.mjs` needs the Natural Earth 10m GeoJSON files in `tools/extractor/cache/ne` (`ne_10m_admin_0_boundary_lines_land`, `ne_10m_admin_0_countries`, `ne_10m_admin_1_states_provinces`, `ne_10m_admin_1_states_provinces_lines`; public domain, from naturalearthdata.com). It projects them with `NewTerrain/Theater.txt` (`projection.mjs`) and drops province lines over the sea using the heightmap.
   - Checks: `node src/geocheck.mjs` compares BMS airfields with real airport positions (needs OurAirports `airports.csv` in `cache/`; the median should stay under ~1 nm), `node src/cmcheck.mjs` compares the satellite texture with the heightmap. Then look at every style: `./gradlew :desktop:run --args="--maprender <theater id> <folder>"` renders all styles at three zoom levels; coastlines, borders and towns must line up in each.
 - [ ] File formats changed? The parsers are split by domain: `db.mjs` (objects DB), `catalog.mjs` (aircraft/weapons/racks), `airports.mjs` (CampObjData, Stations+Ils, ATC, PHD/PDX/FED), `theaters.mjs`, `terrain.mjs`, `images.mjs`, `charts.mjs`.
 - [ ] The Planner's latitude/longitude: `projection` in `index.json` (theater size, centre and `heightmapBytes` of the terrain BMS flies each theater on, written by `projection.mjs` from `main.mjs`, or on its own with `node src/projection.mjs`; WDP's own lookup is `wdpTerrain`, from `wdpterrain.mjs`). A new theater gets it automatically. Check it against BMS itself: fly a few minutes with ACMI recording on and run `--acmicoords <the recording> out.txt` — the theater must PASS (every position within 2 m); a theater that is not 1,024 km prints the projection string until a recording shows what BMS uses there. `--wdppagetest coords` against a fresh `wdpref page Coords` reference if WDP is at hand.
 - [ ] **The Planner's data, every theater**: `node src/plannercheck.mjs` must print `PASS`. It fails when any theater's `planner.missing` in `index.json` is not empty (the extractor's own list of what it could not build: `airports`, `radio`, `airfields`, `map`, `projection`, `ppt`), when a file a theater names (`airportSet`, `radioSet`, `airfieldSet`, `pptSet`) is not in the assets, when a projection does not put the theater's own centre in the middle of its square, when an airport lies outside its theater, or when the install's `theater.lst` has a theater `index.json` does not. `index.json` also records `bmsBuild`, the version of `Bin/x64/Falcon BMS.exe` the data was read from (4.38.1.3315 for 4.38.1): check it names the build you meant.
-- [ ] **A new theater** (a new add-on in `theater.lst`): re-run `main.mjs` and `plannercheck.mjs` — **no code change**. The app, the Planner included, takes everything theater-specific from `index.json` and the files it names: its own airport and radio set (written for every theater, add-ons too), its ground charts, its terrain's figures (`NewTerrain/Theater.txt` and the heightmap's length), its PPT types (`Campaign/Ppt.ini` in the definition's `campaigndir`). If the theater brings its **own terrain**, the map also needs `maps.mjs`/`geo.mjs` (below), and `plannercheck` says so (`map`). Only a `planner.missing` entry that a re-run cannot fill means code: read the extractor's warning for that theater first.
+- [ ] **A new theater** (a new add-on in `theater.lst`): re-run `main.mjs` and `plannercheck.mjs` — **no code change**. The app, the Planner included, takes everything theater-specific from `index.json` and the files it names: its own airport and radio set (written for every theater, add-ons too), its ground charts, its terrain's figures (`NewTerrain/Theater.txt` and the heightmap's length), its PPT types (`Campaign/Ppt.ini` in the definition's `campaigndir`). If the theater brings its **own terrain**, the map also needs `maps.mjs`/`geo.mjs` (below), and `plannercheck` says so (`map`). Only a `planner.missing` entry that a re-run cannot fill means code: read the extractor's warning for that theater first. Check `<n> ground charts` against `<n> airports` in the log: fewer means the fields' `ObjectiveRelatedData` was not found where BMS reads it (`objectdir`, `ocdDir` in `util.mjs`). Check the theater's `theater.lst` line too (a blank line or one starting `#`/`;` is skipped by BMS, `LoadTheaterList`).
 - [ ] Update the `bmsVersion` default in `tools/extractor/src/util.mjs` (`BMS_ROOT`).
 
 ## 2. Manual-derived data (`tools/curated/*.json`)
@@ -40,11 +61,11 @@ Only needed when the manuals changed (Threat Guide, Dash-1/-34 HOTAS, checklists
 File: `desktop/src/main/kotlin/com/bmscompanion/desktop/bridge/SharedMemory.kt` (objects `FD`, `FD2`, `StringId`), from `<BMS>/Tools/SharedMem/FlightData.h`.
 - [ ] Diff the new `FlightData.h` against the previous one. BMS appends fields at the **end** of `FlightData`, `FlightData2` and the `StringIdentifier` enum. Add the same trailing fields in the same order and types (`float` → `l.f()`, `int`/`unsigned long` → `l.i()`, `short` → `l.s()`, `char`/`unsigned char` → `l.b()`, arrays with a count).
 - [ ] If a field was inserted in the middle (rare), re-check everything after it.
-- [ ] Update the version comment (`FlightData v118, FlightData2 v23, StringData v5`).
+- [ ] Update the version comment (`FlightData v118, FlightData2 v24, StringData v5` for 4.38.2). A field the app reads from a newer version is believed only when the area says that version (`FD2.versionNum`): an older BMS's shorter area is zero-padded.
 - [ ] New StringData ids go in `StringId` (constants for the ids the code reads, and the `names` list used by `--dumpstrings`).
 - [ ] RWR symbol ids: compare `Tools/RwrEmulator/Source/ScopeRenderer.cs` with `rwrText()`/`rwrName()` in `app/.../ui/screens/mission/MissionUtil.kt`.
 - [ ] Run `"BMS Companion.exe" --dumpstrings out.txt` (or `./gradlew :desktop:run --args="--dumpstrings out.txt"`) with BMS running and check each StringData id maps to the right value (theater name, aircraft, briefings dir, VoiceHelpers). Fix `StringId` if they shifted.
-- [ ] `--selftest out.txt` prints the struct sizes (4.38.1: FlightData 1920, FlightData2 1284 bytes). In 3D, open `http://127.0.0.1:47474/api/live`: altitude, heading, fuel and the DED text must look right.
+- [ ] `--selftest out.txt` prints the struct sizes (4.38.1: FlightData 1920, FlightData2 1284 bytes; 4.38.2: 1920, 1292). In 3D, open `http://127.0.0.1:47474/api/live`: altitude, heading, fuel and the DED text must look right.
 
 ## 4. Reading BMS: briefing, DTC, registry, EZBoards
 Files in `desktop/src/main/kotlin/com/bmscompanion/desktop/bridge/`.
@@ -67,7 +88,8 @@ Files in `desktop/src/main/kotlin/com/bmscompanion/desktop/bridge/`; `docs/DATA-
 - [ ] The cockpit kneeboard pages (`KoreaObj/7982-7997.dds` in each theater's 3D data): `--ddstest out.txt <copy>` (a new texture layout shows as an unreadable or unwritable line) and `--kbprinttest <copy> out.txt` (section 1: BMS's shipped copies still found in its `Docs` folders).
 - [ ] The two modes: `--missiontest <copy> <scratch APPDATA> out.txt` (switching, Populate from Planner, the snapshot, the clearing at a new mission and a switch, the one mission picture, the same briefing in both modes) and `--contracttest out.txt <copy>` (every route's answer, DevGuard included).
 - [ ] Parking numbers: after `airfieldrun.mjs`, `node src/apcverify.mjs` must stay clean, and `--taxirender <folder>` must still find Gunsan's landed-on-36 stands at 04 and 28. If BMS changes how Ground numbers spots (`docs/PARKING.md`), `numberParking` in `airfields.mjs` is the place.
-- [ ] The MFD glass: `--rttselftest` and, with BMS running and the export on, `--rtttest`; `--mfdkeystest out.txt <copy>` checks the rocker callbacks against the pilot's key file. A changed texture-area header shows as the glass's "cannot read the picture" state.
+- [ ] The MFD glass: `--rttselftest` and, with BMS running and the export on, `--rtttest`; `--mfdkeystest out.txt <copy>` checks the rocker callbacks against the pilot's key file. A changed texture-area header shows as the glass's "cannot read the picture" state. Read the rocker callbacks' code too, not only their names: 4.38.2 made BRT/GAIN press-and-hold, which a key file cannot show (`BmsKeys.holdRocker`).
+- [ ] `Falcon BMS.cfg` is reset with every update: `node src/cfgcatalog.mjs` lists new options without a description, and an option the app follows deserves a look (4.38.2: `g_nTacviewPort`, `g_sTacviewPassword`, `g_bTacviewIpv6`, read by `BmsConfig.tacviewServer`).
 
 ## 5. PC version (`desktop/`) and browser version (`web/`)
 Both compile `app/src/main/java` directly, so reference data and most screen changes need no extra work. Check:

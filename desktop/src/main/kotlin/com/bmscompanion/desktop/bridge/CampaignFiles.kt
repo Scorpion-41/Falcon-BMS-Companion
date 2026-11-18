@@ -740,7 +740,7 @@ object CampaignFiles {
             }?.takeUnless { it.trim() == "--" }
             BriefSteerpoint(
                 // a Nav point prints its route action, as BMS's briefing does (DtcRoute.printedWord)
-                n = i + 1, desc = names.action(if (p.action == 0 && p.routeAction > 0) p.routeAction else p.action)?.takeUnless { it == "--" },
+                n = i + 1, desc = names.action(DtcRoute.printedAction(p.action, p.routeAction, p.flags))?.takeUnless { it == "--" },
                 time = if (timed) "${hms(p.arrive)}z" else null,
                 dist = dist, heading = heading, cas = null, alt = alt, action = change,
                 formation = formationName(p.formation and 0xF), comments = comment,

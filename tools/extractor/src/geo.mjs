@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readTheaterTxt, makeProjector } from './projection.mjs';
+import { readTheaterTxt, makeProjector, georefProjector } from './projection.mjs';
 import { loadGeoJson, geometryLines } from './geodata.mjs';
 import { MAP_SOURCES } from './maps.mjs';
 import { readHeightmap } from './heightmap.mjs';
@@ -165,7 +165,8 @@ function labelPoint(rings, size, n = 256) {
 function build(src) {
   const t = readTheaterTxt(path.join(BMS, src.dir));
   const size = t.sizeKm * 1000 * 3.27998;
-  const proj = makeProjector(t);
+  // a terrain laid on another georeference than its string (Mideast: tools/curated/georef.json)
+  const proj = georefProjector(src.id) ?? makeProjector(t);
   const near = (coords) => coords.some(([lon, lat]) => { const p = proj(lat, lon); return p.x > -size * 0.2 && p.x < size * 1.2 && p.y > -size * 0.2 && p.y < size * 1.2; });
   const scale = size / 3358700; // Falklands is twice the size: coarser simplification
 

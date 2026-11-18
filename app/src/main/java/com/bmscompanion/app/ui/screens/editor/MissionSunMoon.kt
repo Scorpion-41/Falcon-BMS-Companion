@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -212,7 +213,8 @@ internal fun DrawScope.drawMoon(m: Astro.MoonState, south: Boolean, c: Offset, r
 
 /**
  * The Briefing's and Dashboard's Weather card: one line of sun and moon, from the mission's weather on the PC (nothing
- * on paper or a VR board, nothing without the PC or a date).
+ * on paper or a VR board, nothing without the PC or a date) — and, in 3D on Falcon BMS 4.38.2 or later, a line above it
+ * with the sun's elevation over the jet (`Live.sunElDeg`).
  */
 @Composable
 fun SunMoonLine() {
@@ -228,7 +230,16 @@ fun SunMoonLine() {
             ?: w.theater.takeIf { it.isNotBlank() }?.let { com.bmscompanion.app.ui.screens.mission.resolveTheater(all, it) }
         value = runCatching { MissionSkies.of(w, th, MissionSkies.printedZone(mission?.briefing?.overview?.sunrise)) }.getOrNull()
     }
-    val s = sky?.sm ?: return
+    // In 3D, Falcon BMS 4.38.2 publishes where the sun stands over the jet (FlightData2 version 24). Read through a
+    // derived state, so the line follows the 4 Hz live feed only when the rounded figure changes.
+    val liveState = MissionLink.live.collectAsState()
+    val sunNow by remember { derivedStateOf { liveState.value?.takeIf { it.flying }?.sunElDeg?.let(::sunNowText) } }
+    val s = sky?.sm
+    if (s == null) {
+        sunNow?.let { Text(it, color = Hud.TextDim, fontSize = 11.5.sp, maxLines = 1, modifier = Modifier.padding(top = 6.dp)) }
+        return
+    }
+    sunNow?.let { Text(it, color = Hud.TextDim, fontSize = 11.5.sp, maxLines = 1, modifier = Modifier.padding(top = 6.dp)) }
     Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         MoonGlyph(s.moon, south = s.lat < 0, size = 14.dp)
         Spacer(Modifier.width(6.dp))
@@ -241,5 +252,15 @@ fun SunMoonLine() {
             "$sun · ${s.moon.phase.label} ${(s.moon.illumination * 100).roundToInt()} % · moon ${MissionSkies.short(s.moonrise)}–${MissionSkies.short(s.moonset)}L",
             color = Hud.TextDim, fontSize = 11.5.sp, maxLines = 1,
         )
+    }
+}
+
+/** "Sun now 23° up" / "Sun now 4° below the horizon" for the sun's elevation over the jet, degrees. */
+internal fun sunNowText(elDeg: Double): String {
+    val e = elDeg.roundToInt()
+    return when {
+        e > 0 -> "Sun now ${e}° up"
+        e < 0 -> "Sun now ${-e}° below the horizon"
+        else -> "Sun now on the horizon"
     }
 }

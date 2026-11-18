@@ -405,7 +405,7 @@ private fun cockpitProblem(): String? {
         link !is LinkState.Online -> "Connect this device to BMS Companion on the BMS PC to see the cockpit kneeboard."
         !CockpitKneeboards.loaded -> null
         s == null || s.pages.isEmpty() -> CockpitKneeboards.error ?: "The PC did not say where this theater's kneeboard pages are."
-        KbCockpit.pages(s).isEmpty() -> s.error ?: "${s.theater ?: "This theater"} has no cockpit kneeboard pages."
+        KbCockpit.pages(s).isEmpty() -> s.error ?: "${com.bmscompanion.app.data.TheaterLabels.ui(s.theater) ?: "This theater"} has no cockpit kneeboard pages."
         else -> null
     }
 }

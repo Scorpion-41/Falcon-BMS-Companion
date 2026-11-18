@@ -45,6 +45,16 @@ class BmsConfig(private val install: BmsInstall) {
 
     private companion object {
         const val LAUNCHER_MARK = "LAUNCHER OVERRIDES BEGIN HERE"
+        /**
+         * Launcher V3 (Falcon BMS 4.38.2) can also copy the VR settings into the User cfg under a block of its own,
+         * "VR OVERRIDES BEGIN HERE - EDITS MUST BE MADE IN 'Falcon BMS VR.cfg' - DO NOT EDIT THIS DIRECTLY", which it
+         * rewrites like its own. Whichever of the two blocks comes first is where the launcher's part of the file starts.
+         */
+        const val VR_MARK = "VR OVERRIDES BEGIN HERE"
+        fun isMark(line: String) = LAUNCHER_MARK in line || VR_MARK in line
+        /** Where the launcher's part of a cfg text starts (the first of its marks), or -1. */
+        fun markIndex(text: String): Int =
+            listOf(text.indexOf(LAUNCHER_MARK), text.indexOf(VR_MARK)).filter { it >= 0 }.minOrNull() ?: -1
         val SET = Regex("""set\s+(\S+)\s+("[^"]*"|\S+).*""")
     }
 
@@ -168,7 +178,7 @@ class BmsConfig(private val install: BmsInstall) {
             val lines = ArrayList<CfgLine>()
             var belowLauncher = false
             for (raw in f.readLines()) {
-                if (raw.contains(LAUNCHER_MARK)) { belowLauncher = true; continue }
+                if (isMark(raw)) { belowLauncher = true; continue }
                 val m = SET.matchEntire(raw.trim()) ?: continue
                 lines += CfgLine(m.groupValues[1], m.groupValues[2], belowLauncher)
             }
@@ -238,7 +248,7 @@ class BmsConfig(private val install: BmsInstall) {
             if (f == null || !f.isFile) return
             var below = false
             for (raw in f.readLines()) {
-                if (LAUNCHER_MARK in raw) { below = true; continue }
+                if (isMark(raw)) { below = true; continue }
                 val m = SET.matchEntire(raw.trim()) ?: continue
                 onLine(m.groupValues[1], m.groupValues[2].trim('"'), below)
             }
@@ -254,6 +264,34 @@ class BmsConfig(private val install: BmsInstall) {
         var vr: Boolean? = null
         scan(active(Kind.VR)) { k, v, _ -> if (k == RttTextures.SETTING) vr = v == "1" }
         com.bmscompanion.app.data.mission.RttConfig(on = on, launcher = launcher, vrOn = vr, fps = fps)
+    }.getOrNull()
+
+    /** Falcon BMS's Tacview real-time server as its cfg sets it ([tacviewServer]). */
+    data class TacviewServer(val port: Int, val password: String, val ipv6: Boolean)
+
+    /**
+     * `g_nTacviewPort`, `g_sTacviewPassword` and `g_bTacviewIpv6` as Falcon BMS will read them: `Falcon BMS.cfg`, then
+     * the User cfg (launcher's block included), the last line winning. 4.38.2's stock cfg lists all three (42674, no
+     * password, IPv4). Read only; null when there is no BMS folder to read.
+     */
+    fun tacviewServer(): TacviewServer? = runCatching {
+        val dir = configDir() ?: return null
+        var port = 42674
+        var password = ""
+        var ipv6 = false
+        for (f in listOfNotNull(File(dir, "Falcon BMS.cfg"), active(Kind.USER))) {
+            if (!f.isFile) continue
+            for (raw in f.readLines()) {
+                val m = SET.matchEntire(raw.trim()) ?: continue
+                val v = m.groupValues[2]
+                when (m.groupValues[1]) {
+                    "g_nTacviewPort" -> v.toIntOrNull()?.takeIf { it in 1..65535 }?.let { port = it }
+                    "g_sTacviewPassword" -> password = v.trim('"')
+                    "g_bTacviewIpv6" -> ipv6 = v == "1"
+                }
+            }
+        }
+        TacviewServer(port, password, ipv6)
     }.getOrNull()
 
     /**
@@ -288,7 +326,7 @@ class BmsConfig(private val install: BmsInstall) {
     private fun edited(text: String, key: String, value: String?): String {
         val eol = if ("\r\n" in text) "\r\n" else "\n"
         val lines = text.split(Regex("\r?\n")).toMutableList()
-        val mark = lines.indexOfFirst { LAUNCHER_MARK in it }
+        val mark = lines.indexOfFirst { isMark(it) }
         val limit = if (mark >= 0) mark else lines.size
         // BMS reads the file top to bottom and the last line wins, so that is the one to change — and clearing a
         // setting has to take every copy out, or an earlier one it was hiding would come back into force.
@@ -329,13 +367,13 @@ class BmsConfig(private val install: BmsInstall) {
     }
 
     private fun untilMark(text: String): String {
-        val i = text.indexOf(LAUNCHER_MARK)
+        val i = markIndex(text)
         if (i < 0) return text
         return text.substring(0, text.lastIndexOf('\n', i).let { if (it < 0) 0 else it + 1 })
     }
 
     private fun fromMark(text: String): String? {
-        val i = text.indexOf(LAUNCHER_MARK)
+        val i = markIndex(text)
         if (i < 0) return null
         return text.substring(text.lastIndexOf('\n', i).let { if (it < 0) 0 else it + 1 })
     }

@@ -448,7 +448,7 @@ object DtcRoute {
     private val WORDS = listOf(
         "--", "Takeoff", "Push", "Split", "Refuel", "Rearm", "Pickup", "Land", "Holding Pt", "Contact", "Escort", "Sweep", "CAP",
         "Intercept", "Grnd Attack", "Surf Attack", "S&D", "Strike", "Bomb", "SEAD", "ELINT", "Recon", "Rescue", "ASW", "Fuel",
-        "Air Drop", "Jamming",
+        "Air Drop", "Jamming", "Nothing", "Nothing", "Nothing", "FAC", "Pre IP", "IP", "Turn Pt",
     )
 
     /** The route: STPT 1-24 that are not precision targets (action -1), in number order. Targets are never on the line. */
@@ -465,8 +465,28 @@ object DtcRoute {
      * "SEAD", waypoint 6 is action 19; a waypoint with route action 0 prints "--". A mission file `.ini` writes the
      * action alone, which is why [mismatch] takes the save's route action as well.
      */
-    fun printedWord(action: Int, routeAction: Int, strings: Map<Int, String> = emptyMap()): String? =
-        word(if (action == 0 && routeAction > 0) routeAction else action, strings)
+    fun printedWord(action: Int, routeAction: Int, strings: Map<Int, String> = emptyMap(), flags: Long = 0L): String? =
+        word(printedAction(action, routeAction, flags), strings)
+
+    /**
+     * The action whose word BMS prints for a campaign waypoint: its own; for a Nav point (0) its route action; and
+     * for a Nav point with none, its place in the attack from the waypoint's flags — 0x08 "IP" (32), 0x04 "Pre IP"
+     * (31), 0x10 "Turn Pt" (33), Strings 381-383. Seen in 4.38.1 and 4.38.2 alike: a strike flight's points 5, 6 and 8
+     * (flags 0x102004, 0x102008, 0x202010) print Pre IP, IP and Turn Pt, and a SEAD flight's with the same flags and
+     * route action 19 print SEAD.
+     */
+    fun printedAction(action: Int, routeAction: Int, flags: Long = 0L): Int = when {
+        action != 0 -> action
+        routeAction > 0 -> routeAction
+        flags and WPF_IP != 0L -> 32
+        flags and WPF_PRE_IP != 0L -> 31
+        flags and WPF_TURN != 0L -> 33
+        else -> 0
+    }
+
+    private const val WPF_PRE_IP = 0x04L
+    private const val WPF_IP = 0x08L
+    private const val WPF_TURN = 0x10L
 
     /**
      * Null when [route] and the briefing's [rows] agree: as many points as rows, in the same order, and each row's

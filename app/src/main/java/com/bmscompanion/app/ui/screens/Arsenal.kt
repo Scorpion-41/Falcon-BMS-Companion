@@ -164,7 +164,7 @@ private fun TheaterFilter(selected: String?, onSelect: (String?) -> Unit) {
         }
         DropdownMenu(open, { open = false }) {
             DropdownMenuItem({ Text("All theaters") }, { onSelect(null); open = false })
-            index?.theaters?.forEach { t -> DropdownMenuItem({ Text(t.name) }, { onSelect(t.id); open = false }) }
+            index?.theaters?.forEach { t -> DropdownMenuItem({ Text(com.bmscompanion.app.data.TheaterLabels.of(t.name)) }, { onSelect(t.id); open = false }) }
         }
     }
 }

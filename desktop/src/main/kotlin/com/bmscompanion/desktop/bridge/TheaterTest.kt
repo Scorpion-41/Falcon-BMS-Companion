@@ -52,7 +52,13 @@ object TheaterTest {
         appendLine()
 
         // 1. how many
-        check("19 theaters in theater.lst, every one read", set.all.size == 19 && set.error == null, "${set.all.size}, error ${set.error}")
+        // every line BMS reads (LoadTheaterList skips one that starts with a line break, '#' or ';'): 19 up to 4.38.2,
+        // 20 with Mideast
+        val listed = runCatching {
+            Theaters.resolveFile(set.data, "TerrData\\TheaterDefinition\\theater.lst")!!.readLines(Charsets.ISO_8859_1)
+                .count { it.isNotEmpty() && it[0] !in "\r#;" }
+        }.getOrDefault(-1)
+        check("every theater in theater.lst read ($listed listed)", set.all.size == listed && set.error == null, "${set.all.size}, error ${set.error}")
         check("every campaigndir resolves to a folder", set.all.all { set.campaignDir(it) != null },
             set.all.filter { set.campaignDir(it) == null }.joinToString { it.name })
 

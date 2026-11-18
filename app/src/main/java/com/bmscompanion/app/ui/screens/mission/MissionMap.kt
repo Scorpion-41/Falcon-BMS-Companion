@@ -6,6 +6,8 @@ import com.bmscompanion.app.ui.components.drawAttackModel
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -25,7 +27,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material3.Checkbox
@@ -87,6 +95,7 @@ import com.bmscompanion.app.ui.theme.Hud
 import com.bmscompanion.app.ui.theme.LocalExtra
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 sealed interface MapSel {
@@ -144,8 +153,10 @@ object MapLayers {
     var ownship by pref("m_ownship")
     /** The OWNSHIP figures beside the map (or the strip under it on a phone). */
     var ownInfo by pref("m_owninfo")
+    /** Where the sun stands from your jet, in 3D (Falcon BMS 4.38.2 publishes its azimuth and elevation). */
+    var sun by pref("m_sun")
     fun save() {
-        Repo.putInt("m_ownship", if (ownship) 1 else 0); Repo.putInt("m_owninfo", if (ownInfo) 1 else 0)
+        Repo.putInt("m_ownship", if (ownship) 1 else 0); Repo.putInt("m_owninfo", if (ownInfo) 1 else 0); Repo.putInt("m_sun", if (sun) 1 else 0)
         Repo.putInt("m_follow", if (follow) 1 else 0); Repo.putInt("m_route", if (route) 1 else 0)
         Repo.putInt("m_traffic", if (traffic) 1 else 0); Repo.putInt("m_hostiles", if (hostiles) 1 else 0); Repo.putInt("m_labels", if (labels) 1 else 0)
         Repo.putInt("m_allfields", if (fields) 1 else 0)
@@ -402,7 +413,10 @@ fun LiveMap(
     val hitPx = with(density) { 30.dp.toPx() }
     // where each of the flight's fields was named in the last frame, so a tap on "HOME RKSO" opens the field
     val fieldLabels = remember { HashMap<Int, androidx.compose.ui.geometry.Rect>() }
-    var layersOpen by remember { mutableStateOf(!compactControls) }
+    // the left bar of layers and options: open or folded, kept per device (the Dashboard's small map starts folded)
+    // (open on a tablet or a PC until folded; folded on a phone, whose map it would half cover, until opened)
+    val roomy = com.bmscompanion.app.ui.components.isMedium()
+    var barOpen by remember { mutableStateOf(!compactControls && runCatching { Repo.getInt("m_bar_open", if (roomy) 1 else 0) == 1 }.getOrDefault(roomy)) }
     // Two independent switches, not one nested in the other: Traffic is your own side, Hostiles is theirs. A pilot who
     // turns Hostiles off wants the enemy off the map and his own flight left on it, and one who turns Traffic off wants
     // the reverse. Nesting them let Traffic quietly govern both, so switching Traffic on brought the enemy back with it.
@@ -663,6 +677,8 @@ fun LiveMap(
 
             // ownship
             if (MapLayers.ownship) d.ownPos?.let { (ox, oy) -> drawOwnship(pr.toScreen(ox, oy), d.ownHdg, pr) }
+            // the sun, from the jet toward its true bearing (only in 3D, and only above the horizon)
+            if (MapLayers.sun) d.own?.let { (ox, oy) -> d.live?.let { l -> drawSun(pr.toScreen(ox, oy), l.sunAzDeg, l.sunElDeg, tm) } }
 
             // selection
             selPos?.let { (sx, sy) ->
@@ -672,52 +688,50 @@ fun LiveMap(
             }
         } }
 
-        // Top controls. The full-screen map on a kneeboard has no chip row of its own: MissionMapPane puts the same
-        // options behind the ⋯ button, and the corner above is left to the floating sections button.
+        // The map's layers and options: a bar down the left edge, scrolling where the map is shorter than it, folded to a
+        // small Layers tab by its arrow (MapSideBar; open or folded is each device's own, m_bar_open). The full-screen map
+        // on a kneeboard has none: MissionMapPane puts the same options behind the ⋯ button.
         val knee = bare || (Kneeboard.on && !compactControls)
-        Column(
-            Modifier.align(Alignment.TopStart).padding(8.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            if (!knee) Row(
-                // on paper the page behind is cream too, so the strip needs an edge of its own to be a strip at all
-                Modifier.clip(RoundedCornerShape(12.dp)).background(if (Hud.onPaper) Hud.Surface else Hud.Bg.copy(alpha = 0.82f))
-                    .border(1.dp, if (Hud.onPaper) Hud.Outline else Color.Transparent, RoundedCornerShape(12.dp))
-                    .horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp, vertical = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (compactControls) HudChip(if (layersOpen) "Layers ‹" else "Layers ›", layersOpen) { layersOpen = !layersOpen }
-                if (layersOpen) {
-                    com.bmscompanion.app.ui.components.MapLookButton()
-                    HudChip("Follow", MapLayers.follow) { MapLayers.follow = !MapLayers.follow; MapLayers.save() }
-                    HudChip("Route", MapLayers.route) { MapLayers.route = !MapLayers.route; MapLayers.save() }
-                    HudChip("SAMs", MapLayers.sams) { MapLayers.sams = !MapLayers.sams; MapLayers.save() }
-                    HudChip("Support", MapLayers.support) { MapLayers.support = !MapLayers.support; MapLayers.save() }
-                    // the cartridge's lines, offered when there are any
-                    if (d.lines.isNotEmpty() || (MapLayers.plan && d.merged.planApplied && d.merged.lines.isNotEmpty())) HudChip("Lines", MapLayers.lines) { MapLayers.lines = !MapLayers.lines; MapLayers.save() }
-                    // everything the plan put on the map, at once — offered while a plan is applied
-                    if (d.planAvailable) HudChip("Plan", MapLayers.plan) { MapLayers.plan = !MapLayers.plan; MapLayers.save() }
-                    // shown once a plan with an attack was sent; turning it on flies the map to it
-                    planAttack?.let { a ->
-                        HudChip("Attack", MapLayers.attack) {
-                            MapLayers.attack = !MapLayers.attack; MapLayers.save()
-                            if (MapLayers.attack) a.target?.let { t -> MapLayers.follow = false; state.flyTo(t.north, t.east, ATTACK_ZOOM) }
-                        }
-                    }
-                    HudChip("Friendlies", MapLayers.traffic) { MapLayers.traffic = !MapLayers.traffic; MapLayers.save() }
-                    if (hostilesOn) HudChip("Hostiles", MapLayers.hostiles) { MapLayers.hostiles = !MapLayers.hostiles; MapLayers.save() }
-                    HudChip("Labels", MapLayers.labels) { MapLayers.labels = !MapLayers.labels; MapLayers.save() }
-                    HudChip("All fields", MapLayers.fields) { MapLayers.fields = !MapLayers.fields; MapLayers.save() }
-                    HudChip("My jet", MapLayers.ownship) { MapLayers.ownship = !MapLayers.ownship; MapLayers.save() }
-                    // the jet's size, shape and colour on every map of this device (OwnJetSettings.kt)
-                    if (MapLayers.ownship) OwnJetChip()
-                    // the bearings printed (ownship box, cards, steerpoint list): magnetic as the jet, or true
-                    BearingChip()
-                    HudChip("Ownship box", MapLayers.ownInfo) { MapLayers.ownInfo = !MapLayers.ownInfo; MapLayers.save() }
+        if (!knee) MapSideBar(barOpen, Modifier.align(Alignment.TopStart), onToggle = {
+            barOpen = !barOpen
+            if (!compactControls) runCatching { Repo.putInt("m_bar_open", if (barOpen) 1 else 0) }
+        }) {
+            BarSection("Map")
+            MapStyleRow()
+            BarSection("On the map")
+            BarToggle("Route and steerpoints", MapLayers.route) { MapLayers.route = !MapLayers.route; MapLayers.save() }
+            BarToggle("SAMs and threat rings", MapLayers.sams) { MapLayers.sams = !MapLayers.sams; MapLayers.save() }
+            BarToggle("Tanker and AWACS", MapLayers.support) { MapLayers.support = !MapLayers.support; MapLayers.save() }
+            // the cartridge's lines, offered when there are any
+            if (d.lines.isNotEmpty() || (MapLayers.plan && d.merged.planApplied && d.merged.lines.isNotEmpty())) BarToggle("Lines", MapLayers.lines) { MapLayers.lines = !MapLayers.lines; MapLayers.save() }
+            // everything the plan put on the map, at once — offered while a plan is applied
+            if (d.planAvailable) BarToggle("Plan", MapLayers.plan) { MapLayers.plan = !MapLayers.plan; MapLayers.save() }
+            // shown once a plan with an attack was sent; turning it on flies the map to it
+            planAttack?.let { a ->
+                BarToggle("Attack profile", MapLayers.attack) {
+                    MapLayers.attack = !MapLayers.attack; MapLayers.save()
+                    if (MapLayers.attack) a.target?.let { t -> MapLayers.follow = false; state.flyTo(t.north, t.east, ATTACK_ZOOM) }
                 }
             }
-            if (flightStrip && MapLayers.ownInfo) FlightStrip(d.live, d.bull)
+            BarToggle("All airfields", MapLayers.fields) { MapLayers.fields = !MapLayers.fields; MapLayers.save() }
+            BarToggle("Labels", MapLayers.labels) { MapLayers.labels = !MapLayers.labels; MapLayers.save() }
+            if (d.live?.sunAzDeg != null) BarToggle("Sun", MapLayers.sun) { MapLayers.sun = !MapLayers.sun; MapLayers.save() }
+            BarSection("Traffic")
+            BarToggle("Friendlies", MapLayers.traffic) { MapLayers.traffic = !MapLayers.traffic; MapLayers.save() }
+            if (hostilesOn) BarToggle("Hostiles", MapLayers.hostiles) { MapLayers.hostiles = !MapLayers.hostiles; MapLayers.save() }
+            BarSection("Your jet")
+            BarToggle("Follow", MapLayers.follow) { MapLayers.follow = !MapLayers.follow; MapLayers.save() }
+            BarToggle("Show my jet", MapLayers.ownship) { MapLayers.ownship = !MapLayers.ownship; MapLayers.save() }
+            // the jet's size, shape and colour on every map of this device (OwnJetSettings.kt)
+            if (MapLayers.ownship) JetLookRow()
+            BarToggle("Ownship box", MapLayers.ownInfo) { MapLayers.ownInfo = !MapLayers.ownInfo; MapLayers.save() }
+            // the bearings printed (ownship box, cards, steerpoint list): magnetic as the jet, or true
+            BearingRow()
         }
+        // the flight's figures on a phone: beside the bar, or under the folded tab
+        if (flightStrip && MapLayers.ownInfo) Box(
+            Modifier.align(Alignment.TopStart).padding(start = if (knee) 8.dp else if (barOpen) MAP_BAR_W + 8.dp else 44.dp, top = 8.dp),
+        ) { FlightStrip(d.live, d.bull) }
         // The picture is missing whenever BMS is not recording, and a VR board has no pointer to dismiss a corner
         // pill with, so the warning sits in the middle of the map on every copy of it and leaves when data arrives.
         AcmiCenterNotice(Modifier.align(Alignment.Center))
@@ -731,6 +745,157 @@ fun LiveMap(
                 },
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Default.MyLocation, "Center", tint = if (MapLayers.follow) Hud.Amber else Hud.TextDim) }
+    }
+}
+
+/** The width of the Mission map's left bar ([MapSideBar]). */
+private val MAP_BAR_W = 196.dp
+
+/**
+ * The Mission map's layers and options as a bar down its left edge (every platform): flush with the edge, the map's
+ * height, a hairline on its right, its rows in four sections (Map, On the map, Traffic, Your jet) scrolling where the map
+ * is shorter. The arrow in its header folds it to a slim handle on the edge, and the handle opens it again. It replaced
+ * the chip row across the top, which scrolled sideways and hid half its chips on a phone.
+ */
+@Composable
+private fun MapSideBar(open: Boolean, modifier: Modifier, onToggle: () -> Unit, content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
+    // on paper the page behind is cream too, so the bar needs an edge of its own to be a bar at all
+    val bg = if (Hud.onPaper) Hud.Surface else Hud.Bg.copy(alpha = 0.92f)
+    val edge = Hud.Outline.copy(alpha = if (Hud.onPaper) 1f else 0.7f)
+    if (!open) {
+        // the handle: a slim tab on the edge
+        Column(
+            modifier.padding(start = 6.dp, top = 8.dp).background(bg, BAR_SHAPE).barButton(false) { onToggle() }.padding(horizontal = 6.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(Icons.Default.Layers, "Map layers", tint = Hud.Amber, modifier = Modifier.size(18.dp))
+            Icon(Icons.Default.ChevronRight, "Show the map's layers", tint = Hud.Text, modifier = Modifier.size(18.dp))
+        }
+        return
+    }
+    Column(
+        modifier.fillMaxHeight().width(MAP_BAR_W).background(bg)
+            .drawBehind { drawLine(edge, Offset(size.width - 0.5f, 0f), Offset(size.width - 0.5f, size.height), 1f) },
+    ) {
+        Row(Modifier.fillMaxWidth().height(40.dp).padding(start = 12.dp, end = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Layers, null, tint = Hud.Amber, modifier = Modifier.size(16.dp))
+            Text("Map layers", color = Hud.Text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(start = 8.dp).weight(1f))
+            Box(Modifier.padding(end = 6.dp).size(if (com.bmscompanion.app.data.Platform.touchFirst) 34.dp else 26.dp).barButton(false) { onToggle() }, contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.ChevronLeft, "Hide the map's layers", tint = Hud.Text, modifier = Modifier.size(18.dp))
+            }
+        }
+        HorizontalDivider(color = edge)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 8.dp), content = content)
+    }
+}
+
+/** A section's title in the bar. */
+@Composable
+private fun BarSection(title: String) {
+    Text(
+        title.uppercase(), color = Hud.TextFaint, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp,
+        modifier = Modifier.padding(start = 12.dp, top = 12.dp, bottom = 3.dp),
+    )
+}
+
+/** The height of a button: a finger's on a touch screen, a mouse's otherwise. */
+private val barRow: androidx.compose.ui.unit.Dp get() = if (com.bmscompanion.app.data.Platform.touchFirst) 38.dp else 28.dp
+
+/** The bar's buttons' corner. */
+private val BAR_SHAPE = RoundedCornerShape(6.dp)
+
+/**
+ * The bar's button look: a framed, slightly raised face, lit amber while [on], a shade lighter under the mouse, the
+ * whole face pressed. Every control in the bar is one of these, so a pilot sees at once what can be pressed.
+ */
+@Composable
+private fun Modifier.barButton(on: Boolean, onClick: () -> Unit): Modifier {
+    val source = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val hover by source.collectIsHoveredAsState()
+    val face = when {
+        on -> Hud.Amber.copy(alpha = if (hover) 0.24f else 0.15f)
+        hover -> Hud.Surface3
+        else -> Hud.Surface2
+    }
+    return this.clip(BAR_SHAPE).background(face)
+        .border(1.dp, if (on) Hud.Amber.copy(alpha = 0.75f) else Hud.Outline, BAR_SHAPE)
+        .hoverable(source)
+        .clickable(interactionSource = source, indication = androidx.compose.material3.ripple(), onClick = onClick)
+}
+
+/** One layer as a toggle button: a lamp and its name, lit while the layer is on. */
+@Composable
+private fun BarToggle(label: String, on: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.padding(horizontal = 8.dp, vertical = 2.dp).fillMaxWidth().height(barRow).barButton(on, onClick).padding(horizontal = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                .background(if (on) Hud.Amber else Color.Transparent)
+                .border(1.dp, if (on) Hud.Amber else Hud.TextFaint, androidx.compose.foundation.shape.CircleShape),
+        )
+        Text(
+            label, color = if (on) Hud.Text else Hud.TextDim, fontSize = 12.5.sp, maxLines = 1,
+            fontWeight = if (on) FontWeight.Medium else FontWeight.Normal,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.padding(start = 9.dp),
+        )
+    }
+}
+
+/** A choice as a drop-down button: its name over the framed value and a drop-down arrow. */
+@Composable
+private fun BarValue(label: String, value: String, onClick: () -> Unit) {
+    Column(Modifier.padding(horizontal = 8.dp, vertical = 2.dp).fillMaxWidth()) {
+        Text(label, color = Hud.TextFaint, fontSize = 11.sp, modifier = Modifier.padding(start = 2.dp, bottom = 2.dp))
+        Row(
+            Modifier.fillMaxWidth().height(barRow).barButton(false, onClick).padding(start = 10.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                value, color = Hud.Text, fontSize = 12.5.sp, maxLines = 1, fontWeight = FontWeight.Medium,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+            )
+            Icon(Icons.Default.ArrowDropDown, null, tint = Hud.TextDim, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
+/** The map's style and landmarks ([MapLookMenuItems]) from one row. */
+@Composable
+private fun MapStyleRow() {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        BarValue("Style", com.bmscompanion.app.ui.components.MapLook.styleName(com.bmscompanion.app.ui.components.MapLook.style)) { open = !open }
+        DropdownMenu(open, onDismissRequest = { open = false }, modifier = Modifier.background(Hud.Surface).widthIn(min = 230.dp)) { MapLookMenuItems() }
+    }
+}
+
+/** Your jet's size, shape and colour ([OwnJetSettings]) from one row. */
+@Composable
+private fun JetLookRow() {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        BarValue("Jet look", OwnJetLook.labels[OwnJetLook.preset]) { open = !open }
+        DropdownMenu(open, onDismissRequest = { open = false }, modifier = Modifier.background(Hud.Surface)) {
+            OwnJetSettings(Modifier.padding(horizontal = 14.dp, vertical = 6.dp).width(300.dp))
+        }
+    }
+}
+
+/** Bearings, magnetic (as the F-16 shows them) or true ([BearingPrefs]): two buttons side by side, the one in use lit. */
+@Composable
+private fun BearingRow() {
+    Column(Modifier.padding(horizontal = 8.dp, vertical = 2.dp).fillMaxWidth()) {
+        Text("Bearings", color = Hud.TextFaint, fontSize = 11.sp, modifier = Modifier.padding(start = 2.dp, bottom = 2.dp))
+        Row(Modifier.fillMaxWidth().height(barRow), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            listOf("MAG" to true, "TRUE" to false).forEach { (label, mag) ->
+                val on = BearingPrefs.magnetic == mag
+                Box(Modifier.weight(1f).fillMaxHeight().barButton(on) { BearingPrefs.set(mag) }, contentAlignment = Alignment.Center) {
+                    Text(label, color = if (on) Hud.Amber else Hud.TextDim, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp)
+                }
+            }
+        }
     }
 }
 
@@ -759,6 +924,7 @@ private fun MapOptionsButton() {
             OwnJetSettings(Modifier.padding(start = 16.dp, end = 14.dp, bottom = 4.dp).width(300.dp))
             BearingChoice(Modifier.padding(start = 16.dp, end = 14.dp, bottom = 4.dp))
             LayerRow("Ownship box", MapLayers.ownInfo) { MapLayers.ownInfo = it }
+            LayerRow("Sun (in 3D)", MapLayers.sun) { MapLayers.sun = it }
             HorizontalDivider(color = Hud.Outline.copy(alpha = 0.6f))
             MapLookMenuItems()
         }
@@ -835,6 +1001,30 @@ fun DrawScope.drawAttack(
  * Ownship: white, outlined in black, with a cased heading line five miles long — never the route's amber (a pilot
  * could not tell the two apart) — at the size the device chose ([com.bmscompanion.app.ui.components.OwnJetLook]).
  */
+/**
+ * The sun as seen from your jet: a small sun 70 dp from it toward the sun's true azimuth (the map is north up), a
+ * faint line to it, and its elevation. Nothing without the figures (BMS before 4.38.2, or not in 3D) or below the
+ * horizon. Azimuth is from true north, clockwise (FlightData2 sunAzimuth, read in degrees as Live.sunAzDeg).
+ */
+fun DrawScope.drawSun(own: Offset, azDeg: Double?, elDeg: Double?, tm: androidx.compose.ui.text.TextMeasurer) {
+    if (azDeg == null || elDeg == null || elDeg < -1.0) return
+    val rad = Math.toRadians(azDeg)
+    val dist = 70.dp.toPx()
+    val c = own + Offset((sin(rad) * dist).toFloat(), (-cos(rad) * dist).toFloat())
+    val ink = Color(0xFFFFC233)
+    drawDashedLine(ink.copy(alpha = 0.55f), own, c, 1.5f, floatArrayOf(5f, 5f))
+    val r = 6.dp.toPx()
+    drawCircle(Color.Black.copy(alpha = 0.55f), r + 2f, c)
+    drawCircle(ink, r, c)
+    for (k in 0 until 8) {
+        val a = k * Math.PI / 4
+        val d = Offset(sin(a).toFloat(), -cos(a).toFloat())
+        drawLine(ink, c + d * (r + 3f), c + d * (r + 3f + 4.dp.toPx()), 2f)
+    }
+    val label = "SUN " + elDeg.roundToInt() + "°"
+    safeText(tm, label, c + Offset(r + 9.dp.toPx(), -7.dp.toPx()), androidx.compose.ui.text.TextStyle(color = ink, fontSize = 11.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold))
+}
+
 fun DrawScope.drawOwnship(p: Offset, hdg: Double, pr: MapProjection) {
     val jet = OwnJetLook.lengthPx(this)
     val len = (pr.pxPerNm * 5).coerceIn(jet * 1.3f, maxOf(160f, jet * 3f))

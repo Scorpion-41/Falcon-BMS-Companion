@@ -290,7 +290,7 @@ internal fun ColumnScope.PlannerSettingsWindow(onClose: () -> Unit) {
         )
         val planned = PlannerMissionState.theater?.takeIf { PlannerMissionState.fromSave }
         Setting(
-            "Theater", listOfNotNull(bms?.theater?.trim()?.let { "BMS is on $it" }, planned?.let { "planning in $it" }).joinToString(" · ").ifEmpty { "Not known" },
+            "Theater", listOfNotNull(bms?.theater?.trim()?.let { "BMS is on ${com.bmscompanion.app.data.TheaterLabels.of(it)}" }, planned?.let { "planning in ${com.bmscompanion.app.data.TheaterLabels.of(it)}" }).joinToString(" · ").ifEmpty { "Not known" },
             "Settings/Theater",
         )
         Setting("Planner data", "BMS Companion ${AppVersion.NAME}, made from Falcon BMS ${AppVersion.BMS}", "Settings/Data")

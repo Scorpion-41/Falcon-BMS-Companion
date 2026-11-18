@@ -288,6 +288,8 @@ object MissionPrefs {
         "bridge_host", "bridge_port",
         // laid out for this device's screen
         "files_text_size", "taxi_sheet_pct", "planner_steps_open",
+        // the Mission map's left bar, open or folded: each screen its own (a phone folds it, a PC keeps it open)
+        "m_bar_open",
         // the Dashboard: each device's own (with the dash_ keys below)
         "mfd_arrange",
         // what a device keeps for itself

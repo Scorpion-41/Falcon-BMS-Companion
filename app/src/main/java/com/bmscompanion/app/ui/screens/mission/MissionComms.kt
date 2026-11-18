@@ -227,7 +227,7 @@ private fun RadioSettingRow(s: MergedSetting) {
             PlanTags(s.source == PlanItemSource.PLAN, s.notInJet, compact = true)
         }
         s.was?.let { Text("cartridge: $it", fontSize = 10.sp, color = Hud.TextFaint, modifier = Modifier.padding(start = 96.dp)) }
-        if (s.untested) Text("WDP key: BMS 4.38.1 reading not tested", fontSize = 10.sp, color = Hud.TextFaint, modifier = Modifier.padding(start = 96.dp))
+        if (s.untested) Text("WDP key: BMS 4.38 reading not tested", fontSize = 10.sp, color = Hud.TextFaint, modifier = Modifier.padding(start = 96.dp))
     }
 }
 

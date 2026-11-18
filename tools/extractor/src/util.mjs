@@ -69,6 +69,18 @@ export function findFileCI(dir, name) {
   return hit ? path.join(dir, hit) : null;
 }
 
+/**
+ * A theater's `OCD_nnnnn` folder (its OCD, FED, PHD and PDX files) where BMS reads it: the `objectdir`'s
+ * `ObjectiveRelatedData`, and only when that folder does not exist the base theater's (`g_bUseDbFallback`; read out of
+ * `Falcon BMS.exe`, `LoadClassTable`). Never the `3ddatadir` (3D models): Mideast's names Korea's, and EF2000 BTO's,
+ * LHTO's, the LKTOs' and KTO 80s' name a theater whose objectives differ — up to 1.4.4 their fields were read from it.
+ */
+export function ocdDir(th, ocd) {
+  const id = String(ocd).padStart(5, '0');
+  const own = findFileCI(th.objectDir, 'ObjectiveRelatedData');
+  return findFileCI(own || findFileCI(path.join(DATA, 'TerrData/Objects'), 'ObjectiveRelatedData'), `OCD_${id}`);
+}
+
 export function slug(s) {
   return String(s).toLowerCase().replace(/\+/g, 'plus').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }

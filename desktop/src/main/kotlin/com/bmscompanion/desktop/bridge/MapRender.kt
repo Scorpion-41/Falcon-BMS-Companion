@@ -34,6 +34,8 @@ object MapRender {
             MapTiles.rootOverride = bms
             MapDeep.fetcher = { path ->
                 withContext(Dispatchers.IO) {
+                    // the cockpit moving-map pictures the install has (BmsMovingMap), so their styles are drawn too
+                    if (path.startsWith("/api/movingmap/info")) return@withContext MapTiles.movingInfo().body
                     val q = path.substringAfter('?').split('&').associate { it.substringBefore('=') to it.substringAfter('=') }
                     val t0 = System.nanoTime()
                     val a = MapTiles.tile(q["map"]!!, q["style"]!!, q["z"]!!.toInt(), q["r"]!!.toInt(), q["c"]!!.toInt())
@@ -42,6 +44,7 @@ object MapRender {
                 }
             }
         }
+        if (bms != null) runBlocking { com.bmscompanion.app.ui.components.BmsMovingMap.refresh() }
         val w = 1400; val h = 900
         val nm = th.sizeFt / 6076.12
         // scale for a given number of pixels a nautical mile: the square is the window's height at scale 1

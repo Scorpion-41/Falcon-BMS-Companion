@@ -70,6 +70,7 @@ object MapTiles {
         "hellas" to "Data/Add-On Hellas/TerrData/Hellas",
         "israel" to "Data/Add-On Israel/Terrdata/Israel",
         "falklands" to "Data/Add-On Falklands/TerrData/Falklands",
+        "mideast" to "Data/Add-On Mideast128/Terrdata/Mideast",
     )
 
     /** Each map id's own theater's `objectdir`, whose `TerrainRelatedData` levels the terrain under its airbases. */
@@ -79,6 +80,7 @@ object MapTiles {
         "hellas" to "Data/Add-On Hellas/TerrData/Objects",
         "israel" to "Data/Add-On Israel/Terrdata/objects",
         "falklands" to "Data/Add-On Falklands/TerrData/objects",
+        "mideast" to "Data/Add-On Mideast128/Terrdata/ObjectsNT",
     )
 
     /** A check's BMS folder (read only); the program itself reads the install it found. */
@@ -94,7 +96,7 @@ object MapTiles {
         val z = req.query["z"]?.toIntOrNull()
         val r = req.query["r"]?.toIntOrNull()
         val c = req.query["c"]?.toIntOrNull()
-        if (id !in SOURCES || style !in STYLES || z == null || r == null || c == null || z !in 0..MAX_Z || r !in 0 until (1 shl z) || c !in 0 until (1 shl z))
+        if (id !in SOURCES || (style !in STYLES && style !in MOVING) || z == null || r == null || c == null || z !in 0..MAX_Z || r !in 0 until (1 shl z) || c !in 0 until (1 shl z))
             return ApiResponse.json("""{"error":"no such tile"}""", 404)
         val t = tile(id, style, z, r, c)
         return t.bytes?.let { ApiResponse(200, "image/jpeg", it) }
@@ -440,8 +442,60 @@ object MapTiles {
     class Pixels internal constructor(val px: IntArray, internal val labels: Labels?)
 
     /** One tile's pixels in [style]; null when the files cannot be read. */
-    fun render(t: Terrain, style: String, z: Int, r: Int, c: Int, size: Int): Pixels? =
-        if (style == "satellite") satellite(t, z, r, c, size)?.let { Pixels(it, null) } else shaded(t, style, z, r, c, size)
+    fun render(t: Terrain, style: String, z: Int, r: Int, c: Int, size: Int): Pixels? = when {
+        style == "satellite" -> satellite(t, z, r, c, size)?.let { Pixels(it, null) }
+        style in MOVING -> moving(t, style, z, r, c, size)?.let { Pixels(it, null) }
+        else -> shaded(t, style, z, r, c, size)
+    }
+
+    // ================================================================ the cockpit moving-map pictures
+
+    /**
+     * Falcon BMS 4.38.2's cockpit moving-map pictures, as map styles (the app's `BmsMovingMap`): the GNC aeronautical
+     * chart, the hillshade and the coloured elevation the F-16's HSD draws, one DDS each over the whole terrain
+     * (16,384 px BC1 sRGB with every mip level; the elevation 8,192). Korea's are in `Data\Art\CkptArt\MovingMap`, an
+     * add-on's in `<its folder>\Art\CkptArt\MovingMap` (Balkans and Hellas as updated for 4.38.2). Read from the
+     * pilot's install at run time, never shipped (the GNC chart is SkyVector's). Laid like the GlobalColorMap, one cell
+     * in the terrain's frame ([paintGrid]); checked on Korea's and the Balkans' against the bundled relief's coasts.
+     */
+    val MOVING = linkedMapOf("mmgnc" to "GNC_Map.dds", "mmhill" to "HILLSHADE_Map.dds", "mmdem" to "COLOR_DEM_Map.dds")
+
+    /** The picture of [style] for map [id] in the install, or null. */
+    fun movingFile(id: String, style: String): File? {
+        val base = root() ?: return null
+        val name = MOVING[style] ?: return null
+        val rel = SOURCES[id] ?: return null
+        val folders = if (id == "korea") listOf("Data/Art/CkptArt/MovingMap")
+            else rel.split('/').take(2).joinToString("/").let { listOf("$it/Art/CkptArt/MovingMap", "$it/CkptArt/MovingMap") }
+        for (f in folders) {
+            val dir = Theaters.resolveDir(base, f) ?: continue
+            Theaters.resolveFile(dir, name)?.takeIf { it.isFile }?.let { return it }
+        }
+        return null
+    }
+
+    private fun moving(t: Terrain, style: String, z: Int, r: Int, c: Int, size: Int): IntArray? {
+        val f = movingFile(t.id, style) ?: return null
+        val out = IntArray(size * size)
+        paintGrid(t, out, size, z, r, c, 1, false) { _, _ -> f }
+        for (i in out.indices) if (out[i] == 0) out[i] = argb(205.0, 214.0, 220.0) // off the picture: a pale ground
+        return out
+    }
+
+    /** `GET /api/movingmap/info`: per terrain the pictures it has and each one's own level (log2 of its width / 512). */
+    fun movingInfo(): ApiResponse {
+        val maps = SOURCES.keys.mapNotNull { id ->
+            val styles = MOVING.keys.mapNotNull { s ->
+                val f = movingFile(id, s) ?: return@mapNotNull null
+                val w = runCatching {
+                    java.io.RandomAccessFile(f, "r").use { raf -> raf.seek(16); Integer.reverseBytes(raf.readInt()) }
+                }.getOrDefault(0)
+                if (w < TILE) null else s to (Math.round(ln(w / TILE.toDouble()) / ln(2.0))).toInt().coerceIn(0, MAX_Z)
+            }.toMap()
+            if (styles.isEmpty()) null else com.bmscompanion.app.ui.components.MovingMapEntry(id, styles)
+        }
+        return ApiResponse.json(Bridge.json.encodeToString(com.bmscompanion.app.ui.components.MovingMapList.serializer(), com.bmscompanion.app.ui.components.MovingMapList(maps)))
+    }
 
     private fun shaded(t: Terrain, style: String, z: Int, r: Int, c: Int, size: Int): Pixels? {
         val g = grid(t, z, r, c, size) ?: return null
@@ -1066,12 +1120,60 @@ object MapTiles {
                     val total = px.size.toLong()
                     var acc = 0L; var lo = 0; var hi = 255
                     for (v in 0 until 256) { acc += hist[v]; if (acc < total * 0.01) lo = v; if (acc < total * 0.995) hi = v }
-                    intArrayOf(lo, (235.0 / max(40, hi - lo) * 1000).roundToInt())
+                    val gw = d.levelW(level) / stride; val gh = d.levelH(level) / stride
+                    intArrayOf(lo, (235.0 / max(40, hi - lo) * 1000).roundToInt()) + detailGain(t, px, gw, gh)
                 }
             }
         } catch (_: Exception) { null } ?: intArrayOf(0, 1000)
         t.levels = lv
         return lv
+    }
+
+    /**
+     * What the detail cells (4K, 16K, Hires) are multiplied by, per channel × 1000, so they come out as bright as the
+     * GlobalColorMap the levels were measured on ([global], [gw] × [gh] pixels): up to twelve 4K cells, each at a
+     * level of 256 px or less, against the GlobalColorMap over the same ground. Korea's cells are within 15 % of it
+     * (0.97, 0.86, 0.87) and stay as they are; Mideast's are 1.38 times brighter, which the levels' stretch (× 1.27)
+     * turned to white desert from z5. Out of 0.85-1.18 the cells are scaled back, by at most a half or a double.
+     */
+    private fun detailGain(t: Terrain, global: IntArray, gw: Int, gh: Int): IntArray {
+        val none = intArrayOf(1000, 1000, 1000)
+        // a fill-through terrain's cells are blended onto the GlobalColorMap where they are sea ([paintGrid]): left as they are
+        if (gw <= 0 || gh <= 0 || t.id in FILL_THROUGH) return none
+        val g4 = (t.sizeKm / 64).roundToInt().takeIf { it > 0 } ?: return none
+        val names = (1..g4 * g4).filter { t.has("4K", "$it.dds") }
+        if (names.isEmpty()) return none
+        val pick = names.filterIndexed { i, _ -> i % max(1, names.size / 12) == 0 }.take(12)
+        val sum = DoubleArray(3); var n = 0
+        for (k in pick) {
+            val f = t.file("4K", "$k.dds") ?: continue
+            val cell = try {
+                open(f).use { ch ->
+                    val d = dxt(f, ch) ?: return@use null
+                    var level = 0
+                    while (d.levelW(level) > 256 && level < d.levels - 1) level++
+                    meanRgb(decode(ch, d, level, 0, 0, d.levelW(level), d.levelH(level)))
+                }
+            } catch (_: Exception) { null } ?: continue
+            val row = (k - 1) / g4; val col = (k - 1) % g4
+            val x0 = col * gw / g4; val x1 = max(x0 + 1, (col + 1) * gw / g4)
+            val y0 = row * gh / g4; val y1 = max(y0 + 1, (row + 1) * gh / g4)
+            val area = IntArray((x1 - x0) * (y1 - y0)) { global[(y0 + it / (x1 - x0)) * gw + x0 + it % (x1 - x0)] }
+            val g = meanRgb(area)
+            if (g.any { it < 8.0 }) continue // sea or black: no ratio to speak of
+            for (c in 0..2) sum[c] += cell[c] / g[c]
+            n++
+        }
+        if (n == 0) return none
+        val ratio = sum.map { it / n }
+        if (ratio.all { it in 0.85..1.18 }) return none
+        return IntArray(3) { (1000.0 / ratio[it]).coerceIn(500.0, 2000.0).roundToInt() }
+    }
+
+    private fun meanRgb(px: IntArray): DoubleArray {
+        val s = DoubleArray(3)
+        for (v in px) { s[0] += (v shr 16) and 0xFF; s[1] += (v shr 8) and 0xFF; s[2] += v and 0xFF }
+        return DoubleArray(3) { s[it] / max(1, px.size) }
     }
 
     /**
@@ -1112,10 +1214,25 @@ object MapTiles {
     internal fun satellite(t: Terrain, z: Int, r: Int, c: Int, size: Int, only: Int? = null): IntArray? {
         t.photo ?: return null
         val out = IntArray(size * size)
+        val lv = levels(t)
+        // the detail cells brought to the GlobalColorMap's brightness where they differ ([detailGain]; Mideast)
+        val gain = lv.takeIf { it.size >= 5 && (it[2] != 1000 || it[3] != 1000 || it[4] != 1000) }
         photoLayers(t).forEachIndexed { i, l ->
-            if (l.cells > 0 && (if (only == null) z >= l.fromZ else i == only)) paintGrid(t, out, size, z, r, c, l.cells, l.fillThrough && only == null, l.file)
+            if (l.cells > 0 && (if (only == null) z >= l.fromZ else i == only)) {
+                if (i == 0 || gain == null || l.fillThrough) paintGrid(t, out, size, z, r, c, l.cells, l.fillThrough && only == null, l.file)
+                else {
+                    val layer = IntArray(size * size)
+                    paintGrid(t, layer, size, z, r, c, l.cells, false, l.file)
+                    for (p in layer.indices) {
+                        val v = layer[p]
+                        if (v != 0) out[p] = rgbInt(
+                            min(255, ((v shr 16) and 0xFF) * gain[2] / 1000), min(255, ((v shr 8) and 0xFF) * gain[3] / 1000), min(255, (v and 0xFF) * gain[4] / 1000),
+                        ).let { if (it == 0) 1 else it }
+                    }
+                }
+            }
         }
-        val (lo, k) = levels(t).let { it[0] to it[1] / 1000.0 }
+        val (lo, k) = lv[0] to lv[1] / 1000.0
         for (i in out.indices) {
             val v = out[i]
             if (v == 0) { out[i] = argb(18.0, 32.0, 46.0); continue }

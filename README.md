@@ -1,8 +1,10 @@
 # Falcon BMS Companion
 
-A companion for **Falcon BMS 4.38** on **Windows PCs, Android phones and tablets, and iPhone, iPad or any browser**: the live mission, a mission planner, a campaign editor, ground charts for every airfield, a weather generator, VR kneeboards and an offline reference, so the sim never has to be left for a second window.
+A companion for **Falcon BMS 4.38.2** on **Windows PCs, Android phones and tablets, and iPhone, iPad or any browser**: the live mission, a mission planner, a campaign editor, ground charts for every airfield, a weather generator, VR kneeboards and an offline reference, so the sim never has to be left for a second window.
 
 Everything it shows about the game — airfields, charts, aircraft, weapons, threats — is **generated from the Falcon BMS install's own files**. The install is read only, except where a feature writes on request; see [What it writes to the BMS folder](#what-it-writes-to-the-bms-folder).
+
+**New in 1.4.4:** built for **Falcon BMS 4.38.2** only (earlier versions are no longer supported; start new campaigns and missions after updating BMS), the new **MidEast** theater and the updated **Balkans** and **Hellas**, BMS's own **GNC chart, hillshade and elevation** as map styles, **F-15 SIT lines**, the Mission map's layers in a bar down its left edge, and maps that always fill their window. Full list: [CHANGELOG.md](CHANGELOG.md).
 
 **New in 1.4.2:** the **Command section**, a new section of the PC window for editing campaigns, TEs and trainings and their theater data: every side on the map with BMS's own 2D chart and icons, flights, packages, squadrons, ground units, objectives, teams and the campaign header, a Checks page with fixes, and the theater's database files, saved as a copy by default with BMS's own files backed up once. Also the Mission section following you between PC, browser and Android; a weather-type map and a vertical profile on Mission weather; kneeboards shown first on their page, a route map in your map style and a weather map page; a fuel plan with Bingo, Joker and playtime; a larger own-jet symbol; and Start with Windows. Full list: [CHANGELOG.md](CHANGELOG.md).
 
@@ -37,7 +39,7 @@ All pictures: [docs/screenshots](docs/screenshots). They are drawn by the app fr
 **Features**
 - [Mission section](#mission-section) — Dashboard and MFDs, Map, Taxi, Briefing and Comms, Radio, Kneeboards, Weather
 - [Two modes: EZBoards or WDP](#two-modes-ezboards-or-wdp)
-- [Planner: WDP for Falcon BMS 4.38.1](#planner-wdp-for-falcon-bms-4381)
+- [Planner: WDP for Falcon BMS 4.38.2](#planner-wdp-for-falcon-bms-4382)
 - [Command section: campaigns, TEs and theater data](#command-section-campaigns-tes-and-theater-data)
 - [Maps](#maps)
 - [Which kneeboard is which](#which-kneeboard-is-which)
@@ -149,7 +151,7 @@ The live section: what the PC reads from Falcon BMS, on every device. The **EZBo
 | **Kneeboards** | Generates BMS's cockpit kneeboards with EZBoards from any device, sets up the VR boards, and shows the HTML Briefing pages. In WDP mode EZBoards and Run HTML Briefing are paused, with the reason. |
 | **Weather** | **Mission weather**: the weather the mission flies over the theater, with the route and fields (the save's map and, with Maps Auto Update, the maps through the flight on a time line; or the weather type BMS applies to the whole theater). Then the [weather generator](#weather-generator), **Make weather**. |
 | **Files** | Text files and logs, HTML pages, pictures and PDFs on the BMS PC, opened on any device, read only. Hidden under **Setup → Mission pages**. |
-| **Planner** | [WDP for Falcon BMS 4.38.1](#planner-wdp-for-falcon-bms-4381). Available in WDP mode. |
+| **Planner** | [WDP for Falcon BMS 4.38.2](#planner-wdp-for-falcon-bms-4382). Available in WDP mode. |
 | **AWACS** *(optional)* | A GCI console for a human controller in multiplayer: picture calls, BRAA and bullseye per contact, flight control, measure tool and alerts. Turned on in **Setup → Mission pages**; hostile contacts follow the **Show hostile contacts (live)** setting. |
 
 | Dashboard, page 3 (flight data) | Briefing | Comms |
@@ -172,7 +174,7 @@ A Dashboard card with the live MFD pictures from Falcon BMS in an F-16 bezel. Th
 
 ![Taxi page](docs/screenshots/taxi.jpg)
 
-**1,840 charted airfields across all 19 theaters, in the app.** Runways, every taxiway with its letter, hold short points, the pavement, the buildings, and every parking spot with the number BMS's Ground controller gives it ("park 04"). Each chart is generated from Falcon BMS's own files: the airfield data the sim taxis its AI on and, for the asphalt, the airfield's 3D model. Spot numbers and sizes are checked against the parking charts the theaters ship.
+**1,968 charted airfields across all 20 theaters, in the app.** Runways, every taxiway with its letter, hold short points, the pavement, the buildings, and every parking spot with the number BMS's Ground controller gives it ("park 04"). Each chart is generated from Falcon BMS's own files: the airfield data the sim taxis its AI on and, for the asphalt, the airfield's 3D model. Spot numbers and sizes are checked against the parking charts the theaters ship.
 
 1. Open **Mission → Taxi** (or **Reference → Airfields → a field → Ground chart** for any field).
 2. With Falcon BMS running, the page knows the field and the spot the jet is on.
@@ -325,11 +327,11 @@ The model is **WeatherGen**'s (Craig Andera's tool from Virtual Mission Tools, p
 
 BMS's own ready-made Sunny, Fair, Poor and Inclement maps are never changed. `docs/WEATHER.md` has the file format, what the port fixes in WeatherGen, and what is still unknown.
 
-## Planner: WDP for Falcon BMS 4.38.1
+## Planner: WDP for Falcon BMS 4.38.2
 
 ![Planner: ATO Targets in the full app, with the Steps panel](docs/screenshots/planner-ato.jpg)
 
-The Planner is a port of Falcas's Weapon Delivery Planner (WDP) to Falcon BMS 4.38.1; its pages, attack geometry, ballistics and performance planning are his work. The port keeps WDP's pages and controls in their places and uses BMS 4.38.1's own data (airports, runways, ILS, TACAN, charts, HARM codes, PPT types, radios, theaters, aircraft, stores, pylons and racks) in place of WDP's tables. It runs on the PC, on Android and in the browser, in **WDP mode** ([Two modes](#two-modes-ezboards-or-wdp)). What is the same as WDP 3.7.24, what is corrected and what is new is listed in the [1.3.8 release notes](CHANGELOG.md) and, in full, in [docs/WDP-PORT.md](docs/WDP-PORT.md).
+The Planner is a port of Falcas's Weapon Delivery Planner (WDP) to Falcon BMS 4.38.2; its pages, attack geometry, ballistics and performance planning are his work. The port keeps WDP's pages and controls in their places and uses BMS 4.38.2's own data (airports, runways, ILS, TACAN, charts, HARM codes, PPT types, radios, theaters, aircraft, stores, pylons and racks) in place of WDP's tables. It runs on the PC, on Android and in the browser, in **WDP mode** ([Two modes](#two-modes-ezboards-or-wdp)). What is the same as WDP 3.7.24, what is corrected and what is new is listed in the [1.3.8 release notes](CHANGELOG.md) and, in full, in [docs/WDP-PORT.md](docs/WDP-PORT.md).
 
 **From BMS to the cockpit** (switch the Mission section to **WDP** first, at its top or in Setup)
 
@@ -438,7 +440,7 @@ Works with no PC and no connection; it is all in the app, except the in-game pic
 - **Airfields** — every field of every theater: the ground chart with the **Info** box under it (latitude and longitude as BMS shows them, elevation, and the field's frequencies in divert order; tap a value to copy it), then runways, ILS, ATC patterns, nearest diverts, navaids, and the instrument charts of the theaters that ship them (244 charts, 988 pages).
 - **Map** — the theater map with its airfields.
 - **Threats** — SAMs, AAA, radars, MANPADS, aircraft, AAMs and ships, with RWR symbols, in-game pictures of each air-defence system's battalion and of ships drawn from BMS's 3-D models (by the BMS PC), HARM/ALIC codes and engagement envelopes, plus **HARM & RWR**, **Encyclopedia** and **Range chart**.
-- **Arsenal** — 323 flyable aircraft types (KTO and every add-on), per-theater variants, specs, station-by-station loadouts with rack capacity, and 518 stores.
+- **Arsenal** — 325 flyable aircraft types (KTO and every add-on), per-theater variants, specs, station-by-station loadouts with rack capacity, and 526 stores.
 
 | Threats | Arsenal | HARM & RWR |
 |---|---|---|
@@ -630,7 +632,7 @@ See **[docs/UPDATING.md](docs/UPDATING.md)** — a checklist written so it can b
 ## Credits & licences
 
 - Unofficial fan project, **not affiliated with Benchmark Sims**. Falcon BMS, its data, documentation, TacRef pictures, HOTAS illustrations and airport charts belong to Benchmark Sims and the respective add-on theater teams. This repository contains data extracted from the game install for personal reference use.
-- **Weapon Delivery Planner (WDP)** is by **Falcas**. The Planner is a port of Falcas's Weapon Delivery Planner (WDP) to Falcon BMS 4.38.1; its pages, attack geometry, ballistics and performance planning are his work. Falcas is credited on every Planner page, in About and in the Guide; `docs/WDP-PORT.md` records what was ported and every fix.
+- **Weapon Delivery Planner (WDP)** is by **Falcas**. The Planner is a port of Falcas's Weapon Delivery Planner (WDP) to Falcon BMS 4.38.2; its pages, attack geometry, ballistics and performance planning are his work. Falcas is credited on every Planner page, in About and in the Guide; `docs/WDP-PORT.md` records what was ported and every fix.
 - **EZBoards** is a separate tool by Logic, available from the Falcon BMS forum; BMS Companion only launches it (and the extractor uses its bundled Microsoft `texconv` to decode the BMS ground texture).
 - **HTML Briefing** (`html_brief`) is UOAF's tool, a separate download (not part of Falcon BMS); BMS Companion only starts it and shows the pages it exports.
 - **[OpenKneeboard](https://openkneeboard.com/)** is by Fred Emmott. The VR boards are Web Dashboard tabs in it.

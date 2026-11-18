@@ -70,15 +70,11 @@ object CampaignTargets {
         return CampFeatures(id.toString(), out.mapIndexed { i, f -> f.copy(elevFt = ground.getOrNull(i)) })
     }
 
-    /** `OCD_nnnnn/FED_nnnnn.XML`, where the extractor looks for it: the 3D data folder, the object folder, then the default one. */
+    /** `OCD_nnnnn/FED_nnnnn.XML` where BMS reads it ([Theaters.TheaterSet.objectiveDataDir]). */
     private fun fedFile(set: Theaters.TheaterSet, t: Theaters.Theater, ocd: Int): File? {
         val id = ocd.toString().padStart(5, '0')
-        val roots = listOfNotNull(set.threeDDataDir(t), set.objectDir(t), Theaters.resolveDir(set.data, "TerrData\\Objects"))
-        for (r in roots) {
-            val dir = Theaters.resolveDir(r, "ObjectiveRelatedData\\OCD_$id") ?: continue
-            Theaters.resolveFile(dir, "FED_$id.XML")?.let { return it }
-        }
-        return null
+        val dir = set.objectiveDataDir(t)?.let { Theaters.resolveDir(it, "OCD_$id") } ?: return null
+        return Theaters.resolveFile(dir, "FED_$id.XML")
     }
 
     /** The ground under [points] as `/api/campaign/ground` answers it ([TerrainHeights]); nulls where it says nothing. */

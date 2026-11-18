@@ -1,16 +1,92 @@
 # Changelog
 
-## 1.4.3 (BMS 4.38) — November 2026
+## 1.4.4 (BMS 4.38.2) — November 2026
 
 **Files:** `BMS-Companion-PC.msi` (or the portable `.zip`) for the PC that runs Falcon BMS, `BMS-Companion.apk` for Android. Update from **About → Download**, then **Install**; existing settings are kept.
 
-Bug fixes and smaller features: folder selection on the PC, the fuel plan's high-altitude legs, two-finger
-zoom in the browser, the arrival and alternate fields on the VR chart boards, F-15C and radio and chart pages for the
-cockpit kneeboard, magnetic bearings, RWR symbols as the scope draws them, and ground unit orders in the Command
-section.
+Support for Falcon BMS 4.38.2 and for the Balkans and Hellas theaters as updated for it, and a new theater, MidEast.
+Everything since 1.4.2 is in this release: 1.4.3 was not published separately.
+
+**Built for Falcon BMS 4.38.2, and for 4.38.2 only.** Earlier versions of Falcon BMS are no longer supported. BMS
+4.38.2 does not carry campaign saves and TEs over from earlier versions, so start new campaigns and missions after
+updating BMS. Saves, cartridges and mission files left from 4.38.1 may show an incomplete or wrong route, briefing,
+threats or lines; if lines or PPTs from an old mission stay on the HSD, clear them once on the Planner's DTC page
+(Clear All on the Lines and PPT tabs) and Save to DTC.
+
+### Falcon BMS 4.38.2
+
+- **MFD rockers: press and hold.** In 4.38.2 the BRT and GAIN rockers change their value only while the key is held
+  (after half a second, end to end in about five seconds); a short press does nothing. On the MFD card a rocker half is
+  now held for as long as it is pressed, and a tap gives one step. Devices running an older version of the app also
+  get one step per tap.
+- **MFD GAIN for each display.** 4.38.2 gives each MFD its own GAIN callbacks (A-G radar, the HSD's moving map, the
+  targeting pod in MGC). The card presses the display's own binding; the stock key file binds only the left MFD's, and
+  the right card names the callback to bind.
+- **Reference data from 4.38.2:** the F-2A, Su-30SM and F-15C+ IAF CFT; the AAM-5B, the F-2's tanks, the J/AAQ-2 and
+  Sorbtsiya pods; the SA-20's new 80.56 nm PPT ring; updated Korea TvT tables.
+- **Ground charts:** Gunsan's taxiway signs and stands, Kalma's hangar, Panghyon's UAV hangars, and the taxi networks
+  of Gangneung and Seoul, as 4.38.2 lays them out. Parking numbers are unchanged.
+- **The Planner's pylons and racks** follow 4.38.2's rack table (the F-15I's new pylons and racks among them).
+- **HARM ALIC table** as the 4.38.2 Dash-34 prints it: SA-8 "8T", SA-15 "15T", SA-19 "19T", and the SA-20 system
+  (120 "20", Tombstone 220 "20T", Big Bird 620 "BB").
+- **F-16 HOTAS (Reference):** the 4.38.2 targeting pod functions: TMS left steps WHOT, BHOT and TV; the pinky's XR
+  double press; MSL STEP held to step the A-G weapon type; the MAN RNG knob as GMT target gain.
+- **Config page:** the 273 options of 4.38.2's `Falcon BMS.cfg`, the new graphics, VR and multiplayer options among
+  them. The settings written by the new Launcher (its own block and its VR block) are left in place.
+- **Sun position in 3D:** 4.38.2 publishes where the sun stands; the Briefing's Weather card shows its elevation over
+  the jet while flying.
+- **Tacview feed:** while BMS Companion's own Tacview settings are left at their defaults, it follows the Tacview
+  port, password and IPv6 settings of BMS's configuration.
+- **After a BMS update:** the Command section's copies of BMS's campaign starts and missions are refreshed from the
+  updated files (the earlier copies are kept in `Older copies`), so **Restore BMS's original** restores the 4.38.2
+  file. A mission file the update rewrote is no longer taken for the pilot's newest save.
+
+### New with Falcon BMS 4.38.2
+
+- **BMS's own aeronautical chart as a map style.** 4.38.2 ships the GNC chart, a hillshade and a coloured elevation map
+  for the F-16's moving map (Korea, Balkans and Hellas). **BMS GNC chart**, **BMS hillshade** and **BMS elevation** are
+  map styles on every map while the PC has them, read from your Falcon BMS installation (nothing is shipped). The
+  kneeboard's route map can be printed on them too.
+- **F-15 SIT lines** (Planner → Options → **F-15 SIT lines…**): name, colour, dash and show or hide the four steerpoint
+  lines on the F-15C's SIT display, and add up to seven lines of your own, filled from the mission (tanker and AWACS
+  tracks, CAP and station boxes) or from a steerpoint line. Saved into your cartridge; LOAD it in BMS to fly them.
+- **Ground elevation for lines and PPTs.** The Planner now writes the ground's height under every line point and PPT
+  it places, as 4.38.2 does itself, so the cartridge is complete before BMS has opened it.
+- **Mission map: the layers in a bar on the left**, on every device. The chips across the top are now a panel down the
+  map's left edge, in sections (Map, On the map, Traffic, Your jet): each layer a toggle button lit while it is on, the
+  map style and your jet's look as drop-down buttons, bearings as MAG / TRUE buttons. It scrolls on a short screen and
+  folds away to a slim handle with its arrow (open on tablets and PCs, folded on phones until opened).
+- **The sun on the Mission map.** In 3D a small sun shows the sun's direction from your jet and its elevation (**Sun**
+  on the map).
+- **One-step MFD rocker keys.** If your key file binds 4.38.2's one-step BRT/GAIN callbacks (`SimCBKNOB_*`), the MFD
+  card uses them: a tap is one step and holding repeats it.
+
+### Theaters
+
+- **MidEast (new):** the Add-On Mideast128 theater for 4.38 — Kuwait, Iraq, Iran, the Persian Gulf, Saudi Arabia and
+  the Gulf states over 2,048 km. Its maps in every style and the PC's deeper levels, borders and provinces laid on the
+  terrain's own grid, 129 airfields with their ground charts, runways and frequencies, its aircraft, stores, PPT types
+  and campaigns, in the Mission section, the Planner, the weather pages and the Command section, named MidEast throughout
+  the app (BMS lists it as "Mideast4_38"). MidEast ships no
+  instrument charts and no 16K or high-resolution photoreal tiles: the satellite map is enlarged from its 4K tiles
+  when zoomed in.
+- **Balkans and Hellas for 4.38.2:** their new and changed airfields (the Balkans' Villafranca, Ronchi Legionari,
+  S. Angelo, Peretola, Ampugnano, Ladevci, Nis, Pristina, Dolac, Nikola Tesla, Taszar, Amendola and six airstrips;
+  Vlora removed), ground charts, runways, frequencies and ILS, aircraft and stores, Tactical Reference entries and PPT
+  types are read from the updated theaters, and both maps are redrawn from their rebuilt
+  terrain. Without the separate 16K photoreal download, the satellite map is enlarged from the 4K tiles when zoomed in.
+- **Add-on theaters that share another theater's 3D data** (EF2000 BTO, LHTO, the LKTOs, KTO 80s and MidEast): their
+  airfields — ground charts, runways and ILS — are read from the theater's own objective data, as Falcon BMS reads
+  them, instead of from the theater whose 3D models it borrows.
 
 ### Fixes
 
+- **Tacview password.** With a password set for BMS's Tacview server, BMS Companion could not connect: the password
+  is now sent as Tacview's protocol requires.
+- **Route before 3D for strike flights (EZBoards mode).** A flight whose route has a Pre IP, IP or Turn Pt steerpoint
+  now shows its route on the map before 3D, as soon as a campaign save holds the flight (BMS writes one at TAKEOFF).
+- **Bases from an earlier mission.** Before 3D the Briefing, Taxi page and support cards no longer take the departure,
+  arrival, tanker and AWACS of the last flight flown; they follow the printed briefing until the jet is in 3D.
 - **PC: folder selection.** The EZBoards, HTML Briefing, Falcon BMS and screenshots folders are chosen in Windows' own
   folder dialog, and a screenshot's **Save a copy…** uses Windows' own save dialog. This fixes a crash that could
   close the program while browsing for a folder.
@@ -45,6 +121,9 @@ section.
 
 ### Maps
 
+- **Every map fills its window.** Zoomed all the way out, a map now covers its box edge to edge and can no longer be
+  dragged away from an edge to show empty space beside it: the Mission map, the Reference map, the weather maps, the
+  Planner's maps, the Command section's map and the small maps on cards.
 - **Magnetic bearings.** Bullseye and BRA figures (the map's box, cards and steerpoint list, the Dashboard, the AWACS
   page, the VR boards) are magnetic by default, as the F-16's HSD and FCR show them: the jet's own variation in 3D,
   BMS's variation map before. **BRG MAG / BRG TRUE** on the map switches. The Planner's DataCard keeps WDP's true

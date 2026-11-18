@@ -419,7 +419,7 @@ private fun TheaterHeader(g: BrowserGroup, open: Boolean, files: CampFiles) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(if (open) "▾" else "▸", color = Hud.TextDim, fontSize = 13.sp, modifier = Modifier.width(16.dp))
-        Text(t.name, color = Hud.Text, fontSize = fingerSp(13f), fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(com.bmscompanion.app.data.TheaterLabels.of(t.name), color = Hud.Text, fontSize = fingerSp(13f), fontWeight = FontWeight.SemiBold, maxLines = 1)
         if (t.current) {
             Spacer(Modifier.width(8.dp))
             PlannerTag("BMS is set to this", Hud.Green)

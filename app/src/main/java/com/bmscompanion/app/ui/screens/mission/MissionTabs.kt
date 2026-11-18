@@ -379,7 +379,7 @@ fun MissionStatus(
             is LinkState.Offline -> state.reason
             is LinkState.Online -> listOfNotNull(
                 info?.bms?.let { b -> if (!b.running) "BMS not running" else if (b.flying) "BMS in 3D" else "BMS in UI" },
-                info?.bms?.theater,
+                com.bmscompanion.app.data.TheaterLabels.ui(info?.bms?.theater),
                 info?.tacview?.takeIf { it.connected }?.let { "AWACS feed ${it.objects}" },
             ).joinToString(" · ")
             LinkState.Connecting -> MissionLink.host ?: ""

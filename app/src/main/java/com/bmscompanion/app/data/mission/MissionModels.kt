@@ -354,6 +354,12 @@ data class Live(
      * gives no sign convention, so the devices check it against the headings, `MagVar.jet`). Null from an older PC.
      */
     val magDev: Double? = null,
+    /**
+     * Where the sun stands over the jet, degrees (FlightData2 version 24, Falcon BMS 4.38.2): azimuth from north and
+     * elevation above the horizon (negative below it). Null from an older BMS or an older PC.
+     */
+    val sunAzDeg: Double? = null,
+    val sunElDeg: Double? = null,
 ) {
     /** The fuel on board as the cockpit shows it: the totalizer, else internal + external. */
     val fuelTotal get() = if (fuelTotalizer > 0.0) fuelTotalizer else fuelInternal + fuelExternal
@@ -662,7 +668,7 @@ data class MfdKey(val a: String = "", val b: String = "", val inverted: Boolean 
  * One half of an MFD corner rocker and what it is bound to in the pilot's key file (`/api/mfd/keys`, `rockers`).
  *
  * [which] is `gain`, `sym`, `con` or `brt`; [callback] the Falcon BMS callback that half works (`SimCBEOSB_BRTDOWN_L`,
- * `SimRadarGainUp`), empty for SYM and CON, which BMS has none for; [key] the binding as the card prints it
+ * `SimCBEOSB_GAINUP_R`), empty for SYM and CON, which BMS has none for; [key] the binding as the card prints it
  * ("Ctrl+Alt+-"), empty when the callback is not bound — then the card dims that half and names [callback] to bind.
  */
 @Serializable

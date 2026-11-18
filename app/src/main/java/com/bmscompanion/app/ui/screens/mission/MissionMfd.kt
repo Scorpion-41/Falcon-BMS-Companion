@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
@@ -401,6 +402,9 @@ fun MfdPanel(
     // twenty entries whatever BMS is doing: a bezel with gaps in it is not a bezel
     val k = remember(keys) { List(20) { keys.getOrElse(it) { MfdKey() } } }
     var down by remember { mutableStateOf<Ctl?>(null) }
+    // the rocker half being held, and the presses and releases on their way to the PC, in order
+    var heldRocker by remember { mutableStateOf<Ctl.Rocker?>(null) }
+    val rockerEvents = remember { kotlinx.coroutines.channels.Channel<Pair<Ctl.Rocker, Boolean>>(kotlinx.coroutines.channels.Channel.UNLIMITED) }
     // The rocker half under the mouse, for the tooltip a dead half carries. No light on the glass for an OSB press:
     // the pilots found the green flash beside the button a distraction, and the cap sinking says it was pressed.
     var hover by remember { mutableStateOf<Ctl.Rocker?>(null) }
@@ -417,15 +421,28 @@ fun MfdPanel(
         when (c) {
             is Ctl.Osb -> scope.launch { onPressed?.invoke(MissionLink.pressOsb(s, c.n)) }
             is Ctl.Rocker -> {
-                val label = Bz.ROCKERS[c.k]
                 val why = dead(c)
                 if (why != null) onPressed?.invoke(why)
-                else scope.launch { onPressed?.invoke(MissionLink.pressRocker(s, label.lowercase(), c.up)) }
+                else { heldRocker = c; rockerEvents.trySend(c to true) }
             }
         }
     }
+    // A rocker half is held for as long as it is pressed, as on the real bezel: Falcon BMS 4.38.2's BRT and GAIN
+    // rockers act only while their key is down (a tap does nothing), so the PC presses on the press and lets go on
+    // the release (holding at least 0.75 s, one step). One queue, so a release never overtakes its press.
+    val letGo: () -> Unit = { heldRocker?.let { rockerEvents.trySend(it to false) }; heldRocker = null }
     // read through state so the pointer handler, which is set up once, always calls the current one
     val press by rememberUpdatedState(handler)
+    val release by rememberUpdatedState(letGo)
+    val pressedNote by rememberUpdatedState(onPressed)
+    LaunchedEffect(side, rockerEvents) {
+        for ((c, start) in rockerEvents) {
+            val s = side ?: continue
+            val message = MissionLink.holdRocker(s, Bz.ROCKERS[c.k].lowercase(), c.up, start)
+            if (message.isNotBlank()) pressedNote?.invoke(message)
+        }
+    }
+    DisposableEffect(Unit) { onDispose { release() } }
     val measurer = rememberTextMeasurer()
     val density = LocalDensity.current
 
@@ -448,8 +465,8 @@ fun MfdPanel(
                                         down = c
                                         if (c != null) press(c)
                                     }
-                                    PointerEventType.Release -> down = null
-                                    PointerEventType.Exit -> { down = null; hover = null }
+                                    PointerEventType.Release -> { down = null; release() }
+                                    PointerEventType.Exit -> { down = null; hover = null; release() }
                                     PointerEventType.Move -> {
                                         val c = e.changes.firstOrNull()?.position?.let { hit(it, size.width.toFloat()) }
                                         hover = c as? Ctl.Rocker

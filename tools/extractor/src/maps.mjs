@@ -46,6 +46,7 @@ export const MAP_SOURCES = [
   { id: 'hellas', dir: 'Data/Add-On Hellas/TerrData/Hellas', objects: 'Data/Add-On Hellas/TerrData/Objects' },
   { id: 'israel', dir: 'Data/Add-On Israel/Terrdata/Israel', objects: 'Data/Add-On Israel/Terrdata/objects' },
   { id: 'falklands', dir: 'Data/Add-On Falklands/TerrData/Falklands', objects: 'Data/Add-On Falklands/TerrData/objects' },
+  { id: 'mideast', dir: 'Data/Add-On Mideast128/Terrdata/Mideast', objects: 'Data/Add-On Mideast128/Terrdata/ObjectsNT' },
 ];
 
 // ------------------------------------------------------------------ heights

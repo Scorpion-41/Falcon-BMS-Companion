@@ -87,6 +87,7 @@ object SelfTest {
         "--attackmaptest" to "--attackmaptest <a copy of the BMS folder> out.txt",
         "--radiotest" to "--radiotest out.txt <a copy of the BMS folder>",
         "--hostiletest" to "--hostiletest out.txt",
+        "--cmdbackuptest" to "--cmdbackuptest <a scratch folder> out.txt",
         "--installstest" to "--installstest out.txt",
         "--plannerstatetest" to "--plannerstatetest out.txt",
         "--syncstatetest" to "--syncstatetest out.txt",
@@ -148,6 +149,13 @@ object SelfTest {
                     val lines = SharedMemoryReader.invertLines(inv, 0)
                     appendLine("ded invert: " + lines.joinToString("|") + if (lines.size == 5 && lines[0] == "       ######" && lines[1].isEmpty() && lines[2] == " ".repeat(20) + "#####") "  ok" else "  FAIL")
                     appendLine("ded invert (none): " + SharedMemoryReader.invertLines(java.nio.ByteBuffer.allocate(5 * 26), 0).let { if (it.isEmpty()) "empty  ok" else "$it  FAIL" })
+                    // the Tacview real-time password as BMS's server checks it (CRC-64/WE of the UTF-16LE text)
+                    val tv = TacviewClient()
+                    appendLine("tacview password hash: test=${tv.passwordHash("test")} password=${tv.passwordHash("password")}" +
+                        if (tv.passwordHash("test") == "38e095a027baf2bc" && tv.passwordHash("password") == "3c0e55f1cfff14c4") "  ok" else "  FAIL")
+                    // FlightData2 version 24's sun angles, radians to degrees, refused when out of range
+                    val sun = listOf(SharedMemoryReader.sunDeg(Math.PI.toFloat() / 2, -Math.PI / 2, Math.PI / 2), SharedMemoryReader.sunDeg(3f, -Math.PI / 2, Math.PI / 2), SharedMemoryReader.sunDeg(Float.NaN, 0.0, 2 * Math.PI))
+                    appendLine("sun angles: $sun" + if (sun[0]?.let { kotlin.math.abs(it - 90.0) < 0.01 } == true && sun[1] == null && sun[2] == null) "  ok" else "  FAIL")
                     System.getenv("BMSC_TEST_BOARD_HTML")?.let(::File)?.takeIf { it.isFile }?.let { appendLine(json.encodeToString(Board.serializer(), EzBoardsRunner.parseHtml(it.readText()))) }
                 })
             }
@@ -614,6 +622,9 @@ object SelfTest {
             // --hostiletest out.txt : hostile contacts off by default and kept back at the source; the setting, its route and
             // its migration (HostileTest.kt; run it with a scratch APPDATA, whose settings it changes and puts back)
             args.size == 2 && args[0] == "--hostiletest" -> report(File(args[1]), HostileTest.run())
+            // --cmdbackuptest <a scratch folder> out.txt : the Command section's backups across a Falcon BMS update
+            // (refreshed from an updater's files, kept from the section's own writes, Restore) in a made-up folder
+            args.size == 3 && args[0] == "--cmdbackuptest" -> report(File(args[2]), com.bmscompanion.desktop.bridge.command.CommandBackupTest.run(File(args[1])))
             // --installstest out.txt : the list of Falcon BMS installs, the quick switch, its routes, the migration and DevGuard
             // over every registry install (InstallsTest.kt; run it with a scratch APPDATA, whose settings it changes and puts back)
             args.size == 2 && args[0] == "--installstest" -> report(File(args[1]), InstallsTest.run())

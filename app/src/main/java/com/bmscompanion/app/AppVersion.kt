@@ -9,10 +9,10 @@ package com.bmscompanion.app
  */
 object AppVersion {
     /** MAJOR.MINOR.PATCH; the Windows installer accepts nothing else. */
-    const val NAME = "1.4.3"
+    const val NAME = "1.4.4"
 
     /** The Falcon BMS version this build's bundled data was extracted from. */
-    const val BMS = "4.38"
+    const val BMS = "4.38.2"
 
     const val AUTHOR = "LoneWolf-41"
     const val REPO = "https://github.com/Scorpion-41/Falcon-BMS-Companion"

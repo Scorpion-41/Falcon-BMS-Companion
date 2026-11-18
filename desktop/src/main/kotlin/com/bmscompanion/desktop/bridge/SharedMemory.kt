@@ -18,7 +18,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sqrt
 
-// Falcon BMS shared memory (<BMS>\Tools\SharedMem\FlightData.h; BMS 4.38: FlightData v118, FlightData2 v23, StringData v5).
+// Falcon BMS shared memory (<BMS>\Tools\SharedMem\FlightData.h; BMS 4.38.2: FlightData v118, FlightData2 v24, StringData v5).
 //
 // UPDATING FOR A NEW BMS VERSION: diff the new FlightData.h against the field lists below. BMS only appends fields at the
 // end, so usually nothing changes here; add new trailing fields in header order and types. See docs/UPDATING.md.
@@ -109,6 +109,8 @@ internal object FD2 {
     val tacanIlsFrequency = l.i()
     val desiredRttFps = l.i()
     val sideSlipdeg = l.f(); val gsMax = l.f(); val gsMin = l.f()
+    // version 24 (4.38.2): the sun's position in the sky, radians (azimuth 0..2pi, elevation -pi/2..pi/2)
+    val sunAzimuth = l.f(); val sunElevation = l.f()
     val size = l.totalSize
 }
 
@@ -247,6 +249,10 @@ object SharedMemoryReader {
                 radarAltFt = fd2.f(FD2.ralt).toDouble(),
                 bingo = fd2.f(FD2.bingoFuel).toDouble(),
                 magDev = fd2.f(FD2.magDeviationSystem).toDouble().takeIf { it.isFinite() && kotlin.math.abs(it) <= 60.0 },
+                // FlightData2 version 24 (4.38.2). An older BMS's area is shorter and the copy zero-pads it, so the
+                // figures are believed only from an area that says version 24 or later.
+                sunAzDeg = if (fd2.i(FD2.versionNum) >= 24) sunDeg(fd2.f(FD2.sunAzimuth), 0.0, 2 * PI)?.let(::norm360) else null,
+                sunElDeg = if (fd2.i(FD2.versionNum) >= 24) sunDeg(fd2.f(FD2.sunElevation), -PI / 2, PI / 2) else null,
                 timeSec = fd2.i(FD2.currentTime),
                 lat = fd2.f(FD2.latitude).toDouble(), lon = fd2.f(FD2.longitude).toDouble(),
                 navMode = fd2.u8(FD2.navMode),
@@ -263,11 +269,15 @@ object SharedMemoryReader {
                 },
             )
         }
-        snap.strings[StringId.VoiceHelpers]?.let { live = live.copy(voice = parseVoice(it)) }
+        val nav = snap.navPointStrings.mapNotNull(::parseNavPoint)
+        // Back in BMS's 2D screens the string area keeps the last 3D flight's voice helpers (its departure, arrival,
+        // alternate, tanker and AWACS) while its steerpoints are gone: they are served only while they are this jet's,
+        // in 3D, so a new mission's pages never take the last one's bases from them (voiceIsCurrent).
+        if (voiceIsCurrent(snap.flying, nav)) snap.strings[StringId.VoiceHelpers]?.let { live = live.copy(voice = parseVoice(it)) }
         // The MFD bezels are their own area and an older BMS may not publish them at all, so a missing one simply
         // leaves both lists empty and the page says what it is missing.
         readOsb()?.let { (l, r) -> live = live.copy(mfdLeft = l, mfdRight = r) }
-        snap.live = live.copy(navPoints = snap.navPointStrings.mapNotNull(::parseNavPoint))
+        snap.live = live.copy(navPoints = nav)
         return snap
     }
 
@@ -276,6 +286,10 @@ object SharedMemoryReader {
      * internal + external ([sum]; the two can differ by what the totalizer counts, never by a factor). Else 0, and
      * the devices add internal and external as before.
      */
+    /** A sun angle in radians as degrees, or null when it is not a number or outside [lo]..[hi] (with a little slack). */
+    internal fun sunDeg(rad: Float, lo: Double, hi: Double): Double? =
+        rad.toDouble().takeIf { it.isFinite() && it >= lo - 0.01 && it <= hi + 0.01 }?.let { it * 180.0 / PI }
+
     internal fun totalizer(total: Double, sum: Double): Double = when {
         !total.isFinite() || total <= 0.0 -> 0.0
         sum <= 0.0 -> if (total < 100_000.0) total else 0.0
@@ -393,6 +407,10 @@ object SharedMemoryReader {
         }
         return np
     }
+
+    /** Whether the voice helpers are the jet's own: it flies, or it has route steerpoints (it is in 3D). */
+    internal fun voiceIsCurrent(flying: Boolean, nav: List<com.bmscompanion.app.data.mission.NavPoint>): Boolean =
+        flying || nav.any { it.type == "WP" && (it.x != 0.0 || it.y != 0.0) }
 
     fun parseVoice(s: String): Voice {
         val parts = s.split(',')

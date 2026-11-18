@@ -1,9 +1,9 @@
 {
   "aircraft": "F-16C/D Block 40/50/52 (CM)",
   "sourceDocs": [
-    "TO 1F-16CMAM-34-1-1 BMS (Change 4.38)",
+    "TO 1F-16CMAM-34-1-1 BMS (Change 4.38.2)",
     "TO 1F-16CM/AM-1 BMS (Change 4.38)",
-    "BMS Training Manual 4.38.1",
+    "BMS Training Manual 4.38.2",
     "BMS Cockpit Interaction Guide",
     "BMS Technical Manual 4.38.1"
   ],
@@ -224,7 +224,7 @@
               "general": "IFF interrogation in A-A; polarity / table toggle on A-G pages.",
               "byMode": [
                 { "mode": "A-A / FCR RWS", "effect": "AIFF SCAN interrogation of the modes set at OSB 16 (M+ / M1-M4). CPL: beams cover the FCR field of regard; DCPL: all 8 beams, +/-60 deg. Replies shown for 2 s per mode (green circle friendly, yellow square unknown)." },
-                { "mode": "TGP", "effect": "FLIR polarity WHOT / BHOT (no effect with TV sensor). TGP menu: moves the selection arrow up." },
+                { "mode": "TGP", "effect": "Steps the sensor WHOT > BHOT > TV > WHOT (Sniper with TV on; with TV off on the control page, or on the AN/AAQ-14 LANTIRN, WHOT <> BHOT only; back on IR it is always WHOT). TGP menu: moves the selection arrow up. (TO 1F-16CMAM-34-1-1 BMS Change 4.38.2, 2.6.1)" },
                 { "mode": "MFD / WPN (Maverick)", "effect": "AGM-65G: polarity COH / BOH (disabled in AREA mode)." },
                 { "mode": "HARM (HAS/POS)", "effect": "Toggles between the three threat tables (same as OSB 2)." },
                 { "mode": "WPN (man-in-the-loop weapons)", "effect": "Generation-dependent (polarity / antenna / autopilot) - see the Dash-34 man-in-the-loop hands-on table." }
@@ -233,10 +233,6 @@
             {
               "input": "Left - long press (>= 0.6 s)",
               "general": "AIFF LOS interrogation centered on the ACQ cursor (two best beams, range-filtered from the cursor range outward, up to 16 replies shown 1.5 s per mode). Available in any A-A radar mode, even with the FCR in standby."
-            },
-            {
-              "input": "Left - double press (< 0.5 s)",
-              "general": "TGP: changes sensor IR > TV > IR (IR FOV and polarity are remembered)."
             }
           ],
           "bmsNotes": "Timing thresholds modelled in BMS: IFF SCAN/LOS split at 0.6 s; spotlight and TWS/CRM transfer at 1 s; HMCS slaving and double-clicks at 0.5 s. When the ICP MARK page is up it takes ownership of TMS forward (markpoint instead of FCR designate).",
@@ -294,7 +290,7 @@
               "byMode": [
                 { "mode": "A-A / FCR RWS", "effect": "Short (< 0.5 s): selects the next station loaded with the current missile type (order 3, 7, 2, 8, 1, 9). Long (>= 0.5 s): selects the next missile category/type in the A-A weapon rotary (e.g. AIM-120 > AIM-9)." },
                 { "mode": "Dogfight", "effect": "Same as A-A: short = next station, long = next missile type." },
-                { "mode": "A-G / FCR GM", "effect": "With a bomb selected: steps the delivery submode CCRP > CCIP > DTOS > CCRP (LADD and MAN are not in the rotary)." },
+                { "mode": "A-G / FCR GM", "effect": "With a bomb selected: steps the delivery submode CCRP > CCIP > DTOS > CCRP (LADD and MAN are not in the rotary); steps through stations loaded with the same type (AGM-65, IAM, HARM). Held >= 0.5 s: steps to the next A-G weapon type (Advanced MMC aircraft only, 4.38.2)." },
                 { "mode": "MFD / WPN (Maverick)", "effect": "Selects the next AGM-65 station; with two stabilized LOS circles, switches between LOS '1' and '2'." },
                 { "mode": "HARM (HAS/POS)", "effect": "Steps between HARM stations (each station can be preset with its own threat/submode)." },
                 { "mode": "IAM (JDAM / JSOW / WCMD)", "effect": "Switches stations just like missiles." }
@@ -338,7 +334,7 @@
               "byMode": [
                 { "mode": "A-A / FCR RWS", "effect": "NORM <> EXP: 4:1 expansion in range and azimuth around the ACQ cursor (RWS, SAM, TWS); flashing EXP mnemonic. Auto-exits EXP on STT." },
                 { "mode": "A-G / FCR GM", "effect": "Steps NORM > EXP (4:1) > DBS1 (8:1 resolution) > DBS2 (64:1) in GM; NORM <> EXP in GMT and SEA." },
-                { "mode": "TGP", "effect": "Toggles WIDE <> NARO FOV (FLIR 3.6 deg / 1.0 deg). With the TGP SOI, switching to NARO also puts the AGM-65 WPN page in NFOV." },
+                { "mode": "TGP", "effect": "Sniper: toggles WIDE <> NARO, or W-XR <> N-XR with XR on; a double press (two within 0.5 s) toggles XR. With the TV sensor: steps TV wide > PIP > TV. AN/AAQ-14 LANTIRN: 6.0 / 1.7 deg (EXP 0.85). With the TGP SOI, switching to NARO also puts the AGM-65 WPN page in NFOV. (TO 1F-16CMAM-34-1-1 BMS Change 4.38.2, 2.6.1)" },
                 { "mode": "HSD", "effect": "Steps NORM > EXP1 (2:1) > EXP2 (4:1) around the HSD cursor (HSD must be SOI)." },
                 { "mode": "MFD / WPN (Maverick)", "effect": "WFOV <> NFOV on the AGM-65 video." },
                 { "mode": "HARM (HAS/POS)", "effect": "POS: cycles HARM submode (EOM > PB > RUK). HAS: cycles the HAS FOV." },
@@ -407,8 +403,8 @@
               "input": "Rotate",
               "general": "Mode-dependent analog control.",
               "byMode": [
-                { "mode": "A-G / FCR GM", "effect": "Hands-on ground map gain: clockwise increases, counter-clockwise decreases (about +/-20% of the base setting; caret shows gain)." },
-                { "mode": "TGP", "effect": "Electronic zoom 1x to 4x (retained between IR/TV sensor changes; shown below OSB 3)." },
+                { "mode": "A-G / FCR GM", "effect": "Hands-on ground map gain: clockwise increases, counter-clockwise decreases (about +/-20% of the base setting; caret shows gain). In GMT it sets the moving-target detection threshold instead (map gain is on OSB 17/16) (TO Change 4.38.2, 2.3.1.6.2)." },
+                { "mode": "TGP", "effect": "Electronic zoom 1x to 4x on the Sniper (retained between sensor changes; shown below OSB 3); not in XR, and none on the AN/AAQ-14 LANTIRN. (TO 1F-16CMAM-34-1-1 BMS Change 4.38.2, 2.6.1)" },
                 { "mode": "A-A GUN (SNAP gunsight)", "effect": "Without a radar lock: sets the manual range of the SNAP bullet circle (700 or 1500 ft)." }
               ]
             },

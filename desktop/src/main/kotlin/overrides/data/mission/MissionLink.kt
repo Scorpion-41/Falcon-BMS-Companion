@@ -832,6 +832,14 @@ object MissionLink {
         }.getOrElse { "Could not reach the PC." }
     }
 
+    /** Presses ([start]) or lets go of one MFD rocker half for as long as it is held (BMS 4.38.2's press-and-hold rockers). */
+    suspend fun holdRocker(side: Char, which: String, up: Boolean, start: Boolean): String = withContext(Dispatchers.IO) {
+        runCatching {
+            val text = request("POST", "/api/mfd/rocker?side=$side&which=$which&dir=" + (if (up) "up" else "down") + "&hold=" + (if (start) "start" else "end"), timeoutMs = 12_000)
+            messageOf(text).orEmpty()
+        }.getOrElse { "Could not reach the PC." }
+    }
+
     suspend fun cfgState(): CfgState? = runCatching { get<CfgState>("/api/cfg") }.getOrNull()
 
     /** Every line a profile actually holds. These are the settings the page lists first. */

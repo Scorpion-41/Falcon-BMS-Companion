@@ -877,7 +877,7 @@ internal class MapActions(
         MapPick.Bullseye -> d.bull?.let { b ->
             MapCard(
                 "Bullseye", true, "What the HSD shows",
-                listOf("The campaign's bullseye. The cartridge carries no bullseye position in 4.38.1 (only whether the MFDs show bullseye information), so the jet takes it from the mission.") + where(b).take(1),
+                listOf("The campaign's bullseye. The cartridge carries no bullseye position in 4.38 (only whether the MFDs show bullseye information), so the jet takes it from the mission.") + where(b).take(1),
                 emptyList(), Hud.Cyan,
             )
         }
@@ -1041,7 +1041,7 @@ internal class MapActions(
             s.open -> "Open steerpoint (${if (n <= 89) "Open 1" else "Open 2"} tab), ${DataCardPlan.actionString(s.action)}: the HSD marks it with a cross."
             s.inDtc && !s.onRoute -> "A precision steerpoint in your cartridge (not joined to the route)."
             s.inDtc -> "In your cartridge; the jet takes it over its own route's."
-            else -> "From ${s.from}: Falcon BMS 4.38.1 keeps the flight plan in the mission file, so the jet has it without the cartridge."
+            else -> "From ${s.from}: Falcon BMS 4.38 keeps the flight plan in the mission file, so the jet has it without the cartridge."
         }
         if (s.elevFt != 0.0) lines += (if (s.inDtc && !s.onRoute || s.open) "Elevation " else "Altitude ") + "${s.elevFt.toInt()} ft"
         lines += where(s.at)

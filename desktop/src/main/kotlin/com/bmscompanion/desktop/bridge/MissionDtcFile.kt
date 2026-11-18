@@ -258,7 +258,7 @@ object MissionDtcFile {
         // carry: the save's waypoint gives it, and only for the waypoint whose action the file has (the points must
         // then equal the waypoints anyway, below)
         DtcRoute.mismatch(points, briefing.steerpoints, strings) { p ->
-            flight?.waypoints?.getOrNull(p.n - 1)?.takeIf { it.action == p.action }?.let { DtcRoute.printedWord(it.action, it.routeAction, strings) }
+            flight?.waypoints?.getOrNull(p.n - 1)?.takeIf { it.action == p.action }?.let { DtcRoute.printedWord(it.action, it.routeAction, strings, it.flags) }
         }?.let {
             return no("${ini.name} is not the briefed flight's route: $it$holds.", dtc, route, holder = holder)
         }
@@ -312,7 +312,7 @@ object MissionDtcFile {
         rows.forEachIndexed { i, r ->
             val w = f.waypoints[i]
             if (r.n != i + 1) return null to "row ${i + 1} of the briefing is STPT ${r.n}."
-            val want = DtcRoute.printedWord(w.action, w.routeAction, strings)?.trim()
+            val want = DtcRoute.printedWord(w.action, w.routeAction, strings, w.flags)?.trim()
             val got = (r.desc ?: "--").trim()
             if (want == null || !want.equals(got, ignoreCase = true)) {
                 return null to "STPT ${i + 1}: $label's waypoint in ${save.file.name} is '${want ?: "?"}' but the briefing says '$got'."

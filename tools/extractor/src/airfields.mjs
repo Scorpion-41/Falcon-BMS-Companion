@@ -31,7 +31,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { parseRecords, findFileCI, DATA, num } from './util.mjs';
+import { parseRecords, findFileCI, DATA, num, ocdDir } from './util.mjs';
 import { fieldTriangles, pavementShapes } from './pavement.mjs';
 import { shipShapes } from './ships.mjs';
 import { modelFootprint, placeFootprint } from './footprint.mjs';
@@ -127,10 +127,7 @@ const round = (p) => ({ e: Math.round(p.e), n: Math.round(p.n) });
 const letterOf = (v) => (v >= 1 && v <= 26 ? String.fromCharCode(64 + v) : null);
 
 function ocdDirFor(th, ocd) {
-  const id = String(ocd).padStart(5, '0');
-  return findFileCI(path.join(th.data3dDir, 'ObjectiveRelatedData'), `OCD_${id}`)
-    || findFileCI(path.join(th.objectDir, 'ObjectiveRelatedData'), `OCD_${id}`)
-    || findFileCI(path.join(DATA, 'TerrData/Objects/ObjectiveRelatedData'), `OCD_${id}`);
+  return ocdDir(th, ocd);
 }
 
 /** The authored points, turned upright: X east, Y north, rotated by the objective's own heading. */

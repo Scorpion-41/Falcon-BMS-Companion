@@ -95,13 +95,15 @@ object BmsKeys {
         val out = HashMap<String, Binding?>()
         runCatching {
             for (line in file.readLines()) {
-                // the OSBs and the BRT rockers are SimCBEOSB_*, the GAIN rocker is the radar's own gain callback
-                if (!line.startsWith("SimCBEOSB_") && !line.startsWith("SimRadarGain")) continue
+                // the OSBs and the BRT and GAIN rockers are SimCBEOSB_*, and 4.38.2's one-step-per-press rocker
+                // callbacks SimCBKNOB_* (in no stock key file; a pilot may bind them)
+                if (!line.startsWith("SimCBEOSB_") && !line.startsWith("SimCBKNOB_")) continue
                 val f = line.split(' ').filter { it.isNotBlank() }
                 if (f.size < 5) continue
                 val scan = scanOf(f[3]) ?: continue
                 val mods = f[4].toIntOrNull() ?: continue
-                val name = f[0].removePrefix("SimCBEOSB_").removePrefix("SimRadar").uppercase()
+                val name = if (f[0].startsWith("SimCBKNOB_")) "KNOB_" + f[0].removePrefix("SimCBKNOB_").uppercase()
+                    else f[0].removePrefix("SimCBEOSB_").uppercase()
                 // A button the pilot has unbound (`0XFFFFFFFF`) is recorded as unbound rather than skipped: skipping
                 // it fell back to the stock key, which on the pilot's own layout may now do something else entirely.
                 // A real binding for the same button elsewhere in the file still wins.
@@ -166,15 +168,15 @@ object BmsKeys {
     /**
      * The Falcon BMS callback one half of a rocker works, or null for SYM and CON.
      *
-     * Checked against the callback table inside `Falcon BMS.exe` (4.38.1): the only MFD rocker callbacks are
-     * `SimCBEOSB_BRTUP_<L|R|T|F>` / `SimCBEOSB_BRTDOWN_<…>` and `SimRadarGainUp` / `SimRadarGainDown`. The SYM
-     * callbacks that do exist (`SimSymWheelUp/Dn`, `SimHmsSymWheelUp/Dn`) are the HUD's and the helmet's wheels.
+     * Falcon BMS 4.38.2 has one per display for both: `SimCBEOSB_BRTUP_<L|R|T|F>` / `SimCBEOSB_BRTDOWN_<…>` and
+     * `SimCBEOSB_GAINUP_<…>` / `SimCBEOSB_GAINDOWN_<…>`. The SYM callbacks that do exist (`SimSymWheelUp/Dn`, `SimHmsSymWheelUp/Dn`)
+     * are the HUD's and the helmet's wheels.
      */
     fun rockerCallback(side: Char, which: String, up: Boolean): String? {
         val s = side.uppercaseChar().takeIf { it == 'L' || it == 'R' } ?: return null
         return when (which.lowercase()) {
             "brt" -> "SimCBEOSB_" + (if (up) "BRTUP_" else "BRTDOWN_") + s
-            "gain" -> if (up) "SimRadarGainUp" else "SimRadarGainDown"
+            "gain" -> "SimCBEOSB_" + (if (up) "GAINUP_" else "GAINDOWN_") + s
             else -> null
         }
     }
@@ -184,23 +186,44 @@ object BmsKeys {
         listOf('L', 'R').flatMap { s ->
             listOf("gain", "sym", "con", "brt").flatMap { w ->
                 listOf(true, false).map { up ->
+                    val step = stepRocker(install, s, w, up)
                     com.bmscompanion.app.data.mission.MfdRockerKey(
                         side = s.toString(), which = w, up = up,
-                        callback = rockerCallback(s, w, up).orEmpty(),
-                        key = rocker(install, s, w, up)?.text.orEmpty(),
+                        callback = (if (step != null) stepCallback(s, w, up) else rockerCallback(s, w, up)).orEmpty(),
+                        key = (step ?: rocker(install, s, w, up))?.text.orEmpty(),
                     )
                 }
             }
         }
+
+    /** The one-step callback of a BRT or GAIN half (`SimCBKNOB_BRTUP_L` …, Falcon BMS 4.38.2), or null for SYM and CON. */
+    fun stepCallback(side: Char, which: String, up: Boolean): String? =
+        rockerCallback(side, which, up)?.replace("SimCBEOSB_", "SimCBKNOB_")
+
+    /**
+     * The key of a rocker half's **one-step** callback, when the pilot's key file binds it: 4.38.2's `SimCBKNOB_*`
+     * moves BRT or GAIN 5 % per key press (`MFDClass::IncreaseBrightness` / `IncreaseGainLevel`, the pre-4.38.2
+     * behaviour) where the `SimCBEOSB_*` rockers want the key held. No stock key file binds them; a pilot who does
+     * gets a tap = one step on the card, and a held half repeats the step ([holdRocker]).
+     */
+    fun stepRocker(install: BmsInstall, side: Char, which: String, up: Boolean): Binding? {
+        val s = side.uppercaseChar().takeIf { it == 'L' || it == 'R' } ?: return null
+        val w = which.lowercase().takeIf { it == "brt" || it == "gain" } ?: return null
+        return fromKeyFile(install)["KNOB_" + w.uppercase() + (if (up) "UP_" else "DOWN_") + s]
+    }
+
+    /** How often a held half repeats a one-step press ([stepRocker]): 5 % a step, end to end in about 4 s. */
+    const val ROCKER_STEP_MS = 200L
 
     /**
      * The key for one half of an MFD corner rocker, or null when Falcon BMS has none.
      *
      * Of the four rockers on the real bezel only two do anything in BMS 4.38: **BRT** has a callback per display
      * (`SimCBEOSB_BRTUP_L` / `BRTDOWN_L`, the same Ctrl+Alt / Shift+Alt as that display's OSBs, on = and -), and
-     * **GAIN** is the radar's own gain (`SimRadarGainUp` / `Down`, Shift+Alt+` and Ctrl+Alt+`), which the key file
-     * lists under the left display and marks "change @ LMFD" under the right — it is one sensor gain, so both
-     * bezels send it. **SYM** and **CON** have no callback at all; the Dash-34 calls them not implemented. Both
+     * so has **GAIN** since 4.38.2 (`SimCBEOSB_GAINUP_L` / `GAINDOWN_L`, Shift+Alt+` and Ctrl+Alt+`; the right
+     * display's are unbound in the stock key file). It works the page on that display: the A-G radar, the HSD's
+     * moving map, the TGP in MGC (only the latest Falcon BMS is supported: the deprecated radar gain callbacks of
+     * earlier key files are not used). **SYM** and **CON** have no callback at all; the Dash-34 calls them not implemented. Both
      * halves were always mapped right: "the down half does nothing" (1.3.8 test) was the bezel drawing a pressed
      * lower half in a grey two shades off the unpressed one.
      */
@@ -211,25 +234,104 @@ object BmsKeys {
             "brt" -> ((if (up) "BRTUP_" else "BRTDOWN_") + s).let { key ->
                 if (key in keys) keys[key] else Binding(if (up) 0x0D else 0x0C, if (s == 'L') LEFT_MODS else RIGHT_MODS)
             }
-            "gain" -> (if (up) "GAINUP" else "GAINDOWN").let { key ->
-                if (key in keys) keys[key] else Binding(0x29, if (up) RIGHT_MODS else LEFT_MODS)
+            "gain" -> {
+                // the display's own callback (the stock key file binds the left one to Shift+Alt+` / Ctrl+Alt+`
+                // and leaves the right one unbound, which the card then names)
+                val own = (if (up) "GAINUP_" else "GAINDOWN_") + s
+                when {
+                    own in keys -> keys[own]
+                    s == 'L' -> Binding(0x29, if (up) RIGHT_MODS else LEFT_MODS)
+                    else -> null
+                }
             }
             else -> null
         }
     }
 
-    /** Rocks one corner switch, if Falcon BMS is the window in front; the answer is in the card's words. */
+    /**
+     * How long a rocker key is held at the least. Falcon BMS 4.38.2 made the BRT and GAIN rockers press-and-hold
+     * (`MFDRocker::Process`, read out of the exe: nothing happens until the key has been down 500 ms, then the value
+     * runs end to end in 5 s of game time; key up only stops it), so a tap — key down and up within a few ms — does
+     * nothing at all. 750 ms is the old rocker's one step of 5 %.
+     */
+    const val ROCKER_MIN_HOLD_MS = 750L
+    /** A held rocker is let go by itself after this long, should the device that holds it never say so. */
+    const val ROCKER_MAX_HOLD_MS = 8_000L
+
+    private class Held(val b: Binding, val since: Long, val id: Long, val label: String, val step: Boolean = false)
+    private val holdLock = Any()
+    private var held: Held? = null
+    private var heldIds = 0L
+
+    /**
+     * Rocks one corner switch as a tap, if Falcon BMS is the window in front: the key is held [ROCKER_MIN_HOLD_MS]
+     * (one 5 % step on 4.38.2, one step on an older BMS too). The answer is in the card's words. What a device that
+     * predates press-and-hold sends; the card holds the key for as long as the half is pressed ([holdRocker]).
+     */
     fun pressRocker(install: BmsInstall, side: Char, which: String, up: Boolean): String {
+        val started = holdRocker(install, side, which, up, start = true)
+        if (synchronized(holdLock) { held } == null) return started
+        return holdRocker(install, side, which, up, start = false)
+    }
+
+    /**
+     * Presses ([start]) or lets go of one corner switch, for as long as the half is held on the device — the way the
+     * real bezel and Falcon BMS 4.38.2's press-and-hold rockers work. Letting go sooner than [ROCKER_MIN_HOLD_MS]
+     * after the press still holds the key that long, so a tap is one step. A rocker left held is let go after
+     * [ROCKER_MAX_HOLD_MS] by itself, and pressing another lets the first go. The answer is in the card's words.
+     */
+    fun holdRocker(install: BmsInstall, side: Char, which: String, up: Boolean, start: Boolean): String {
         val name = which.uppercase()
+        val dir = if (up) "up" else "down"
+        if (!start) return release() ?: ""
         if (name == "SYM" || name == "CON") return "$name is not implemented in Falcon BMS, so there is nothing to press."
+        stepRocker(install, side, which, up)?.let { step -> return stepHold(step, "$name $dir") }
         val b = rocker(install, side, which, up)
-            ?: return "$name ${if (up) "up" else "down"} is not bound in your key file: bind ${rockerCallback(side, which, up) ?: "it"} to a key in Falcon BMS."
+            ?: return "$name $dir is not bound in your key file: bind ${rockerCallback(side, which, up) ?: "it"} to a key in Falcon BMS."
+        release()
         if (!bmsInFront()) return "Falcon BMS is not the window in front on the PC, so nothing was pressed."
         blockedByElevation()?.let { return it }
         return runCatching {
-            send(b)?.let { return it }
-            "$name ${if (up) "up" else "down"} (${b.text})."
+            sendKeys(b, press = true, letGo = false)?.let { return it }
+            val id = synchronized(holdLock) { (++heldIds).also { held = Held(b, System.currentTimeMillis(), it, "$name $dir (${b.text})") } }
+            Thread({
+                Thread.sleep(ROCKER_MAX_HOLD_MS)
+                synchronized(holdLock) { if (held?.id != id) return@Thread }
+                release()
+            }, "rocker-release").apply { isDaemon = true }.start()
+            "$name $dir (${b.text})."
         }.getOrElse { "Could not send the key: ${it.message}" }
+    }
+
+    /**
+     * A held half on a one-step binding ([stepRocker]): one press at once, then one every [ROCKER_STEP_MS] until it is
+     * let go ([release]) or [ROCKER_MAX_HOLD_MS] has passed. Each press is a full tap, so nothing stays down.
+     */
+    private fun stepHold(b: Binding, label: String): String {
+        release()
+        if (!bmsInFront()) return "Falcon BMS is not the window in front on the PC, so nothing was pressed."
+        blockedByElevation()?.let { return it }
+        sendKeys(b, press = true, letGo = true)?.let { return it }
+        val id = synchronized(holdLock) { (++heldIds).also { held = Held(b, System.currentTimeMillis(), it, "$label (${b.text})", step = true) } }
+        Thread({
+            val until = System.currentTimeMillis() + ROCKER_MAX_HOLD_MS
+            while (System.currentTimeMillis() < until) {
+                Thread.sleep(ROCKER_STEP_MS)
+                synchronized(holdLock) { if (held?.id != id) return@Thread }
+                sendKeys(b, press = true, letGo = true)
+            }
+            synchronized(holdLock) { if (held?.id == id) held = null }
+        }, "rocker-step").apply { isDaemon = true }.start()
+        return "$label (${b.text}), one step a press."
+    }
+
+    /** Lets go of the held rocker key, at the earliest [ROCKER_MIN_HOLD_MS] after it was pressed; null when none was. */
+    private fun release(): String? {
+        val h = synchronized(holdLock) { held.also { held = null } } ?: return null
+        if (h.step) return h.label // one-step presses are whole taps: nothing is down, the repeating just stops
+        val wait = h.since + ROCKER_MIN_HOLD_MS - System.currentTimeMillis()
+        if (wait > 0) runCatching { Thread.sleep(wait) }
+        return runCatching { sendKeys(h.b, press = false, letGo = true) ?: h.label }.getOrElse { "Could not let go of the key: ${it.message}" }
     }
 
     /** The key file the bindings are read from (the one the pilot file names), for the checks. */
@@ -259,8 +361,11 @@ object BmsKeys {
             val dir = if (r.up) "up  " else "down"
             appendLine("${r.side} ${r.which.uppercase().padEnd(4)} $dir -> ${r.callback.ifBlank { "(no BMS callback)" }.padEnd(20)} -> ${r.key.ifBlank { "(unbound)" }}")
         }
-        for (r in all.filter { it.callback.isNotBlank() && it.key.isBlank() })
-            appendLine("FAIL: ${r.side} ${r.which} ${if (r.up) "up" else "down"}: ${r.callback} is not bound")
+        for (r in all.filter { it.callback.isNotBlank() && it.key.isBlank() }) {
+            // the stock 4.38.2 key file leaves the right display's GAIN unbound: the card says so, it is no fault
+            val stock = r.side == "R" && r.which == "gain"
+            appendLine("${if (stock) "note" else "FAIL"}: ${r.side} ${r.which} ${if (r.up) "up" else "down"}: ${r.callback} is not bound")
+        }
         all.filter { it.callback.isNotBlank() && it.key.isNotBlank() }.groupBy { it.side + it.which }.forEach { (k, v) ->
             if (v.size == 2 && v[0].key == v[1].key) appendLine("FAIL: $k: up and down share ${v[0].key}")
         }
@@ -365,16 +470,23 @@ object BmsKeys {
      * event, else the card's sentence ([SendInput] answers how many it inserted; a refusal by UIPI is not among them,
      * which is what [blockedByElevation] is for).
      */
-    private fun send(b: Binding): String? {
+    private fun send(b: Binding): String? = sendKeys(b, press = true, letGo = true)
+
+    /** The modifiers and the key down ([press]) and/or up again ([letGo]), as one SendInput. */
+    private fun sendKeys(b: Binding, press: Boolean, letGo: Boolean): String? {
         val mods = ArrayList<Int>()
         if (b.mods and 1 != 0) mods += 0x2A   // left shift
         if (b.mods and 2 != 0) mods += 0x1D   // left ctrl
         if (b.mods and 4 != 0) mods += 0x38   // left alt
         val events = ArrayList<U32.INPUT>()
-        for (m in mods) events += key(m, false)
-        events += key(b.scan, false)
-        events += key(b.scan, true)
-        for (m in mods.asReversed()) events += key(m, true)
+        if (press) {
+            for (m in mods) events += key(m, false)
+            events += key(b.scan, false)
+        }
+        if (letGo) {
+            events += key(b.scan, true)
+            for (m in mods.asReversed()) events += key(m, true)
+        }
         val arr = U32.INPUT().toArray(events.size) as Array<*>
         events.forEachIndexed { i, e ->
             val t = arr[i] as U32.INPUT

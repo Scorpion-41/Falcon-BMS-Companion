@@ -114,7 +114,7 @@ fun PlanCard(merged: MergedMission) {
             }
         }
         if (rows.any { it.untested }) Text(
-            "Laser, bingo, ALOW, MSL floor, TACAN and ILS are keys WDP writes: BMS 4.38.1 reading them is not tested.",
+            "Laser, bingo, ALOW, MSL floor, TACAN and ILS are keys WDP writes: BMS 4.38 reading them is not tested.",
             fontSize = 11.sp, color = Hud.TextFaint, modifier = Modifier.padding(top = 4.dp),
         )
     }

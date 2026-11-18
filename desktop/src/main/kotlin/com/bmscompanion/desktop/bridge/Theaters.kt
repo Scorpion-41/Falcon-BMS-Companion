@@ -63,6 +63,16 @@ object Theaters {
         fun objectDir(t: Theater?): File? = t?.objectDir?.let { resolveDir(data, it) }
         fun threeDDataDir(t: Theater?): File? = t?.threeDDataDir?.let { resolveDir(data, it) }
 
+        /**
+         * Where BMS reads the theater's per-objective data (`OCD_nnnnn` with its OCD, FED, PHD and PDX files): the
+         * `objectdir`'s `ObjectiveRelatedData`, and only when that folder does not exist the base theater's
+         * (`Data\TerrData\Objects`, `g_bUseDbFallback`) — read out of `Falcon BMS.exe` (`LoadClassTable`:
+         * `FalconObjectThrDataDir`, then `FalconObjectBaseDataDir`). Never the `3ddatadir`, which is the 3D models': Mideast's
+         * names Korea's, and EF2000 BTO's, LHTO's, the LKTOs' and KTO 80s' name a theater whose objectives differ.
+         */
+        fun objectiveDataDir(t: Theater?): File? =
+            objectDir(t)?.let { resolveDir(it, "ObjectiveRelatedData") } ?: resolveDir(data, "TerrData\\Objects\\ObjectiveRelatedData")
+
         /** `<3ddatadir>/KoreaObj`, where the F-16's kneeboard pages 7982-7997 are. */
         fun kneeboardDir(t: Theater?): File? = threeDDataDir(t)?.let { resolveDir(it, "KoreaObj") }
 
@@ -130,7 +140,20 @@ object Theaters {
          * not by its name. Null when there is none.
          */
         fun newestSave(t: Theater?, now: Long = System.currentTimeMillis()): File? =
-            saves(t, withTraining = false).firstOrNull { f -> now - f.lastModified() >= SETTLE_MS && !isStart(f) }
+            saves(t, withTraining = false).firstOrNull { f -> now - f.lastModified() >= SETTLE_MS && !isStart(f) && !laidByUpdate(f) }
+
+        /**
+         * One of BMS's own missions (`TE_BMS_*`, `TR_BMS_*`, `DF_BMS_*`) as an update laid it down: modified more than
+         * a minute before it was created, the patch's own date kept. Nothing on this PC saved it, so it is not the save
+         * BMS flies — but it is newer than every save made before the update (4.38.2 rewrote `TE_BMS_04_F-16_DCA.tac`
+         * with its build date and became "the newest save", ahead of the pilot's `Auto Save.cam`). Once BMS saves it,
+         * its modified time passes its created time and it counts again.
+         */
+        fun laidByUpdate(f: File): Boolean = runCatching {
+            if (!com.bmscompanion.desktop.bridge.command.ShippedSaves.shippedByName(f.nameWithoutExtension)) return false
+            val a = java.nio.file.Files.readAttributes(f.toPath(), java.nio.file.attribute.BasicFileAttributes::class.java)
+            a.lastModifiedTime().toMillis() < a.creationTime().toMillis() - 60_000L
+        }.getOrDefault(false)
 
         /** The theater whose `campaigndir` is [dir] (compared without case), for a file found some other way. */
         fun owning(dir: File): Theater? {

@@ -83,6 +83,8 @@ enum class PlannerWindow(val title: String, val probe: String) {
     SETTINGS("Planner settings", "Settings"),
     /** The Noteboard editor on its own (the Kneeboards page's Edit notes, 1.4.1; [NoteboardWindow]); arg = the board, 0 or 1 */
     NOTES("Noteboard", "Notes"),
+    /** The F-15C's SIT lines in the cartridge (Falcon BMS 4.38.2; [F15SitLinesWindow]) */
+    F15_SIT("F-15 SIT lines", "SitLines"),
     // WDP's ATO Target List is a page of the Planner's own now (WdpPage.ATO, AtoTargetsPage), not a window
 }
 
@@ -191,6 +193,7 @@ fun PlannerWindowHost(
                     PlannerWindow.GUIDE -> PlannerGuideWindow(section = PlannerWindows.arg, onClose = PlannerWindows::close)
                     PlannerWindow.SETTINGS -> PlannerSettingsWindow(onClose = PlannerWindows::close)
                     PlannerWindow.NOTES -> NoteboardWindow(PlannerWindows.arg?.toIntOrNull() ?: 0, onClose = PlannerWindows::close)
+                    PlannerWindow.F15_SIT -> F15SitLinesWindow(onClose = PlannerWindows::close)
                 }
             }
         }

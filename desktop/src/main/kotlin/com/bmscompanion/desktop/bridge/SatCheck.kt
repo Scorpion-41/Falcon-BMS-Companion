@@ -41,7 +41,8 @@ object SatCheck {
             appendLine("  GlobalColorMap: ${g?.let(::dds) ?: "none"}")
             val l0 = System.nanoTime()
             val lv = MapTiles.levels(t)
-            appendLine("  auto levels (low, scale × 1000): ${lv[0]}, ${lv[1]} in ${(System.nanoTime() - l0) / 1_000_000} ms")
+            appendLine("  auto levels (low, scale × 1000): ${lv[0]}, ${lv[1]} in ${(System.nanoTime() - l0) / 1_000_000} ms" +
+                (lv.takeIf { it.size >= 5 }?.let { "; detail cells × ${it[2]}/${it[3]}/${it[4]} (R/G/B ÷ 1000, 1000 = as they are)" } ?: ""))
             for (sub in listOf("4K", "16K")) {
                 val names = t.photo?.let { Theaters.resolveDir(it, sub) }?.list()?.filter { it.endsWith(".dds", true) }.orEmpty()
                 val nums = names.mapNotNull { it.substringBeforeLast('.').toIntOrNull() }

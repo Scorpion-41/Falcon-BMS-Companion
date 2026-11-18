@@ -154,10 +154,14 @@ fun airbases(live: Live?, b: Briefing?, contacts: List<Contact>? = null): Airbas
         tacans = if (home) tacans else emptyList(),
         hulls = hulls,
     )
+    // the jet's own bases only while they are this flight's: back in BMS's 2D screens shared memory still holds the
+    // last 3D flight's (a PC before 1.4.4 serves them), and a new briefing's ladder names its own
+    val inJet = live?.navPoints.orEmpty().any { it.type == "WP" && (it.x != 0.0 || it.y != 0.0) }
+    val jet = v?.takeIf { same || inJet }
     return Airbases(
-        departure = v?.departure ?: ladder("Dep "),
-        arrival = v?.arrival ?: ladder("Arr "),
-        alternate = v?.alternate ?: b?.alternate ?: ladder("Alt "),
+        departure = jet?.departure ?: ladder("Dep "),
+        arrival = jet?.arrival ?: ladder("Arr "),
+        alternate = jet?.alternate ?: b?.alternate ?: ladder("Alt "),
         departureClues = clues("Dep ", home = true, deckHulls(live, contacts)),
         arrivalClues = clues("Arr ", home = true),
         alternateClues = clues("Alt ", home = false),

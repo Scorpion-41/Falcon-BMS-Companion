@@ -111,11 +111,54 @@ class CartridgeStore(
 
     // ---------------------------------------------------------------- writing
 
+    private val GROUND_KEY = Regex("(lineSTPT|ppt)_\\d+", RegexOption.IGNORE_CASE)
+
+    /**
+     * The ground under each line point and PPT the Planner placed, as Falcon BMS 4.38.2 writes it: the third figure of
+     * `lineSTPT_n` ("north, east, z") and `ppt_n` ("north, east, z, range, code") is minus the ground's height in feet
+     * (`DataCartridgeClass::ResolveStptElevation`: the height loaded with the point, else `GetGroundLevel` at it — the
+     * sim's z, up negative). Up to 4.38.1 BMS wrote 0 and so did WDP; 4.38.2 fills a 0 in when it saves, so this only
+     * makes the file right before BMS has touched it. Only a point at a place with a 0 height is filled (a point
+     * cleared to 0, 0, 0 stays as it is, and a height already there is kept), from BMS's height map of the theater BMS
+     * is on ([TerrainHeights], its airbase levelling included); a point the map says nothing about is left at 0, as is
+     * one at sea level. Never throws.
+     */
+    internal fun withGround(edits: List<CartridgeEdit>): List<CartridgeEdit> = try {
+        val at = edits.withIndex().mapNotNull { (i, e) ->
+            val v = e.value ?: return@mapNotNull null
+            if (!e.section.trim().equals("STPT", ignoreCase = true) || !GROUND_KEY.matches(e.key.trim())) return@mapNotNull null
+            val f = v.split(',').map { it.trim() }
+            if (f.size < 3) return@mapNotNull null
+            val n = f[0].toDoubleOrNull() ?: return@mapNotNull null
+            val east = f[1].toDoubleOrNull() ?: return@mapNotNull null
+            if (f[2].toDoubleOrNull() != 0.0 || (n == 0.0 && east == 0.0)) return@mapNotNull null
+            Triple(i, f, n to east)
+        }
+        if (at.isEmpty()) edits
+        else {
+            val install = Bridge.install
+            val set = Theaters.of(install)
+            val t = set?.current(install.theater)
+            val heights = if (set != null && t != null) TerrainHeights.at(set, t, at.map { it.third }).heights else emptyList()
+            val out = edits.toMutableList()
+            at.forEachIndexed { k, (i, _, _) ->
+                val h = heights.getOrNull(k)?.takeIf { it != 0 } ?: return@forEachIndexed
+                // the third figure alone is replaced, in the text as the page wrote it ("…, 100.000000," keeps its comma)
+                val v = edits[i].value!!
+                val c1 = v.indexOf(','); val c2 = v.indexOf(',', c1 + 1); val c3 = v.indexOf(',', c2 + 1).let { if (it < 0) v.length else it }
+                if (c1 < 0 || c2 < 0) return@forEachIndexed
+                out[i] = edits[i].copy(value = v.substring(0, c2 + 1) + " " + String.format(java.util.Locale.ROOT, "%.6f", -h.toDouble()) + v.substring(c3))
+            }
+            out
+        }
+    } catch (_: Throwable) { edits }
+
     /**
      * Writes [edits] into the cartridge as it is on disk now, directly, as WDP's Save DTC does: no copy is taken first
      * and nothing has to be switched on. A temporary file beside it, then one atomic move.
      */
-    fun save(callsign: String?, edits: List<CartridgeEdit>, mission: LedgerMission? = null, ledgered: Boolean = true): CartridgeState = attempt({ state(callsign, it) }) {
+    fun save(callsign: String?, planned: List<CartridgeEdit>, mission: LedgerMission? = null, ledgered: Boolean = true): CartridgeState = attempt({ state(callsign, it) }) {
+        val edits = withGround(planned)
         val f = fileFor(callsign)
         if (f == null || !f.isFile) return@attempt state(callsign)
         if (edits.isEmpty()) return@attempt state(callsign, message = "${f.name}: nothing had changed.")
@@ -466,8 +509,10 @@ class CartridgeStore(
             fun other(w: LedgerWrite) = if (keep == null) true else w.mission?.let { !it.sameFlight(keep) } == true
             /** The Planner's write [cur] is a copy of, for another flight; null when it is none, or one for [keep]. */
             fun copyOf(key: String, kind: String, cur: String): LedgerWrite? {
-                // a line point exactly as the Planner wrote it (BMS writes it back so), anything else as BMS rewrites it
-                val c = values[diskId("STPT", key)]?.filter { if (kind == Leftovers.LINE) Leftovers.same(cur, it.value) else Leftovers.sameItem(kind, cur, it.value) }.orEmpty()
+                // by position, as BMS rewrites each: Falcon BMS 4.38.2's DTC SAVE writes a line point or PPT the Planner
+                // left at z = 0 back with the ground's height there (`ResolveStptElevation`, #7371), so a line point is
+                // no longer matched exactly — and a line still goes only whole, every one of its points a copy
+                val c = values[diskId("STPT", key)]?.filter { Leftovers.sameItem(kind, cur, it.value) }.orEmpty()
                 if (c.isEmpty() || c.any(::own)) return null
                 return c.filter(::other).maxByOrNull { it.at }
             }
@@ -734,7 +779,9 @@ class CartridgeStore(
      * file places is left out of it (only the cartridge gets it), and its `target_n` keys stay out of the ledger, so
      * a mode switch or a new mission never clears a route point there either.
      */
-    fun saveTe(callsign: String?, edits: List<CartridgeEdit>, te: CampRef, for_: LedgerMission? = null): CartridgeState {
+    fun saveTe(callsign: String?, planned: List<CartridgeEdit>, te: CampRef, for_: LedgerMission? = null): CartridgeState {
+        // the heights filled once, so the cartridge, the mission file and the ledger hold the same text
+        val edits = withGround(planned)
         val saved = save(callsign, edits, for_)
         val ini = teIniName(te.file)
         var stpt: List<CartridgeEdit> = emptyList()

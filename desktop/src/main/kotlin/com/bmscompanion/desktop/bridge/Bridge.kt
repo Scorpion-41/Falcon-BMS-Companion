@@ -240,10 +240,25 @@ object Bridge {
         val s = _settings.value
         install.refresh(s.BmsDirOverride)
         if (s.EzBoardsDir.isNullOrBlank()) install.defaultEzBoardsDir()?.let { auto -> _settings.value = s.copy(EzBoardsDir = auto).also { it.save() } }
-        if (s.TacviewEnabled) tacview.start(s.TacviewHost, s.TacviewPort, s.TacviewPassword) else tacview.stop()
+        startTacview(s)
         synchronized(filesLock) { briefing = null; dtc = null; briefingMtime = 0; dtcMtime = 0; boardKey = 0; printedPending = false }
         MissionDtcFile.forget()
         _ticks.value++
+    }
+
+    /**
+     * Connects the Tacview feed as the settings say — except that a server on this PC left at the stock settings
+     * (127.0.0.1, port 42674, no password) follows Falcon BMS's own cfg: 4.38.2's stock cfg lists `g_nTacviewPort`,
+     * `g_sTacviewPassword` and `g_bTacviewIpv6`, and a pilot who changes them there should not have to change them
+     * here too. Called when the settings change and every tenth tick (the cfg may change while the program runs);
+     * the client does nothing when the address is the one it already has.
+     */
+    private fun startTacview(s: BridgeSettings) {
+        if (!s.TacviewEnabled) { tacview.stop(); return }
+        val local = s.TacviewHost == "127.0.0.1" || s.TacviewHost.equals("localhost", ignoreCase = true)
+        val bms = if (local && s.TacviewPort == 42674 && s.TacviewPassword.isEmpty()) cfg.tacviewServer() else null
+        if (bms == null) { tacview.start(s.TacviewHost, s.TacviewPort, s.TacviewPassword); return }
+        tacview.start(if (bms.ipv6) "::1" else s.TacviewHost, bms.port, bms.password)
     }
 
     // ------------------------------------------------------------------ data
@@ -252,7 +267,7 @@ object Bridge {
 
     private fun tick() {
         runCatching {
-            if (++tickCount % 10 == 0) install.refresh(_settings.value.BmsDirOverride)
+            if (++tickCount % 10 == 0) { install.refresh(_settings.value.BmsDirOverride); startTacview(_settings.value) }
             refreshFiles()
             // the radio subtitles in BMS's debug log, while BMS runs (nothing at all without one: RadioLog)
             RadioLog.tick(install, runCatching { snapshot().flying }.getOrDefault(false))
@@ -602,6 +617,7 @@ object Bridge {
             // (style bms2d: BMS's own 2D campaign map, read from the theater's art at run time; command.CampMap2D, read only)
             path == "/api/maptile" -> return if (req.query["style"] == com.bmscompanion.desktop.bridge.command.CampMap2D.STYLE) com.bmscompanion.desktop.bridge.command.CampMap2D.handle(req) else MapTiles.handle(req)
             path == "/api/campmap/info" -> return com.bmscompanion.desktop.bridge.command.CampMap2D.info()
+            path == "/api/movingmap/info" -> return MapTiles.movingInfo()
             // pictures of the mission's targets drawn from BMS's own 3-D models (TargetPictures; read only)
             path.startsWith("/api/targets/") -> return TargetPictures.handle(req)
             // the pilot's noteboards, kept per mission in the settings folder, never in BMS's (NotesStore, 1.4.1)
@@ -939,9 +955,17 @@ object Bridge {
             }
             // Rocks one of an MFD's corner switches, the same way: BRT and GAIN have keys in Falcon BMS, SYM and CON
             // are not implemented in BMS and are refused with a sentence rather than a silent nothing.
+            // `hold=start` / `hold=end` (1.4.4): pressed for as long as the half is held on the device, which BMS 4.38.2's
+            // press-and-hold rockers need; without it, a tap of BmsKeys.ROCKER_MIN_HOLD_MS (an older device).
             "POST" to "/api/mfd/rocker" -> {
                 val side = req.query["side"]?.firstOrNull() ?: 'L'
-                val message = BmsKeys.pressRocker(install, side, req.query["which"].orEmpty(), req.query["dir"] != "down")
+                val which = req.query["which"].orEmpty()
+                val up = req.query["dir"] != "down"
+                val message = when (req.query["hold"]) {
+                    "start" -> BmsKeys.holdRocker(install, side, which, up, start = true)
+                    "end" -> BmsKeys.holdRocker(install, side, which, up, start = false)
+                    else -> BmsKeys.pressRocker(install, side, which, up)
+                }
                 ApiResponse.json("""{"message":${json.encodeToString(String.serializer(), message)}}""")
             }
             // What the twenty buttons of each display are bound to, so the card can say so rather than a tap

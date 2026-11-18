@@ -1958,7 +1958,7 @@ class DtcWiring(private val source: DtcSource = LinkDtcSource) : WdpWiring {
         } else {
             "Targets ${DtcPage.ranges(fill.map { it.first + 1 })}: " +
                 fill.groupBy { it.second.group }.entries.joinToString("; ") { (g, v) -> "${v.size} × ${g.lowercase()}" } +
-                ".\n\nThe list is yours to take along: Falcon BMS 4.38.1 does nothing with it in the jet."
+                ".\n\nThe list is yours to take along: Falcon BMS 4.38 does nothing with it in the jet."
         }
         WdpDialogs.message("Targets from the mission", "$text\n\n$PICK_TEXT", listOfNotNull("Add".takeIf { fill.isNotEmpty() }, PICK_POINT, "Cancel")) { a ->
             when (a) {

@@ -404,20 +404,26 @@ async function main() {
       }
       if (!files) continue;
       matched++;
-      const refs = files.map((f) => {
+      // Only the instrument chart PDFs are shipped. A BMS plate (a picture in the docs folder) is still walked,
+      // because a folder only counts as an airport when it holds one (see walkPngDirs) and that is what keeps
+      // national AIP volumes out — but no longer shipped: the app draws that chart itself, from the field's own data,
+      // at any zoom and with the jet's own position on it (they were 1,401 pictures and 52 MB of the app). The
+      // plates' own PDF twins (4.38.2 put "Osan AB (RKSO)_AGC.pdf", "_APC.pdf" and "_LOC.pdf" beside the PNGs: ground
+      // chart, parking chart and the local area plate) are left out with them (261 files, 19 MB).
+      const shipped = files.filter((f) => /\.pdf$/i.test(f) && !/_(AGC|APC|LOC)\.pdf$/i.test(f));
+      // an airport whose only charts are plates has nothing to ship
+      if (!shipped.length) continue;
+      const refs = shipped.map((f) => {
         const st = fs.statSync(f);
         const h = crypto.createHash('sha1').update(path.basename(f) + ':' + st.size).digest('hex').slice(0, 16);
-        if (/\.pdf$/i.test(f)) { pdfJobs.set(h, f); return { order: 20, title: pdfTitle(f), file: `charts/${h}-1.webp`, hash: h }; }
-        // A BMS plate: one of the pictures in the docs folder. Still walked, because a folder only counts as an
-        // airport when it holds one (see walkPngDirs) and that is what keeps national AIP volumes out — but no
-        // longer shipped. The app draws that chart itself now, from the field's own data, at any zoom and with the
-        // jet's own position on it. They were 1,401 pictures and 52 MB of the app.
-        return null;
-      }).filter(Boolean);
-      entry[a.id] = withDistinctTitles(refs, files)
+        pdfJobs.set(h, f);
+        return { order: 20, title: pdfTitle(f), file: `charts/${h}-1.webp`, hash: h };
+      });
+      // refs and shipped are index for index, which withDistinctTitles relies on
+      entry[a.id] = withDistinctTitles(refs, shipped)
         .sort((x, y) => x.order - y.order || x.title.localeCompare(y.title, 'en', { numeric: true })).map(({ order, ...r }) => r);
     }
-    chartIndex[setId] = entry;
+    if (Object.keys(entry).length) chartIndex[setId] = entry;
     console.log(th.id, setId, 'roots', roots.length, 'dirs', dirs.size, 'airports matched', matched, '/', airports.length);
   }
   // charts.json is written at the end: the instrument chart entries only get their page lists once the PDFs are rendered

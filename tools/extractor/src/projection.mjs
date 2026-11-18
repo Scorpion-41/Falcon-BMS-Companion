@@ -25,12 +25,30 @@ export function readTheaterTxt(terrainDir) {
   const p = (k) => { const m = proj.match(new RegExp(`\\+${k}=([-+0-9.eE]+)`)); return m ? parseFloat(m[1]) : null; };
   if (!/\+proj=tmerc/.test(proj)) return null;
   const numKey = (k) => { const v = parseFloat(kv[k]); return Number.isFinite(v) ? v : null; };
-  return {
+  const t = {
     dir: nt, name: kv['Theater name'], sizeKm: parseFloat(kv['Theater size in KM']), mapPx: parseInt(kv['Map size in pixels'], 10),
     lon0: p('lon_0'), k0: p('k') ?? 0.9996, x0: p('x_0') ?? 0, y0: p('y_0') ?? 0,
     lat0: p('lat_0') ?? 0, ellps: proj.match(/\+ellps=(\S+)/)?.[1] ?? (/\+datum=WGS84/.test(proj) ? 'WGS84' : null),
     centerLat: numKey('Center latitude'), centerLon: numKey('Center longitude'), proj,
   };
+  return centred(t);
+}
+
+/**
+ * The theater grid counts from its south-west corner, with the terrain's centre (`Center latitude/longitude`) in the
+ * middle — BMS's own latitude and longitude are built that way, and every terrain up to 4.38.2 writes a string whose
+ * false easting/northing put that centre there to within 10 m (Korea, Balkans, Hellas, Israel, the Falklands). A
+ * string that does not (Mideast's community terrain: `+lat_0=29.8 +x_0=0 +y_0=0`, the projection's origin at its
+ * middle, which put the centre 3,288 km north of it) gets its false origin worked out from the centre, keeping its
+ * meridian and scale; `lat0` is then 0, as the drawing measures northings from the equator. `proj` stays word for word.
+ */
+function centred(t) {
+  if (t.lon0 == null || !Number.isFinite(t.sizeKm) || t.centerLat == null || t.centerLon == null) return t;
+  const half = (t.sizeKm * 1000) / 2;
+  const at = makeProjector(t)(t.centerLat, t.centerLon);
+  if (t.lat0 === 0 && Math.abs(at.x / FT_PER_M - half) < 1000 && Math.abs(at.y / FT_PER_M - half) < 1000) return t;
+  const bare = makeProjector({ ...t, x0: 0, y0: 0 })(t.centerLat, t.centerLon);
+  return { ...t, lat0: 0, x0: half - bare.y / FT_PER_M, y0: half - bare.x / FT_PER_M, centredFrom: { lat0: t.lat0, x0: t.x0, y0: t.y0 } };
 }
 
 /**
@@ -94,7 +112,22 @@ export function makeProjector(t) {
   };
 }
 
-export const ROOT_CACHE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../cache');
+/**
+ * The projector for map [id] when its terrain is laid on another georeference than its projection string
+ * (`tools/curated/georef.json`: Mideast's is a sinusoidal grid), else null and the caller takes [makeProjector].
+ */
+export function georefProjector(id) {
+  const f = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../curated/georef.json');
+  const g = fs.existsSync(f) ? JSON.parse(fs.readFileSync(f, 'utf8'))[id] : null;
+  if (!g || g.type !== 'sinusoidal') return null;
+  const R = 6371008.8, rad = Math.PI / 180;
+  return (lat, lon) => {
+    const e = R * (lon - g.lon0) * rad * Math.cos(lat * rad), n = R * (lat - g.lat0) * rad;
+    return { x: g.x[0] * e + g.x[1] * n + g.x[2], y: g.y[0] * e + g.y[1] * n + g.y[2] };
+  };
+}
+
+export const ROOT_CACHE =path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../cache');
 
 // run on its own: refresh each theater's `projection` in the index the app already has (the terrain BMS flies it on),
 // touching nothing else in it

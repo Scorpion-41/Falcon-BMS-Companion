@@ -304,14 +304,11 @@ object TargetModels {
         return list.sortedByDescending { it["Value"]?.trim()?.toIntOrNull() ?: 0 }.mapNotNull(::kind).distinctBy { it.name }.take(max)
     }
 
+    /** `OCD_nnnnn/FED_nnnnn.XML` where BMS reads it ([Theaters.TheaterSet.objectiveDataDir]). */
     private fun fedFile(tables: Tables, ocd: Int): File? {
         val id = ocd.toString().padStart(5, '0')
-        val roots = listOfNotNull(tables.set.threeDDataDir(tables.theater), tables.set.objectDir(tables.theater), Theaters.resolveDir(tables.set.data, "TerrData\\Objects"))
-        for (r in roots) {
-            val dir = Theaters.resolveDir(r, "ObjectiveRelatedData\\OCD_$id") ?: continue
-            Theaters.resolveFile(dir, "FED_$id.XML")?.let { return it }
-        }
-        return null
+        val dir = tables.set.objectiveDataDir(tables.theater)?.let { Theaters.resolveDir(it, "OCD_$id") } ?: return null
+        return Theaters.resolveFile(dir, "FED_$id.XML")
     }
 
     /**

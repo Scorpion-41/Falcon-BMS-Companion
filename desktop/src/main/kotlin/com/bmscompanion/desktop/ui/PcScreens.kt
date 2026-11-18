@@ -95,7 +95,7 @@ fun ServerScreen(onOpenApp: () -> Unit, onOpenAbout: () -> Unit, onUseAsClient: 
                 Tile("FALCON BMS", when { i == null -> "—"; i.bms.flying -> "In 3D"; i.bms.running -> "Running"; i.bms.installed -> "Not running"; else -> "Not found" },
                     i?.bms?.running == true,
                     // the install in use, when there are two or more (1.4.1)
-                    listOfNotNull(i?.bms?.install?.takeIf { i.bms.installs > 1 }, i?.bms?.theater).joinToString(" · ").ifEmpty { null },
+                    listOfNotNull(i?.bms?.install?.takeIf { i.bms.installs > 1 }, com.bmscompanion.app.data.TheaterLabels.ui(i?.bms?.theater)).joinToString(" · ").ifEmpty { null },
                     Modifier.weight(1f))
                 Tile("AWACS FEED", if (i?.tacview?.connected == true) "Connected" else "Waiting", i?.tacview?.connected == true,
                     i?.tacview?.let { if (it.connected) "${it.objects} objects" else it.state }, Modifier.weight(1f))
